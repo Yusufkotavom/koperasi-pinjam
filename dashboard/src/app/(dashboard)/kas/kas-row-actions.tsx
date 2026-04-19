@@ -150,7 +150,7 @@ export function KasRowActions({ data, kategoriList }: { data: KasData; kategoriL
 
               <div className="space-y-2">
                 <Label>Kategori Transaksi</Label>
-                <Select onValueChange={(v) => setKategori(v)} value={kategori}>
+                <Select onValueChange={(v) => setKategori(v ?? "")} value={kategori}>
                   <SelectTrigger><SelectValue placeholder="Kategori" /></SelectTrigger>
                   <SelectContent>
                     {kategoriOptions.map((k) => (

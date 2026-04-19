@@ -13,22 +13,24 @@
 ## 1) Baseline Saat Ini (As-Is)
 
 ### Sudah tersedia
-- Master Nasabah (list, detail, create).
-- Pengajuan pinjaman (create, list, detail, approve sederhana).
-- Pencairan pinjaman (kontrak + jadwal angsuran + kas keluar).
-- Pembayaran angsuran dasar + denda + kas masuk.
-- Monitoring tunggakan (aging sederhana).
-- Rekap kolektor dan laporan per kelompok berbasis data DB (versi awal).
-- Dashboard ringkasan awal.
+- Master Nasabah: list/detail/create/edit + upload dokumen pendukung (dasar).
+- Master Kelompok: create/update + kelola anggota + set ketua kelompok.
+- Pengajuan pinjaman: create/list/detail + upload dokumen pendukung + catatan + approval sederhana (role-based).
+- Pencairan pinjaman: kontrak + jadwal angsuran (bulanan/mingguan) + kas keluar + dokumen pencairan + kartu angsuran.
+- Pembayaran angsuran: full/parsial/pelunasan + bukti bayar + kas masuk + pembatalan via approval.
+- Monitoring tunggakan: filter kolektor/kelompok/wilayah + bucket aging + metrik NPL.
+- Rekap kolektor: target vs realisasi + setoran (berbasis transaksi).
+- Arus kas: input transaksi + kategori kas + larangan kategori masuk/keluar sama + tab Add Category.
+- Laporan: transaksi per user (filter by user/kelompok) + tooltips alasan ranking; laba-rugi dari transaksi kas.
+- RBAC + audit trail (minimum) untuk action sensitif.
+- Dashboard: header cepat + jam/tanggal + notif penagihan hari ini + quick menu.
 
 ### Masih kurang utama
-- Master data lanjutan (`kolektor`, `jenis pinjaman`, `tarif bunga`, `cabang/wilayah`, `user-role` CRUD).
-- Approval berjenjang + audit trail aktivitas.
-- Pembayaran lanjutan: parsial, pelunasan dipercepat, pembatalan dengan approval, pembayaran kolektif.
-- Kas: approval transaksi, bukti lampiran, rekonsiliasi, kas per cabang.
-- Laba rugi masih placeholder, belum akuntansi dari transaksi real.
-- Dokumen cetak (kuitansi, bukti pencairan, surat tunggakan, kartu angsuran).
-- Notifikasi/reminder jatuh tempo dan approval.
+- Survey workflow detail (status `DISURVEY`, input hasil survey, tanggal survey) + alur operasional surveyor.
+- Master data lanjutan: jenis pinjaman, tarif bunga, cabang/wilayah, pengaturan akun (bila dibutuhkan), user-role CRUD yang lebih lengkap.
+- Kas lanjutan: rekonsiliasi, laporan kas per cabang/wilayah, dan kontrol approval yang lebih kaya.
+- Notifikasi in-app tersimpan (jatuh tempo, approval pending, kas pending).
+- Dokumen tambahan: surat tunggakan, rekap kolektor, export/cetak laporan per kelompok/arus kas/laba rugi.
 
 ---
 
@@ -53,19 +55,19 @@
 
 | Domain | Status | Keterangan |
 |---|---|---|
-| Master Nasabah | Partial | Sudah create/list/detail, belum edit/nonaktif lengkap + dokumen upload |
-| Master Kelompok | Partial | Sudah overview data, belum CRUD lengkap |
-| Pengajuan | Partial | Alur dasar ada, belum survey workflow detail + approval berjenjang |
-| Pencairan | Partial | Dasar ada, dokumen cetak belum ada |
-| Pembayaran | Partial | Dasar ada, belum parsial/pelunasan/pembatalan approval |
-| Tunggakan | Partial | Aging ada, filter dan KPI NPL lengkap belum |
-| Rekap Kolektor | Partial | Dasar ada, target/setoran/kunjungan belum |
-| Arus Kas | Partial | Input dasar ada, approval + rekonsiliasi belum |
-| Laba Rugi | Not Started (real) | Masih statis/placeholder |
-| Laporan Per Kelompok | Partial | Sudah ada ranking awal, belum export/cetak |
-| Hak Akses | Partial | Guard basic ada, RBAC menyeluruh belum |
-| Notifikasi | Not Started | Belum ada modul |
-| Dokumen & Cetak | Not Started | Belum ada template print/PDF |
+| Master Nasabah | Partial | Create/list/detail/edit + upload dokumen sudah ada; UI nonaktif/keluar + export masih minimal |
+| Master Kelompok | Partial | CRUD inti + anggota + ketua sudah ada; penugasan kolektor eksplisit per kelompok belum ada |
+| Pengajuan | Partial | Upload + catatan + approval ada; survey workflow detail belum |
+| Pencairan | Done | Kontrak + jadwal + kas keluar + dokumen pencairan + kartu angsuran |
+| Pembayaran | Done | Full/parsial/pelunasan + bukti bayar + pembatalan via approval |
+| Tunggakan | Done | Filter + bucket aging + NPL ratio tersedia |
+| Rekap Kolektor | Done | Target vs realisasi + setoran tersedia (berbasis transaksi) |
+| Arus Kas | Partial | Input + kategori + laba-rugi sudah; rekonsiliasi + kas per cabang/wilayah belum |
+| Laba Rugi | Done | Laporan laba-rugi dari transaksi kas |
+| Laporan Per Kelompok | Partial | Ringkasan ada; export/cetak belum |
+| Hak Akses | Partial | RBAC + audit log ada; coverage per fitur masih bertahap |
+| Notifikasi | Not Started | Model ada, modul UI + action belum |
+| Dokumen & Cetak | Partial | Kuitansi + bukti pencairan + kartu angsuran ada; dokumen tambahan belum |
 
 ---
 
@@ -118,10 +120,9 @@
 - Modify: `prisma/schema.prisma`
 - Create: `prisma/migrations/<timestamp>_phase_a_gap_closure/migration.sql`
 
-- [ ] Tambah tabel `AuditLog`, `ApprovalLog`, `KolektorTarget`, `Notifikasi`.
-- [ ] Tambah relasi ke `User`, `Pengajuan`, `Pembayaran`, `KasTransaksi`.
-- [ ] Jalankan `npm run db:generate` dan validasi schema compile.
-- [ ] Commit: `feat(db): add approval audit and collector target models`.
+- [x] Tambah tabel `AuditLog`, `ApprovalLog`, `KolektorTarget`, `Notifikasi`.
+- [x] Tambah relasi ke `User`, `Pengajuan`, `Pembayaran`, `KasTransaksi`.
+- [x] Jalankan `npm run db:generate` dan validasi schema compile.
 
 ### Task 2: RBAC utility dan audit helper
 
@@ -129,10 +130,9 @@
 - Create: `src/lib/roles.ts`
 - Create: `src/lib/audit.ts`
 
-- [ ] Buat helper `requireRoles(session, allowedRoles)`.
-- [ ] Buat helper `writeAuditLog({...})`.
-- [ ] Integrasi ke action sensitif (`approve`, `cairkan`, `input kas`).
-- [ ] Commit: `feat(security): add RBAC and audit helpers`.
+- [x] Buat helper `requireRoles(session, allowedRoles)`.
+- [x] Buat helper `writeAuditLog({...})` + `writeApprovalLog({...})`.
+- [x] Integrasi ke action sensitif (`approve`, `cairkan`, `input kas`, `pembayaran`).
 
 ### Task 3: Master Kelompok full CRUD
 
@@ -143,10 +143,10 @@
 - Create: `src/app/(dashboard)/kelompok/baru/page.tsx`
 - Create: `src/app/(dashboard)/kelompok/[id]/edit/page.tsx`
 
-- [ ] Tambah create/update/delete kelompok + validasi kode unik.
-- [ ] Tambah assign kolektor default per kelompok.
-- [ ] Lengkapi UI list dengan aksi create/edit/nonaktif.
-- [ ] Commit: `feat(kelompok): implement full CRUD and assignment`.
+- [x] Tambah create/update kelompok + validasi kode unik.
+- [x] Lengkapi UI list + halaman create/edit + kelola anggota + set ketua.
+- [ ] (Sisa) Penugasan kolektor eksplisit per kelompok (bukan turunan dari nasabah).
+- [ ] (Sisa) Nonaktif/delete kelompok + proteksi data (jika dibutuhkan).
 
 ### Task 4: Pembayaran lanjutan
 
@@ -156,11 +156,10 @@
 - Modify: `src/app/(dashboard)/pembayaran/page.tsx`
 - Create: `src/app/(dashboard)/pembayaran/[id]/pembatalan/page.tsx`
 
-- [ ] Tambah mode bayar parsial + alokasi ke pokok/bunga/denda.
-- [ ] Tambah pelunasan dipercepat.
-- [ ] Tambah pembatalan pembayaran dengan approval manager.
-- [ ] Tulis log audit tiap perubahan pembayaran.
-- [ ] Commit: `feat(pembayaran): add partial, early payoff, and cancel approval flow`.
+- [x] Tambah mode bayar parsial + alokasi ke pokok/bunga/denda.
+- [x] Tambah pelunasan dipercepat.
+- [x] Tambah pembatalan pembayaran dengan approval manager.
+- [x] Tulis log audit tiap perubahan pembayaran.
 
 ### Task 5: Tunggakan & rekap kolektor versi operasional
 
@@ -169,10 +168,9 @@
 - Modify: `src/app/(dashboard)/monitoring/tunggakan/page.tsx`
 - Modify: `src/app/(dashboard)/monitoring/kolektor/page.tsx`
 
-- [ ] Tambah filter query: tanggal, kolektor, kelompok, wilayah.
-- [ ] Tambah metrik NPL formal + bucket aging detail.
-- [ ] Tambah KPI rekap kolektor: target, realisasi, tunggakan, setoran.
-- [ ] Commit: `feat(monitoring): complete delinquency and collector KPI reporting`.
+- [x] Tambah filter query: tanggal, kolektor, kelompok, wilayah.
+- [x] Tambah metrik NPL formal + bucket aging detail.
+- [x] Tambah KPI rekap kolektor: target, realisasi, tunggakan, setoran.
 
 ### Task 6: Dokumen transaksi (print-ready)
 
@@ -182,10 +180,9 @@
 - Modify: `src/app/(dashboard)/pembayaran/page.tsx`
 - Modify: `src/app/(dashboard)/pencairan/pencairan-form.tsx`
 
-- [ ] Buat template kuitansi pembayaran (print CSS).
-- [ ] Buat template bukti pencairan (print CSS).
-- [ ] Tambah tombol cetak di flow pembayaran dan pencairan.
-- [ ] Commit: `feat(docs): add printable receipt and disbursement documents`.
+- [x] Buat template kuitansi pembayaran (print CSS).
+- [x] Buat template bukti pencairan (print CSS).
+- [x] Tambah tombol/tautan dokumen di flow pembayaran dan pencairan.
 
 ### Task 7: Arus kas lanjutan + laba rugi real
 
@@ -195,10 +192,10 @@
 - Modify: `src/app/(dashboard)/laporan/laba-rugi/page.tsx`
 - Create: `src/lib/validations/kas.ts`
 
-- [ ] Tambah approval transaksi kas tertentu (`isApproved=false` flow).
-- [ ] Tambah lampiran bukti URL transaksi kas.
-- [ ] Hitung laba rugi dari kategori kas + transaksi pembayaran/denda.
-- [ ] Commit: `feat(finance): add cash approval flow and real profit-loss report`.
+- [x] Tambah approval transaksi kas (`isApproved=false` flow) untuk input teller + aksi approve/reject.
+- [x] Tambah lampiran bukti URL transaksi kas (upload + simpan ke `buktiUrl`).
+- [x] Hitung laba rugi dari kategori kas + transaksi pembayaran/denda (via transaksi kas).
+- [ ] (Sisa) Rekonsiliasi kas + kas per cabang/wilayah (bila dipakai).
 
 ### Task 8: Notifikasi internal
 

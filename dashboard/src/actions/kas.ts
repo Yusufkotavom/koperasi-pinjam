@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
-import { Prisma, RoleType } from "@prisma/client"
-import { requireRoles } from "@/lib/roles"
+import { ApprovalEntityType, ApprovalStatus, Prisma, RoleType } from "@prisma/client"
+import { hasAnyRole, requireRoles } from "@/lib/roles"
 import { writeAuditLog } from "@/lib/audit"
 
 function normalizeKasCategoryKey(raw: string) {
@@ -23,6 +23,7 @@ const kasSchema = z.object({
   deskripsi: z.string().min(3),
   jumlah: z.coerce.number().min(1),
   kasJenis: z.enum(["TUNAI", "BANK"]).default("TUNAI"),
+  buktiUrl: z.string().min(3).optional(),
   tanggal: z.string().optional(),
 })
 
@@ -153,17 +154,26 @@ export async function getKasHarian(tanggal?: string) {
 
   const totalMasuk = transaksi.filter((t) => t.jenis === "MASUK").reduce((a, b) => a + Number(b.jumlah), 0)
   const totalKeluar = transaksi.filter((t) => t.jenis === "KELUAR").reduce((a, b) => a + Number(b.jumlah), 0)
+  const pendingApprovalCount = transaksi.filter((t) => t.isApproved === false).length
 
-  return { transaksi, totalMasuk, totalKeluar, saldoAwal: Number(saldoAwal._sum.jumlah ?? 0) }
+  return {
+    transaksi,
+    totalMasuk,
+    totalKeluar,
+    pendingApprovalCount,
+    saldoAwal: Number(saldoAwal._sum.jumlah ?? 0),
+  }
 }
 
 export async function inputKas(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   let userId: string
+  let isPrivileged = false
   try {
     const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN, RoleType.TELLER])
     userId = required.userId
+    isPrivileged = hasAnyRole(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
   } catch {
     return { error: "Tidak memiliki hak akses untuk input transaksi kas." }
   }
@@ -171,19 +181,37 @@ export async function inputKas(input: unknown) {
   const parsed = kasSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { tanggal, jumlah, ...rest } = parsed.data
+  const { tanggal, jumlah, buktiUrl, ...rest } = parsed.data
 
   const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori: rest.kategori })
   if ("error" in ensured) return { error: ensured.error }
 
-  const kas = await prisma.kasTransaksi.create({
-    data: {
-      ...rest,
-      kategori: ensured.key,
-      jumlah: new Prisma.Decimal(jumlah),
-      tanggal: tanggal ? new Date(tanggal) : new Date(),
-      inputOlehId: userId,
-    },
+  const kas = await prisma.$transaction(async (tx) => {
+    const row = await tx.kasTransaksi.create({
+      data: {
+        ...rest,
+        kategori: ensured.key,
+        jumlah: new Prisma.Decimal(jumlah),
+        tanggal: tanggal ? new Date(tanggal) : new Date(),
+        inputOlehId: userId,
+        buktiUrl: buktiUrl?.trim() || null,
+        isApproved: isPrivileged ? true : false,
+      },
+    })
+
+    if (!isPrivileged) {
+      await tx.approvalLog.create({
+        data: {
+          entityType: ApprovalEntityType.KAS,
+          entityId: row.id,
+          status: ApprovalStatus.PENDING,
+          requestedById: userId,
+          catatan: "Menunggu persetujuan transaksi kas.",
+        },
+      })
+    }
+
+    return row
   })
 
   revalidatePath("/kas")
@@ -195,7 +223,7 @@ export async function inputKas(input: unknown) {
     action: "CASH",
     afterData: { jenis: kas.jenis, kategori: kas.kategori, jumlah: kas.jumlah.toString() },
   })
-  return { success: true }
+  return { success: true, data: { id: kas.id, isApproved: kas.isApproved } }
 }
 
 export async function updateKas(id: string, input: unknown) {
@@ -212,13 +240,17 @@ export async function updateKas(id: string, input: unknown) {
   const parsed = kasSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { tanggal, jumlah, ...rest } = parsed.data
+  const { tanggal, jumlah, buktiUrl, ...rest } = parsed.data
 
   const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori: rest.kategori })
   if ("error" in ensured) return { error: ensured.error }
 
   const existing = await prisma.kasTransaksi.findUnique({ where: { id } })
   if (!existing) return { error: "Data tidak ditemukan." }
+
+  if (existing.isApproved === false) {
+    return { error: "Transaksi kas ini masih menunggu persetujuan. Selesaikan approval sebelum edit." }
+  }
 
   const kas = await prisma.kasTransaksi.update({
     where: { id },
@@ -227,6 +259,7 @@ export async function updateKas(id: string, input: unknown) {
       kategori: ensured.key,
       jumlah: new Prisma.Decimal(jumlah),
       tanggal: tanggal ? new Date(tanggal) : new Date(),
+      ...(buktiUrl !== undefined ? { buktiUrl: buktiUrl?.trim() || null } : {}),
     },
   })
 
@@ -256,6 +289,10 @@ export async function deleteKas(id: string) {
   const existing = await prisma.kasTransaksi.findUnique({ where: { id } })
   if (!existing) return { error: "Data tidak ditemukan." }
 
+  if (existing.isApproved === false) {
+    return { error: "Transaksi kas ini masih menunggu persetujuan. Selesaikan approval sebelum hapus." }
+  }
+
   await prisma.kasTransaksi.delete({ where: { id } })
 
   revalidatePath("/kas")
@@ -267,6 +304,104 @@ export async function deleteKas(id: string) {
     action: "DELETE",
     afterData: { jenis: existing.jenis, jumlah: existing.jumlah.toString() },
   })
+  return { success: true }
+}
+
+export async function getKasPendingApprovals(params?: { limit?: number }) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  try {
+    requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+  } catch {
+    return { error: "Tidak memiliki hak akses untuk melihat approval kas." as const }
+  }
+
+  const limit = Math.min(Math.max(params?.limit ?? 50, 1), 200)
+
+  const rows = await prisma.kasTransaksi.findMany({
+    where: { isApproved: false },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { inputOleh: { select: { id: true, name: true } } },
+  })
+
+  return { success: true as const, data: rows }
+}
+
+export async function approveKasTransaksi(input: { id: string; action: "APPROVE" | "REJECT"; catatan?: string }) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  let userId: string
+  try {
+    const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+    userId = required.userId
+  } catch {
+    return { error: "Tidak memiliki hak akses untuk memproses approval kas." }
+  }
+
+  const row = await prisma.kasTransaksi.findUnique({ where: { id: input.id } })
+  if (!row) return { error: "Transaksi kas tidak ditemukan." }
+  if (row.isApproved && input.action === "APPROVE") return { error: "Transaksi kas sudah disetujui." }
+
+  const pending = await prisma.approvalLog.findFirst({
+    where: {
+      entityType: ApprovalEntityType.KAS,
+      entityId: input.id,
+      status: ApprovalStatus.PENDING,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, catatan: true },
+  })
+
+  const status = input.action === "APPROVE" ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED
+  const catatan = input.catatan?.trim()
+
+  await prisma.$transaction(async (tx) => {
+    if (input.action === "APPROVE") {
+      await tx.kasTransaksi.update({
+        where: { id: input.id },
+        data: { isApproved: true },
+      })
+    }
+
+    if (pending) {
+      await tx.approvalLog.update({
+        where: { id: pending.id },
+        data: {
+          status,
+          approvedById: userId,
+          catatan: catatan
+            ? `${pending.catatan ?? ""}\n${input.action === "APPROVE" ? "Approve" : "Reject"}: ${catatan}`.trim()
+            : pending.catatan,
+        },
+      })
+    } else {
+      await tx.approvalLog.create({
+        data: {
+          entityType: ApprovalEntityType.KAS,
+          entityId: input.id,
+          status,
+          requestedById: userId,
+          approvedById: userId,
+          catatan: catatan ?? (input.action === "APPROVE" ? "Disetujui." : "Ditolak."),
+        },
+      })
+    }
+  })
+
+  revalidatePath("/kas")
+  revalidatePath("/laporan/laba-rugi")
+
+  await writeAuditLog({
+    actorId: userId,
+    entityType: "KAS_TRANSAKSI",
+    entityId: input.id,
+    action: input.action === "APPROVE" ? "APPROVE" : "REJECT",
+    metadata: { catatan: catatan ?? null },
+  })
+
   return { success: true }
 }
 

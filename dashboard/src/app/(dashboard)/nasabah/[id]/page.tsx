@@ -232,9 +232,7 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground text-xs">Ranking</span>
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">{rankingBadge(indikator.ranking)}</span>
-                </TooltipTrigger>
+                <TooltipTrigger render={<span className="inline-flex">{rankingBadge(indikator.ranking)}</span>} />
                 <TooltipContent className="max-w-sm">
                   <div className="text-xs space-y-1">
                     <div className="font-semibold">Alasan Ranking</div>

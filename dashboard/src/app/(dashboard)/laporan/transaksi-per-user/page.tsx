@@ -200,9 +200,7 @@ export default async function TransaksiPerUserPage({
                       <TableCell className="text-right">{fmt(r.outstanding)}</TableCell>
                       <TableCell>
                         <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex">{rankingBadge(r.ranking)}</span>
-                          </TooltipTrigger>
+                          <TooltipTrigger render={<span className="inline-flex">{rankingBadge(r.ranking)}</span>} />
                           <TooltipContent className="max-w-sm">
                             <div className="text-xs space-y-1">
                               <div className="font-semibold">Alasan Ranking</div>

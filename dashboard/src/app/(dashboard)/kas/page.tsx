@@ -14,6 +14,8 @@ export default async function KasPage() {
       deskripsi: t.deskripsi,
       jumlah: Number(t.jumlah),
       kasJenis: t.kasJenis,
+      buktiUrl: t.buktiUrl,
+      isApproved: t.isApproved,
       inputOleh: t.inputOleh,
     })),
   }
