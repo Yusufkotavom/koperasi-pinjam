@@ -1,11 +1,15 @@
 import { getDashboardStats } from "@/actions/dashboard"
+import Link from "next/link"
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { DashboardHeader } from "./_components/dashboard-header"
 import {
   Users, Banknote, TrendingUp, AlertTriangle,
-  ArrowUpRight, ArrowDownRight, Bell, Clock
+  ArrowUpRight, ArrowDownRight, Clock, UserPlus, ClipboardList,
+  HandCoins, WalletCards, Layers3, BarChart3,
 } from "lucide-react"
 
 function fmt(n: number) {
@@ -38,6 +42,12 @@ export default async function DashboardPage() {
   const today = new Date().toLocaleDateString("id-ID", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   })
+  const currentTime = new Date().toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
 
   const surplusBulanIni = stats.arusKas6Bulan.at(-1)
   const surplusVal = (surplusBulanIni?.masuk ?? 0) - (surplusBulanIni?.keluar ?? 0)
@@ -49,19 +59,94 @@ export default async function DashboardPage() {
     { title: "Total Tunggakan", value: fmt(stats.totalTunggakan), change: "Angsuran belum dibayar", trend: "down", icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50" },
   ]
 
+  const quickMenus = [
+    {
+      title: "Tambah Nasabah",
+      description: "Input anggota baru",
+      href: "/nasabah/baru",
+      icon: UserPlus,
+      className: "from-sky-500 to-cyan-500",
+    },
+    {
+      title: "Ajukan Pinjaman",
+      description: "Buat pengajuan baru",
+      href: "/pengajuan/baru",
+      icon: ClipboardList,
+      className: "from-emerald-500 to-teal-500",
+    },
+    {
+      title: "Proses Pencairan",
+      description: "Tindak lanjut pengajuan",
+      href: "/pencairan",
+      icon: HandCoins,
+      className: "from-amber-500 to-orange-500",
+    },
+    {
+      title: "Catat Pembayaran",
+      description: "Input angsuran masuk",
+      href: "/pembayaran",
+      icon: WalletCards,
+      className: "from-violet-500 to-fuchsia-500",
+    },
+    {
+      title: "Data Kelompok",
+      description: "Kelola kelompok nasabah",
+      href: "/kelompok",
+      icon: Layers3,
+      className: "from-slate-700 to-slate-900",
+    },
+    {
+      title: "Laporan Kas",
+      description: "Pantau laporan utama",
+      href: "/laporan/arus-kas",
+      icon: BarChart3,
+      className: "from-rose-500 to-pink-500",
+    },
+  ]
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard Overview</h1>
-          <p className="text-muted-foreground text-sm">{today}</p>
-        </div>
-        {stats.penagihanHariIni > 0 && (
-          <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300 bg-amber-50">
-            <Bell className="size-3" /> {stats.penagihanHariIni} Penagihan Hari Ini
-          </Badge>
-        )}
-      </div>
+      <DashboardHeader
+        title="Dashboard Overview"
+        description="Ringkasan cepat kondisi koperasi, arus kas, tunggakan, dan notifikasi penagihan hari ini."
+        dateLabel={today}
+        initialTimeLabel={currentTime}
+        notificationCount={stats.penagihanHariIni}
+      />
+
+      {/* Quick Menu */}
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Quick Menu</CardTitle>
+              <CardDescription>Akses cepat ke modul yang paling sering dipakai</CardDescription>
+            </div>
+            <Badge variant="outline" className="hidden sm:inline-flex">
+              Fast access
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            {quickMenus.map((menu) => (
+              <Button key={menu.href} asChild variant="outline" className="h-auto items-stretch justify-start p-0">
+                <Link href={menu.href} className="w-full">
+                  <div className="flex h-full w-full flex-col gap-3 rounded-lg p-4 text-left transition-colors hover:bg-muted/50">
+                    <div className={`inline-flex size-10 items-center justify-center rounded-2xl bg-gradient-to-br ${menu.className} text-white shadow-sm`}>
+                      <menu.icon className="size-4.5" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold leading-none">{menu.title}</p>
+                      <p className="text-xs text-muted-foreground">{menu.description}</p>
+                    </div>
+                  </div>
+                </Link>
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

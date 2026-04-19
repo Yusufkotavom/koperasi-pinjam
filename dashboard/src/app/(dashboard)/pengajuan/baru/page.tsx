@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Calculator, Save } from "lucide-react"
+import { ArrowLeft, Calculator, Save, Upload, X } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
 
@@ -30,6 +30,11 @@ type NasabahOption = {
 
 function formatRupiah(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
+}
+
+function docTitle(url: string) {
+  const clean = url.split("?")[0]
+  return clean.split("/").filter(Boolean).pop() ?? url
 }
 
 function KalkulatorAngsuran({
@@ -78,6 +83,8 @@ function KalkulatorAngsuran({
 export default function PengajuanBaruPage() {
   const [isPending, startTransition] = useTransition()
   const [nasabahOptions, setNasabahOptions] = useState<NasabahOption[]>([])
+  const [isUploadingDokumen, setIsUploadingDokumen] = useState(false)
+  const [uploadedDokumen, setUploadedDokumen] = useState<string[]>([])
   const router = useRouter()
   const searchParams = useSearchParams()
   const nasabahIdParam = searchParams.get("nasabahId") ?? ""
@@ -96,6 +103,7 @@ export default function PengajuanBaruPage() {
       tenorType: "BULANAN",
       bungaPerBulan: 1.5,
       tenor: 12,
+      dokumenPendukungUrls: [],
     },
   })
 
@@ -152,6 +160,32 @@ export default function PengajuanBaruPage() {
       toast.success("Pengajuan berhasil diajukan!")
       router.push("/pengajuan")
     })
+  }
+
+  const handleUploadDokumen = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setIsUploadingDokumen(true)
+    try {
+      const formData = new FormData()
+      for (const file of Array.from(files)) {
+        formData.append("files", file)
+      }
+      const res = await fetch("/api/upload/pengajuan", { method: "POST", body: formData })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json?.error ?? "Upload dokumen gagal.")
+        return
+      }
+      const urls = (json?.urls as string[] | undefined) ?? []
+      const next = Array.from(new Set([...uploadedDokumen, ...urls]))
+      setUploadedDokumen(next)
+      setValue("dokumenPendukungUrls", next)
+      toast.success("Dokumen pendukung berhasil diupload.")
+    } catch {
+      toast.error("Upload dokumen gagal.")
+    } finally {
+      setIsUploadingDokumen(false)
+    }
   }
 
   return (
@@ -313,6 +347,58 @@ export default function PengajuanBaruPage() {
               <div className="space-y-2">
                 <Label htmlFor="agunan">Agunan / Jaminan</Label>
                 <Input id="agunan" {...register("agunan")} placeholder="BPKB Motor, sertifikat tanah, dll..." />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="catatanPengajuan">Catatan</Label>
+                <Textarea
+                  id="catatanPengajuan"
+                  {...register("catatanPengajuan")}
+                  rows={2}
+                  placeholder="Catatan tambahan untuk koperasi (opsional)..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dokumenPendukungUrls">Dokumen Pendukung</Label>
+                <Input
+                  id="dokumenPendukungUrls"
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.webp,.pdf"
+                  onChange={(e) => {
+                    void handleUploadDokumen(e.target.files)
+                    e.currentTarget.value = ""
+                  }}
+                  disabled={isUploadingDokumen}
+                />
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Upload className="size-3" /> {isUploadingDokumen ? "Sedang upload..." : "Upload dokumen (jpg/png/webp/pdf, max 5MB per file)."}
+                </p>
+                {uploadedDokumen.length > 0 && (
+                  <div className="space-y-1">
+                    {uploadedDokumen.map((url) => (
+                      <div key={url} className="flex items-center justify-between rounded border px-2 py-1 text-xs">
+                        <div className="min-w-0 pr-2">
+                          <div className="truncate font-medium">{docTitle(url)}</div>
+                          <div className="truncate text-muted-foreground">{url}</div>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-red-500 hover:text-red-600"
+                          onClick={() => {
+                            const next = uploadedDokumen.filter((v) => v !== url)
+                            setUploadedDokumen(next)
+                            setValue("dokumenPendukungUrls", next)
+                          }}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {errors.dokumenPendukungUrls && <p className="text-xs text-red-500">Dokumen pendukung tidak valid.</p>}
               </div>
             </CardContent>
           </Card>

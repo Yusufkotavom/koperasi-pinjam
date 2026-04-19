@@ -5,7 +5,7 @@ import { inputPembayaran } from "@/actions/pembayaran"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Wallet } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -75,15 +75,18 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label>Tipe Pembayaran</Label>
-              <select
-                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={mode}
-                onChange={(e) => setMode(e.target.value as any)}
-              >
-                <option value="FULL">Sesuai Tagihan (Penuh)</option>
-                <option value="PARSIAL">Bayar Sebagian (Parsial)</option>
-                <option value="PELUNASAN">Pelunasan Dipercepat</option>
-              </select>
+                <select
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={mode}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (v === "FULL" || v === "PARSIAL" || v === "PELUNASAN") setMode(v)
+                  }}
+                >
+                  <option value="FULL">Sesuai Tagihan (Penuh)</option>
+                  <option value="PARSIAL">Bayar Sebagian (Parsial)</option>
+                  <option value="PELUNASAN">Pelunasan Dipercepat</option>
+                </select>
             </div>
 
             {mode === "PARSIAL" && (
@@ -105,7 +108,10 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
                 <select
                   className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={metode}
-                  onChange={(e) => setMetode(e.target.value as any)}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (v === "TUNAI" || v === "TRANSFER") setMetode(v)
+                  }}
                 >
                   <option value="TUNAI">Kas Tunai</option>
                   <option value="TRANSFER">Transfer Bank</option>

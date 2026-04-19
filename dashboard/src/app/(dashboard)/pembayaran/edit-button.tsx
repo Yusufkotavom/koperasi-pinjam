@@ -85,7 +85,10 @@ export function EditPembayaranButton({ data }: { data: PembayaranData }) {
                 <select
                   className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={metode}
-                  onChange={(e) => setMetode(e.target.value as any)}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    if (v === "TUNAI" || v === "TRANSFER") setMetode(v)
+                  }}
                 >
                   <option value="TUNAI">Kas Tunai</option>
                   <option value="TRANSFER">Transfer Bank</option>

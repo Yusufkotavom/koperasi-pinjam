@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Save } from "lucide-react"
 import { createKelompok, getNasabahOptionsForKelompok, updateKelompok } from "@/actions/kelompok"
@@ -34,25 +34,25 @@ export function KelompokForm({
     jadwalPertemuan: string | null
     nasabah: { id: string; namaLengkap: string }[]
   }
-}) {
-  const [isPending, startTransition] = useTransition()
-  const [nasabahOptions, setNasabahOptions] = useState<NasabahOption[]>([])
-  const router = useRouter()
+	}) {
+	  const [isPending, startTransition] = useTransition()
+	  const [nasabahOptions, setNasabahOptions] = useState<NasabahOption[]>([])
+	  const router = useRouter()
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<KelompokInput>({
-    resolver: zodResolver(kelompokSchema) as never,
-    defaultValues: {
-      kode: initialData?.kode ?? "",
-      nama: initialData?.nama ?? "",
-      ketua: initialData?.ketua ?? "",
-      wilayah: initialData?.wilayah ?? "",
-      jadwalPertemuan: initialData?.jadwalPertemuan ?? "",
-      anggotaIds: initialData?.nasabah?.map((n) => n.id) ?? [],
-    },
-  })
+	  const { register, handleSubmit, setValue, control, formState: { errors } } = useForm<KelompokInput>({
+	    resolver: zodResolver(kelompokSchema) as never,
+	    defaultValues: {
+	      kode: initialData?.kode ?? "",
+	      nama: initialData?.nama ?? "",
+	      ketua: initialData?.ketua ?? "",
+	      wilayah: initialData?.wilayah ?? "",
+	      jadwalPertemuan: initialData?.jadwalPertemuan ?? "",
+	      anggotaIds: initialData?.nasabah?.map((n) => n.id) ?? [],
+	    },
+	  })
 
-  const anggotaIds = watch("anggotaIds") ?? []
-  const ketuaNasabahId = watch("ketuaNasabahId")
+	  const anggotaIds = useWatch({ control, name: "anggotaIds" }) ?? []
+	  const ketuaNasabahId = useWatch({ control, name: "ketuaNasabahId" })
 
   useEffect(() => {
     let cancelled = false
@@ -80,7 +80,7 @@ export function KelompokForm({
   const availableForKelompok = useMemo(() => {
     if (!initialData?.id) return nasabahOptions
     return nasabahOptions.filter((n) => !n.kelompokId || n.kelompokId === initialData.id)
-  }, [initialData?.id, nasabahOptions])
+  }, [initialData, nasabahOptions])
 
   const toggleAnggota = (id: string) => {
     const exists = anggotaIds.includes(id)

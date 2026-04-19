@@ -172,6 +172,8 @@ model Pengajuan {
   bungaPerBulan   Decimal         @db.Decimal(5, 4)
   tujuanPinjaman  String?
   agunan          String?
+  catatanPengajuan String?
+  dokumenPendukungUrls String[]
   hasilSurvey     String?
   catatanApproval String?
   status          StatusPengajuan @default(DRAFT)
@@ -299,6 +301,18 @@ model Simpanan {
 enum JenisKas {
   MASUK
   KELUAR
+}
+
+model KasKategori {
+  id        String   @id @default(cuid())
+  nama      String
+  key       String   @unique
+  jenis     JenisKas
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("kas_kategori")
 }
 
 model KasTransaksi {

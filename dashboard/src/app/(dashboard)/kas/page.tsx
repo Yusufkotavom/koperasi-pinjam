@@ -1,8 +1,8 @@
-import { getKasHarian } from "@/actions/kas"
+import { getKasHarian, getKasKategoriList } from "@/actions/kas"
 import { KasClientPage } from "./kas-client"
 
 export default async function KasPage() {
-  const data = await getKasHarian()
+  const [data, kategori] = await Promise.all([getKasHarian(), getKasKategoriList()])
 
   const normalized = {
     ...data,
@@ -18,5 +18,5 @@ export default async function KasPage() {
     })),
   }
 
-  return <KasClientPage initialData={normalized} />
+  return <KasClientPage initialData={normalized} initialKategori={kategori} />
 }

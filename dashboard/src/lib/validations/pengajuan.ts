@@ -10,6 +10,8 @@ export const pengajuanSchema = z.object({
   bungaPerBulan: z.coerce.number().min(0.1).max(5),
   tujuanPinjaman: z.string().min(5, "Tujuan harus diisi"),
   agunan: z.string().optional(),
+  catatanPengajuan: z.string().optional(),
+  dokumenPendukungUrls: z.array(z.string().min(3)).optional(),
 })
 
 export type PengajuanInput = z.infer<typeof pengajuanSchema>

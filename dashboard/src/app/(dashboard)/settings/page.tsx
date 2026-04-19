@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Shield, User, Mail, Phone } from "lucide-react"
+import { Shield, User, Mail } from "lucide-react"
 import { getRankingConfig } from "@/actions/settings"
 import { RankingSettingsForm } from "./ranking-settings-form"
 

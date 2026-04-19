@@ -22,7 +22,14 @@ type KasData = {
   kasJenis: string
 }
 
-export function KasRowActions({ data }: { data: KasData }) {
+type KasKategori = {
+  id: string
+  nama: string
+  key: string
+  jenis: "MASUK" | "KELUAR"
+}
+
+export function KasRowActions({ data, kategoriList }: { data: KasData; kategoriList: KasKategori[] }) {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -36,17 +43,12 @@ export function KasRowActions({ data }: { data: KasData }) {
   const [jumlah, setJumlah] = useState<number>(data.jumlah)
   const [deskripsi, setDeskripsi] = useState(data.deskripsi)
   const [kasJenis, setKasJenis] = useState(data.kasJenis)
-  
-  // Deteksi jika ini adalah custom kategori
-  const defaultKategori = ["ANGSURAN", "SIMPANAN", "PENCAIRAN", "ADMIN", "DENDA", "GAJI", "OPERASIONAL", "LAINNYA"]
-  const [isCustomKategori, setIsCustomKategori] = useState(!defaultKategori.includes(data.kategori))
-  const [customKategori, setCustomKategori] = useState(isCustomKategori ? data.kategori : "")
+  const kategoriOptions = kategoriList.filter((k) => k.jenis === jenis)
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    const finalKategori = isCustomKategori ? customKategori : kategori
-    if (!finalKategori.trim()) {
+    if (!kategori.trim()) {
       toast.error("Kategori tidak boleh kosong")
       return
     }
@@ -55,14 +57,15 @@ export function KasRowActions({ data }: { data: KasData }) {
       const result = await updateKas(data.id, {
         tanggal,
         jenis,
-        kategori: finalKategori,
+        kategori,
         deskripsi,
         jumlah,
         kasJenis,
       })
 
       if (!result.success) {
-        toast.error("error" in result ? (result.error as any).toString() : "Gagal mengedit transaksi.")
+        const err = "error" in result ? result.error : null
+        toast.error(typeof err === "string" ? err : "Gagal mengedit transaksi.")
         return
       }
 
@@ -147,43 +150,17 @@ export function KasRowActions({ data }: { data: KasData }) {
 
               <div className="space-y-2">
                 <Label>Kategori Transaksi</Label>
-                <div className="flex gap-2">
-                  <Select 
-                    onValueChange={(v) => {
-                      if (!v) return;
-                      if(v === "__CUSTOM__") {
-                        setIsCustomKategori(true)
-                      } else {
-                        setIsCustomKategori(false)
-                        setKategori(v)
-                      }
-                    }} 
-                    value={isCustomKategori ? "__CUSTOM__" : kategori}
-                  >
-                    <SelectTrigger className={isCustomKategori ? "w-[140px]" : "w-full"}><SelectValue placeholder="Kategori" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ANGSURAN">Angsuran</SelectItem>
-                      <SelectItem value="SIMPANAN">Simpanan</SelectItem>
-                      <SelectItem value="PENCAIRAN">Pencairan</SelectItem>
-                      <SelectItem value="ADMIN">Biaya Admin</SelectItem>
-                      <SelectItem value="DENDA">Denda</SelectItem>
-                      <SelectItem value="GAJI">Gaji</SelectItem>
-                      <SelectItem value="OPERASIONAL">Operasional</SelectItem>
-                      <SelectItem value="LAINNYA">Lainnya</SelectItem>
-                      <SelectItem value="__CUSTOM__">Buat Kategori Baru...</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  
-                  {isCustomKategori && (
-                    <Input 
-                      placeholder="Nama kategori..." 
-                      value={customKategori} 
-                      onChange={(e) => setCustomKategori(e.target.value)}
-                      className="flex-1"
-                      required
-                    />
-                  )}
-                </div>
+                <Select onValueChange={(v) => setKategori(v)} value={kategori}>
+                  <SelectTrigger><SelectValue placeholder="Kategori" /></SelectTrigger>
+                  <SelectContent>
+                    {kategoriOptions.map((k) => (
+                      <SelectItem key={k.id} value={k.key}>{k.nama}</SelectItem>
+                    ))}
+                    {!kategoriOptions.some((k) => k.key === kategori) && (
+                      <SelectItem value={kategori}>{kategori} (tidak terdaftar)</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

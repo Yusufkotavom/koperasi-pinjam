@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ArrowLeft, Edit, Phone, MapPin, Briefcase, CreditCard } from "lucide-react"
-import { computeRanking } from "@/lib/ranking"
+import { computeRanking, explainRanking } from "@/lib/ranking"
 
 function docTitle(url: string) {
   const clean = url.split("?")[0]
@@ -120,6 +121,10 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
       anomaliNominal,
     }
   })()
+  const rankingExplain = explainRanking(
+    { telat: indikator.telat, kurangAngsuran: indikator.kurangAngsuran },
+    rankingConfig
+  )
 
   const transaksiTerjadi = nasabah.pengajuan
     .flatMap((p) =>
@@ -226,7 +231,22 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground text-xs">Ranking</span>
-              {rankingBadge(indikator.ranking)}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">{rankingBadge(indikator.ranking)}</span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-sm">
+                  <div className="text-xs space-y-1">
+                    <div className="font-semibold">Alasan Ranking</div>
+                    <div>{rankingExplain.summary}</div>
+                    <div className="pt-1">
+                      {rankingExplain.rules.map((line) => (
+                        <div key={line}>{line}</div>
+                      ))}
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-3">

@@ -91,7 +91,7 @@ export async function createPengajuan(input: unknown) {
   const parsed = pengajuanSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { bungaPerBulan, plafonDiajukan, ...rest } = parsed.data
+  const { bungaPerBulan, plafonDiajukan, dokumenPendukungUrls, ...rest } = parsed.data
 
   const nasabah = await prisma.nasabah.findUnique({
     where: { id: parsed.data.nasabahId },
@@ -107,6 +107,7 @@ export async function createPengajuan(input: unknown) {
       kelompokId: rest.kelompokId || nasabah.kelompokId || null,
       plafonDiajukan: new Prisma.Decimal(plafonDiajukan),
       bungaPerBulan: new Prisma.Decimal(bungaPerBulan / 100),
+      dokumenPendukungUrls: dokumenPendukungUrls ?? [],
       status: "DIAJUKAN",
     },
   })

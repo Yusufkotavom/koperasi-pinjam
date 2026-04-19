@@ -22,6 +22,11 @@ function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
 }
 
+function docTitle(url: string) {
+  const clean = url.split("?")[0]
+  return clean.split("/").filter(Boolean).pop() ?? url
+}
+
 export default async function PengajuanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const pengajuan = await getPengajuanById(id)
@@ -103,6 +108,37 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
               ))}
             </div>
 
+            {(pengajuan.catatanPengajuan || pengajuan.dokumenPendukungUrls.length > 0) && (
+              <>
+                <Separator />
+                {pengajuan.catatanPengajuan && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Catatan Pengajuan</p>
+                    <p className="text-sm bg-muted/40 rounded-md p-3">{pengajuan.catatanPengajuan}</p>
+                  </div>
+                )}
+                {pengajuan.dokumenPendukungUrls.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Dokumen Pendukung</p>
+                    <div className="space-y-2">
+                      {pengajuan.dokumenPendukungUrls.map((url) => (
+                        <a
+                          key={url}
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block rounded border px-3 py-2 hover:bg-muted/30"
+                        >
+                          <div className="text-sm font-medium truncate">{docTitle(url)}</div>
+                          <div className="text-xs text-muted-foreground truncate">{url}</div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
             {pengajuan.catatanApproval && (
               <>
                 <Separator />
@@ -151,11 +187,18 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
                   <span>{new Date(pengajuan.pinjaman.tanggalCair).toLocaleDateString("id-ID")}</span>
                 </div>
                 <div className="pt-2 mt-2 border-t">
-                  <Button asChild variant="outline" className="w-full text-indigo-700 border-indigo-200 bg-indigo-50 hover:bg-indigo-100">
-                    <Link href={`/dokumen/kartu-angsuran/${pengajuan.pinjaman.id}`}>
-                      Cetak Kartu Angsuran
-                    </Link>
-                  </Button>
+                  <div className="grid gap-2">
+                    <Button asChild variant="outline" className="w-full text-indigo-700 border-indigo-200 bg-indigo-50 hover:bg-indigo-100">
+                      <Link href={`/dokumen/kartu-angsuran/${pengajuan.pinjaman.id}`}>
+                        Dokumen Angsuran/Cicilan
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full text-slate-700 border-slate-200 bg-slate-50 hover:bg-slate-100">
+                      <Link href={`/dokumen/pencairan/${pengajuan.id}`}>
+                        Dokumen Bukti Pencairan
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

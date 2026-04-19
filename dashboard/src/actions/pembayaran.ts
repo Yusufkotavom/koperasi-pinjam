@@ -441,6 +441,7 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
                 { namaLengkap: { contains: params.search, mode: "insensitive" as const } },
                 { nomorAnggota: { contains: params.search, mode: "insensitive" as const } },
                 { nik: { contains: params.search, mode: "insensitive" as const } },
+                { kelompok: { nama: { contains: params.search, mode: "insensitive" as const } } },
               ],
             }
           : {}),
@@ -816,7 +817,12 @@ export async function editPembayaranMetadata(input: {
   if (!existing) return { error: "Transaksi tidak ditemukan." }
   if (existing.isBatalkan) return { error: "Transaksi batal tidak bisa diedit." }
 
-  const updateData: any = {}
+  const updateData: {
+    tanggalBayar?: Date
+    metode?: MetodePembayaran
+    buktiBayarUrl?: string | null
+    catatan?: string | null
+  } = {}
   if (input.tanggalBayar) updateData.tanggalBayar = new Date(input.tanggalBayar)
   if (input.metode) updateData.metode = input.metode
   if (input.buktiBayarUrl !== undefined) updateData.buktiBayarUrl = input.buktiBayarUrl

@@ -25,3 +25,25 @@ export function computeRanking(input: { telat: number; kurangAngsuran: number },
   return "D"
 }
 
+export function explainRanking(input: { telat: number; kurangAngsuran: number }, cfg?: Partial<RankingConfig>) {
+  const config: RankingConfig = { ...DEFAULT_RANKING_CONFIG, ...(cfg ?? {}) }
+  const telat = Math.max(0, Math.trunc(input.telat))
+  const kurang = Math.max(0, Number(input.kurangAngsuran) || 0)
+  const grade = computeRanking({ telat, kurangAngsuran: kurang }, config)
+
+  const rules = [
+    `A: telat = 0 dan kurang = 0`,
+    `B: telat <= ${config.bMaxTelat} dan kurang < Rp ${config.bMaxKurang.toLocaleString("id-ID")}`,
+    `C: telat <= ${config.cMaxTelat} dan kurang < Rp ${config.cMaxKurang.toLocaleString("id-ID")}`,
+    `D: selain itu`,
+  ]
+
+  return {
+    grade,
+    telat,
+    kurangAngsuran: kurang,
+    config,
+    rules,
+    summary: `Kondisi: telat ${telat}, kurang Rp ${kurang.toLocaleString("id-ID")} -> ranking ${grade}`,
+  }
+}

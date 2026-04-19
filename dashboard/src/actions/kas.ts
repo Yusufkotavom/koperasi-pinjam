@@ -8,6 +8,15 @@ import { Prisma, RoleType } from "@prisma/client"
 import { requireRoles } from "@/lib/roles"
 import { writeAuditLog } from "@/lib/audit"
 
+function normalizeKasCategoryKey(raw: string) {
+  return raw.trim().toUpperCase().replace(/\s+/g, "_")
+}
+
+const kasKategoriSchema = z.object({
+  jenis: z.enum(["MASUK", "KELUAR"]),
+  nama: z.string().min(2, "Nama kategori minimal 2 karakter"),
+})
+
 const kasSchema = z.object({
   jenis: z.enum(["MASUK", "KELUAR"]),
   kategori: z.string().min(1),
@@ -16,6 +25,109 @@ const kasSchema = z.object({
   kasJenis: z.enum(["TUNAI", "BANK"]).default("TUNAI"),
   tanggal: z.string().optional(),
 })
+
+async function ensureKasKategori(params: { jenis: "MASUK" | "KELUAR"; kategori: string }) {
+  const key = normalizeKasCategoryKey(params.kategori)
+  if (!key) return { error: "Kategori tidak boleh kosong." as const }
+
+  const existing = await prisma.kasKategori.findUnique({ where: { key } })
+  if (existing && existing.jenis !== params.jenis) {
+    return { error: `Kategori "${existing.nama}" sudah terpakai untuk jenis ${existing.jenis}. Kategori masuk dan keluar tidak boleh sama.` as const }
+  }
+
+  if (!existing) {
+    await prisma.kasKategori.create({
+      data: {
+        nama: params.kategori.trim(),
+        key,
+        jenis: params.jenis,
+        isActive: true,
+      },
+    })
+  }
+
+  return { key }
+}
+
+export async function getKasKategoriList() {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  const existingCount = await prisma.kasKategori.count()
+  if (existingCount === 0) {
+    const defaults: Array<{ jenis: "MASUK" | "KELUAR"; nama: string }> = [
+      { jenis: "MASUK", nama: "ANGSURAN" },
+      { jenis: "MASUK", nama: "SIMPANAN" },
+      { jenis: "MASUK", nama: "ADMIN" },
+      { jenis: "MASUK", nama: "DENDA" },
+      { jenis: "MASUK", nama: "LAINNYA_MASUK" },
+      { jenis: "KELUAR", nama: "PENCAIRAN" },
+      { jenis: "KELUAR", nama: "GAJI" },
+      { jenis: "KELUAR", nama: "OPERASIONAL" },
+      { jenis: "KELUAR", nama: "LAINNYA_KELUAR" },
+    ]
+
+    await Promise.all(
+      defaults.map(async (d) => {
+        const key = normalizeKasCategoryKey(d.nama)
+        const found = await prisma.kasKategori.findUnique({ where: { key } })
+        if (found) return
+        await prisma.kasKategori.create({
+          data: { nama: d.nama, key, jenis: d.jenis, isActive: true },
+        })
+      })
+    )
+  }
+
+  const rows = await prisma.kasKategori.findMany({
+    where: { isActive: true },
+    select: { id: true, nama: true, key: true, jenis: true },
+    orderBy: [{ jenis: "asc" }, { nama: "asc" }],
+  })
+
+  return rows
+}
+
+export async function createKasKategori(input: unknown) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  let userId: string
+  try {
+    const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+    userId = required.userId
+  } catch {
+    return { error: "Tidak memiliki hak akses untuk menambah kategori kas." }
+  }
+
+  const parsed = kasKategoriSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+
+  const key = normalizeKasCategoryKey(parsed.data.nama)
+  const existing = await prisma.kasKategori.findUnique({ where: { key } })
+  if (existing) {
+    return { error: `Kategori "${existing.nama}" sudah ada (jenis ${existing.jenis}). Kategori masuk dan keluar tidak boleh sama.` }
+  }
+
+  const row = await prisma.kasKategori.create({
+    data: {
+      nama: parsed.data.nama.trim(),
+      key,
+      jenis: parsed.data.jenis,
+      isActive: true,
+    },
+    select: { id: true, nama: true, key: true, jenis: true },
+  })
+
+  revalidatePath("/kas")
+  await writeAuditLog({
+    actorId: userId,
+    entityType: "KAS_KATEGORI",
+    entityId: row.id,
+    action: "CREATE",
+    afterData: { key: row.key, nama: row.nama, jenis: row.jenis },
+  })
+  return { success: true, data: row }
+}
 
 export async function getKasHarian(tanggal?: string) {
   const session = await auth()
@@ -61,9 +173,13 @@ export async function inputKas(input: unknown) {
 
   const { tanggal, jumlah, ...rest } = parsed.data
 
+  const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori: rest.kategori })
+  if ("error" in ensured) return { error: ensured.error }
+
   const kas = await prisma.kasTransaksi.create({
     data: {
       ...rest,
+      kategori: ensured.key,
       jumlah: new Prisma.Decimal(jumlah),
       tanggal: tanggal ? new Date(tanggal) : new Date(),
       inputOlehId: userId,
@@ -98,6 +214,9 @@ export async function updateKas(id: string, input: unknown) {
 
   const { tanggal, jumlah, ...rest } = parsed.data
 
+  const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori: rest.kategori })
+  if ("error" in ensured) return { error: ensured.error }
+
   const existing = await prisma.kasTransaksi.findUnique({ where: { id } })
   if (!existing) return { error: "Data tidak ditemukan." }
 
@@ -105,6 +224,7 @@ export async function updateKas(id: string, input: unknown) {
     where: { id },
     data: {
       ...rest,
+      kategori: ensured.key,
       jumlah: new Prisma.Decimal(jumlah),
       tanggal: tanggal ? new Date(tanggal) : new Date(),
     },
