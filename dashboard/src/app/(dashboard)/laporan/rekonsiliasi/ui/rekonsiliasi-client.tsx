@@ -78,7 +78,7 @@ export function RekonsiliasiClient({ cashAccounts }: { cashAccounts: CashAccount
         catatan,
         ...(buktiUrl ? { buktiUrl } : {}),
       })
-      if (!res.success) {
+      if (!("success" in res) || !res.success) {
         const err = "error" in res ? res.error : null
         toast.error(typeof err === "string" ? err : "Gagal menyimpan rekonsiliasi.")
         return

@@ -9,6 +9,8 @@ import { requireRoles } from "@/lib/roles"
 import { writeAuditLog } from "@/lib/audit"
 import { computeRanking } from "@/lib/ranking"
 import { getRankingConfig } from "@/actions/settings"
+import { ensureKasKategori } from "./kas"
+import { serializeData } from "@/lib/utils"
 
 type MetodePembayaran = "TUNAI" | "TRANSFER"
 type ModePembayaran = "FULL" | "PARSIAL" | "PELUNASAN"
@@ -54,7 +56,7 @@ export async function getAngsuranJatuhTempo(pinjamanId?: string) {
     ? { pinjamanId, sudahDibayar: false }
     : { sudahDibayar: false, tanggalJatuhTempo: { lte: today } }
 
-  return prisma.jadwalAngsuran.findMany({
+  const result = await prisma.jadwalAngsuran.findMany({
     where,
     orderBy: { tanggalJatuhTempo: "asc" },
     include: {
@@ -70,6 +72,254 @@ export async function getAngsuranJatuhTempo(pinjamanId?: string) {
       },
     },
   })
+
+  return serializeData(result)
+}
+
+export async function getJadwalPembayaran(params?: { search?: string; limit?: number; windowDays?: number | "all" }) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  const limit = params?.limit ?? 50
+  const search = params?.search?.trim()
+  const today = new Date()
+  const windowDays = params?.windowDays ?? 7
+  const end =
+    windowDays === "all"
+      ? null
+      : new Date(today.getTime() + windowDays * 24 * 60 * 60 * 1000)
+
+  const where: Prisma.JadwalAngsuranWhereInput = {
+    sudahDibayar: false,
+    ...(end ? { tanggalJatuhTempo: { lte: end } } : {}),
+    pinjaman: { status: { not: "LUNAS" } },
+  }
+
+  if (search) {
+    where.OR = [
+      {
+        pinjaman: {
+          nomorKontrak: { contains: search, mode: "insensitive" },
+        },
+      },
+      {
+        pinjaman: {
+          pengajuan: {
+            nasabah: {
+              namaLengkap: { contains: search, mode: "insensitive" },
+            },
+          },
+        },
+      },
+      {
+        pinjaman: {
+          pengajuan: {
+            nasabah: {
+              nomorAnggota: { contains: search, mode: "insensitive" },
+            },
+          },
+        },
+      },
+      {
+        pinjaman: {
+          pengajuan: {
+            nasabah: {
+              nik: { contains: search, mode: "insensitive" },
+            },
+          },
+        },
+      },
+    ]
+  }
+
+  const result = await prisma.jadwalAngsuran.findMany({
+    where,
+    orderBy: { tanggalJatuhTempo: "asc" },
+    take: limit,
+    include: {
+      pinjaman: {
+        include: {
+          pengajuan: {
+            include: {
+              nasabah: {
+                select: {
+                  namaLengkap: true,
+                  nomorAnggota: true,
+                  noHp: true,
+                },
+              },
+              kelompok: { select: { nama: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  return serializeData(result)
+}
+
+export type ActiveLoanBorrowerOption = {
+  nasabahId: string
+  namaLengkap: string
+  nomorAnggota: string
+  nik: string
+  kelompok: string
+  activeLoanCount: number
+  contractNumbers: string[]
+  totalSisaPinjaman: number
+  nextDueAt: string | null
+}
+
+export async function getActiveLoanBorrowers(params?: { search?: string }) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  const search = params?.search?.trim()
+
+  const where: Prisma.PinjamanWhereInput = {
+    status: { not: "LUNAS" },
+    ...(search
+      ? {
+          OR: [
+            { nomorKontrak: { contains: search, mode: "insensitive" } },
+            {
+              pengajuan: {
+                nasabah: {
+                  namaLengkap: { contains: search, mode: "insensitive" },
+                },
+              },
+            },
+            {
+              pengajuan: {
+                nasabah: {
+                  nomorAnggota: { contains: search, mode: "insensitive" },
+                },
+              },
+            },
+            {
+              pengajuan: {
+                nasabah: {
+                  nik: { contains: search, mode: "insensitive" },
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+  }
+
+  const pinjaman = await prisma.pinjaman.findMany({
+    where,
+    orderBy: [{ tanggalJatuhTempo: "asc" }],
+    select: {
+      nomorKontrak: true,
+      sisaPinjaman: true,
+      tanggalJatuhTempo: true,
+      pengajuan: {
+        select: {
+          nasabahId: true,
+          nasabah: {
+            select: {
+              namaLengkap: true,
+              nomorAnggota: true,
+              nik: true,
+              kelompok: { select: { nama: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  const byNasabah = new Map<string, ActiveLoanBorrowerOption>()
+
+  for (const pinj of pinjaman) {
+    const nasabahId = pinj.pengajuan.nasabahId
+    const nasabah = pinj.pengajuan.nasabah
+    const existing = byNasabah.get(nasabahId) ?? {
+      nasabahId,
+      namaLengkap: nasabah.namaLengkap,
+      nomorAnggota: nasabah.nomorAnggota,
+      nik: nasabah.nik,
+      kelompok: nasabah.kelompok?.nama ?? "Individu",
+      activeLoanCount: 0,
+      contractNumbers: [],
+      totalSisaPinjaman: 0,
+      nextDueAt: null,
+    }
+
+    existing.activeLoanCount += 1
+    existing.contractNumbers.push(pinj.nomorKontrak)
+    existing.totalSisaPinjaman += Number(pinj.sisaPinjaman)
+
+    const dueAt = pinj.tanggalJatuhTempo.toISOString()
+    if (!existing.nextDueAt || dueAt < existing.nextDueAt) existing.nextDueAt = dueAt
+
+    byNasabah.set(nasabahId, existing)
+  }
+
+  return serializeData(Array.from(byNasabah.values()).sort((a, b) => a.namaLengkap.localeCompare(b.namaLengkap, "id")))
+}
+
+export async function searchJadwalAngsuranManual(params: { search: string; nasabahId?: string; limit?: number }) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  const search = params.search.trim()
+  const nasabahId = params.nasabahId?.trim()
+  if (!search && !nasabahId) return []
+
+  const limit = params.limit ?? 20
+
+  const where: Prisma.JadwalAngsuranWhereInput = {
+    AND: [
+      { sudahDibayar: false },
+      { pinjaman: { status: { not: "LUNAS" } } },
+      nasabahId ? { pinjaman: { pengajuan: { nasabahId } } } : {},
+      search
+        ? {
+            OR: [
+              { pinjaman: { nomorKontrak: { contains: search, mode: "insensitive" } } },
+              { pinjaman: { pengajuan: { nasabah: { namaLengkap: { contains: search, mode: "insensitive" } } } } },
+              { pinjaman: { pengajuan: { nasabah: { nomorAnggota: { contains: search, mode: "insensitive" } } } } },
+              { pinjaman: { pengajuan: { nasabah: { nik: { contains: search, mode: "insensitive" } } } } },
+            ],
+          }
+        : {},
+    ],
+  }
+
+  const result = await prisma.jadwalAngsuran.findMany({
+    where,
+    orderBy: { tanggalJatuhTempo: "asc" },
+    take: limit,
+    select: {
+      id: true,
+      angsuranKe: true,
+      tanggalJatuhTempo: true,
+      total: true,
+      pinjaman: {
+        select: {
+          nomorKontrak: true,
+          tenorType: true,
+          pengajuan: {
+            select: {
+              nasabah: {
+                select: {
+                  namaLengkap: true,
+                  nomorAnggota: true,
+                },
+              },
+              kelompok: { select: { nama: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  return serializeData(result)
 }
 
 export async function inputPembayaran(input: {
@@ -149,6 +399,10 @@ export async function inputPembayaran(input: {
   if (input.catatan?.trim()) metaCatatan.push(input.catatan.trim())
   const catatanFinal = metaCatatan.join(" ")
 
+  const kategoriKey = mode === "PELUNASAN" ? "PELUNASAN" : "ANGSURAN"
+  const ensured = await ensureKasKategori({ jenis: "MASUK", kategori: kategoriKey })
+  if ("error" in ensured) return { error: ensured.error }
+
   const result = await prisma.$transaction(async (tx) => {
     const pembayaran = await tx.pembayaran.create({
       data: {
@@ -205,7 +459,7 @@ export async function inputPembayaran(input: {
     await tx.kasTransaksi.create({
       data: {
         jenis: "MASUK",
-        kategori: mode === "PELUNASAN" ? "PELUNASAN" : "ANGSURAN",
+        kategori: ensured.key,
         deskripsi: `${mode} angsuran ke-${jadwal.angsuranKe} ${jadwal.pinjaman.nomorKontrak}`,
         jumlah: new Prisma.Decimal(jumlahBayar),
         kasJenis: input.metode === "TRANSFER" ? "BANK" : "TUNAI",
@@ -255,11 +509,13 @@ export async function getRiwayatPembayaran(pinjamanId: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
 
-  return prisma.pembayaran.findMany({
+  const result = await prisma.pembayaran.findMany({
     where: { pinjamanId, isBatalkan: false },
     orderBy: { tanggalBayar: "desc" },
     include: { inputOleh: { select: { name: true } } },
   })
+
+  return serializeData(result)
 }
 
 export async function getRecentPembayaran(limit = 20, query?: string) {
@@ -288,11 +544,14 @@ export async function getRecentPembayaran(limit = 20, query?: string) {
     ]
   }
 
-  return prisma.pembayaran.findMany({
+  const rows = await prisma.pembayaran.findMany({
     where,
     orderBy: { tanggalBayar: "desc" },
     take: limit,
     include: {
+      // digunakan untuk "pembayaran ke berapa" / info jadwal
+      // catatan menyimpan tag [JADWAL:<id>]
+      // (jadwal diambil dengan query ringan di tahap berikutnya)
       pinjaman: {
         select: {
           nomorKontrak: true,
@@ -308,43 +567,98 @@ export async function getRecentPembayaran(limit = 20, query?: string) {
       inputOleh: { select: { name: true } },
     },
   })
+
+  const jadwalIds = Array.from(
+    new Set(
+      rows
+        .map((p) => p.catatan?.match(/\[JADWAL:([^\]]+)\]/)?.[1])
+        .filter((v): v is string => Boolean(v)),
+    ),
+  )
+
+  const jadwalMap = new Map<
+    string,
+    { angsuranKe: number; tanggalJatuhTempo: Date }
+  >()
+
+  if (jadwalIds.length > 0) {
+    const jadwalRows = await prisma.jadwalAngsuran.findMany({
+      where: { id: { in: jadwalIds } },
+      select: { id: true, angsuranKe: true, tanggalJatuhTempo: true },
+    })
+    for (const j of jadwalRows) {
+      jadwalMap.set(j.id, {
+        angsuranKe: j.angsuranKe,
+        tanggalJatuhTempo: j.tanggalJatuhTempo,
+      })
+    }
+  }
+
+  const results = rows.map((p) => {
+    const jadwalId = p.catatan?.match(/\[JADWAL:([^\]]+)\]/)?.[1]
+    const jadwal = jadwalId ? jadwalMap.get(jadwalId) : undefined
+    return {
+      ...p,
+      jadwal,
+    }
+  })
+
+  return serializeData(results)
 }
 
-export async function getHistoryPembayaranNasabahReport() {
+export async function getHistoryPembayaranNasabahReport(params?: { page?: number; limit?: number; search?: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+
+  const page = params?.page ?? 1
+  const limit = params?.limit ?? 50
+  const skip = (page - 1) * limit
+  const search = params?.search
 
   const today = new Date()
   const rankingConfig = await getRankingConfig()
 
-  const nasabahList = await prisma.nasabah.findMany({
-    include: {
-      kelompok: { select: { nama: true } },
-      pengajuan: {
-        include: {
-          pinjaman: {
-            include: {
-              jadwalAngsuran: {
-                orderBy: { angsuranKe: "asc" },
-              },
-              pembayaran: {
-                where: { isBatalkan: false },
-                select: {
-                  catatan: true,
-                  totalBayar: true,
+  const where = search ? {
+    OR: [
+      { namaLengkap: { contains: search, mode: "insensitive" as const } },
+      { nomorAnggota: { contains: search, mode: "insensitive" as const } },
+    ]
+  } : {}
+
+  const [nasabahList, total] = await Promise.all([
+    prisma.nasabah.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        kelompok: { select: { nama: true } },
+        pengajuan: {
+          include: {
+            pinjaman: {
+              include: {
+                jadwalAngsuran: {
+                  orderBy: { angsuranKe: "asc" },
+                },
+                pembayaran: {
+                  where: { isBatalkan: false },
+                  select: {
+                    catatan: true,
+                    totalBayar: true,
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-    orderBy: { namaLengkap: "asc" },
-  })
+      orderBy: { namaLengkap: "asc" },
+    }),
+    prisma.nasabah.count({ where })
+  ])
 
-  return nasabahList.map((nasabah) => {
-    let totalTagihan = 0
-    let totalDibayar = 0
+  const data = nasabahList.map((nasabah) => {
+    let totalTagihanArrears = 0
+    let totalDibayarArrears = 0
     let selesai = 0
     let telat = 0
     let belumJatuhTempo = 0
@@ -369,12 +683,15 @@ export async function getHistoryPembayaranNasabahReport() {
       }
 
       for (const jadwal of pinjaman.jadwalAngsuran) {
-        const nominalTagihan = Number(jadwal.total)
+        const nominalTagihan = Number(jadwal.total ?? 0)
         const bayarParsial = pembayaranTagMap.get(jadwal.id) ?? 0
         const bayarEfektif = jadwal.sudahDibayar ? nominalTagihan : Math.min(nominalTagihan, bayarParsial)
 
-        totalTagihan += nominalTagihan
-        totalDibayar += bayarEfektif
+        // Hanya hitung tagihan yang SUDAH JATUH TEMPO (atau sudah dibayar) ke tunggakan
+        if (jadwal.sudahDibayar || jadwal.tanggalJatuhTempo <= today || bayarEfektif > 0) {
+          totalTagihanArrears += nominalTagihan
+          totalDibayarArrears += bayarEfektif
+        }
 
         if (jadwal.sudahDibayar || bayarEfektif >= nominalTagihan) {
           selesai += 1
@@ -393,18 +710,18 @@ export async function getHistoryPembayaranNasabahReport() {
       }
     }
 
-    const kurangAngsuran = Math.max(0, totalTagihan - totalDibayar)
-
-    const ranking = computeRanking({ telat, kurangAngsuran }, rankingConfig)
+    const tunggakanNominal = Math.max(0, totalTagihanArrears - totalDibayarArrears)
+    const ranking = computeRanking({ telat, tunggakanNominal }, rankingConfig)
 
     return {
       nasabahId: nasabah.id,
       nomorAnggota: nasabah.nomorAnggota,
       namaLengkap: nasabah.namaLengkap,
       kelompok: nasabah.kelompok?.nama ?? "-",
-      totalTagihan,
-      totalDibayar,
-      kurangAngsuran,
+      totalTagihan: totalTagihanArrears,
+      totalDibayar: totalDibayarArrears,
+      kurangAngsuran: tunggakanNominal,
+      tunggakanNominal,
       selesai,
       telat,
       belumJatuhTempo,
@@ -413,6 +730,8 @@ export async function getHistoryPembayaranNasabahReport() {
       ranking,
     }
   })
+
+  return serializeData({ data, total, page, totalPages: Math.ceil(total / limit) })
 }
 
 type LaporanTransaksiUserFilter = {
@@ -472,8 +791,8 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
   ])
 
   const data = nasabahList.map((nasabah) => {
-    let totalTagihan = 0
-    let totalDibayar = 0
+    let totalTagihanArrears = 0
+    let totalDibayarArrears = 0
     let selesai = 0
     let telat = 0
     let belumJatuhTempo = 0
@@ -481,6 +800,12 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
     let outstanding = 0
     let anomaliPembayaran = 0
     let anomaliNominal = 0
+    let overdueCount = 0
+    let overdueOldestDueAt: Date | null = null
+    let overdueDaysLate = 0
+    let progressPaid = 0
+    let progressTotal = 0
+    let progressTenorType: "MINGGUAN" | "BULANAN" | null = null
 
     const pinjamanAktif = nasabah.pengajuan
       .map((p) => p.pinjaman)
@@ -489,6 +814,8 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
     for (const pinjaman of pinjamanAktif) {
       outstanding += Number(pinjaman.sisaPinjaman)
       const pembayaranTagMap = new Map<string, number>()
+      let paidThisLoan = 0
+      let totalThisLoan = 0
 
       for (const p of pinjaman.pembayaran) {
         const tags = p.catatan?.match(/\[JADWAL:([^\]]+)\]/g) ?? []
@@ -509,37 +836,64 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
         const bayarParsial = pembayaranTagMap.get(jadwal.id) ?? 0
         const bayarEfektif = jadwal.sudahDibayar ? nominalTagihan : Math.min(nominalTagihan, bayarParsial)
 
-        totalTagihan += nominalTagihan
-        totalDibayar += bayarEfektif
+        // Hanya hitung tagihan yang SUDAH JATUH TEMPO (atau sudah dibayar) ke tunggakan
+        if (jadwal.sudahDibayar || jadwal.tanggalJatuhTempo <= today || bayarEfektif > 0) {
+          totalTagihanArrears += nominalTagihan
+          totalDibayarArrears += bayarEfektif
+        }
 
         if (jadwal.sudahDibayar || bayarEfektif >= nominalTagihan) {
           selesai += 1
+          paidThisLoan += 1
+          totalThisLoan += 1
           if (jadwal.tanggalBayar && jadwal.tanggalBayar > jadwal.tanggalJatuhTempo) {
             telat += 1
           }
           continue
         }
+        totalThisLoan += 1
 
         if (jadwal.tanggalJatuhTempo > today) {
           belumJatuhTempo += 1
         } else {
           belumBayar += 1
           telat += 1
+          overdueCount += 1
+          if (!overdueOldestDueAt || jadwal.tanggalJatuhTempo < overdueOldestDueAt) {
+            overdueOldestDueAt = jadwal.tanggalJatuhTempo
+          }
+        }
+      }
+
+      // Pilih satu progress pinjaman (aktif dulu, jika banyak pilih tenor terbesar agar label stabil).
+      if (pinjaman.status !== "LUNAS" || progressTotal === 0) {
+        if (totalThisLoan >= progressTotal) {
+          progressPaid = paidThisLoan
+          progressTotal = totalThisLoan
+          progressTenorType = pinjaman.tenorType
         }
       }
     }
 
-    const kurangAngsuran = Math.max(0, totalTagihan - totalDibayar)
-    const ranking = computeRanking({ telat, kurangAngsuran }, rankingConfig)
+    if (overdueOldestDueAt) {
+      overdueDaysLate = Math.max(
+        0,
+        Math.floor((today.getTime() - overdueOldestDueAt.getTime()) / (1000 * 60 * 60 * 24)),
+      )
+    }
+
+    const tunggakanNominal = Math.max(0, totalTagihanArrears - totalDibayarArrears)
+    const ranking = computeRanking({ telat, tunggakanNominal }, rankingConfig)
 
     return {
       nasabahId: nasabah.id,
       nomorAnggota: nasabah.nomorAnggota,
       namaLengkap: nasabah.namaLengkap,
       kelompok: nasabah.kelompok?.nama ?? "-",
-      totalTagihan,
-      totalDibayar,
-      kurangAngsuran,
+      totalTagihan: totalTagihanArrears,
+      totalDibayar: totalDibayarArrears,
+      kurangAngsuran: tunggakanNominal,
+      tunggakanNominal,
       outstanding,
       selesai,
       telat,
@@ -548,6 +902,16 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
       ranking,
       anomaliPembayaran,
       anomaliNominal,
+      progress: {
+        paid: progressPaid,
+        total: progressTotal,
+        tenorType: progressTenorType,
+      },
+      overdue: {
+        count: overdueCount,
+        oldestDueAt: overdueOldestDueAt,
+        daysLate: overdueDaysLate,
+      },
     }
   })
 
@@ -555,7 +919,7 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
     (acc, row) => {
       acc.totalTagihan += row.totalTagihan
       acc.totalDibayar += row.totalDibayar
-      acc.kurang += row.kurangAngsuran
+      acc.kurang += row.tunggakanNominal
       acc.outstanding += row.outstanding
       acc.anomaliPembayaran += row.anomaliPembayaran
       acc.anomaliNominal += row.anomaliNominal
@@ -565,18 +929,18 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
     { totalTagihan: 0, totalDibayar: 0, kurang: 0, outstanding: 0, rankA: 0, anomaliPembayaran: 0, anomaliNominal: 0 }
   )
 
-  return {
+  return serializeData({
     data,
     summary,
     kelompokOptions,
-  }
+  })
 }
 
 export async function getPembayaranById(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
 
-  return prisma.pembayaran.findUnique({
+  const result = await prisma.pembayaran.findUnique({
     where: { id },
     include: {
       pinjaman: {
@@ -592,6 +956,8 @@ export async function getPembayaranById(id: string) {
       inputOleh: { select: { name: true, id: true } },
     },
   })
+
+  return serializeData(result)
 }
 
 export async function requestPembatalanPembayaran(input: { pembayaranId: string; alasan: string }) {
@@ -724,6 +1090,9 @@ export async function approvePembatalanPembayaran(input: {
   if (!pembayaran) return { error: "Pembayaran tidak ditemukan." }
   if (pembayaran.isBatalkan) return { error: "Pembayaran sudah dibatalkan." }
 
+  const ensured = await ensureKasKategori({ jenis: "KELUAR", kategori: "PEMBATALAN_ANGSURAN" })
+  if ("error" in ensured) return { error: ensured.error }
+
   await prisma.$transaction(async (tx) => {
     await tx.pembayaran.update({
       where: { id: pembayaran.id },
@@ -757,7 +1126,7 @@ export async function approvePembatalanPembayaran(input: {
     await tx.kasTransaksi.create({
       data: {
         jenis: "KELUAR",
-        kategori: "PEMBATALAN_ANGSURAN",
+        kategori: ensured.key,
         deskripsi: `Pembatalan pembayaran ${pembayaran.nomorTransaksi}`,
         jumlah: pembayaran.totalBayar,
         kasJenis: pembayaran.metode === "TRANSFER" ? "BANK" : "TUNAI",
