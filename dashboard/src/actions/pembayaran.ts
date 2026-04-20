@@ -15,6 +15,35 @@ import { serializeData } from "@/lib/utils"
 type MetodePembayaran = "TUNAI" | "TRANSFER"
 type ModePembayaran = "FULL" | "PARSIAL" | "PELUNASAN"
 
+type AuthSessionLike = {
+  user?: {
+    id?: string | null
+    email?: string | null
+  } | null
+} | null
+
+async function resolveActorUserId(session: AuthSessionLike) {
+  const sessionUserId = session?.user?.id
+  if (sessionUserId) {
+    const byId = await prisma.user.findUnique({
+      where: { id: sessionUserId },
+      select: { id: true, isActive: true },
+    })
+    if (byId?.isActive) return byId.id
+  }
+
+  const email = session?.user?.email?.trim().toLowerCase()
+  if (email) {
+    const byEmail = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, isActive: true },
+    })
+    if (byEmail?.isActive) return byEmail.id
+  }
+
+  return null
+}
+
 function jadwalTag(jadwalAngsuranId: string) {
   return `[JADWAL:${jadwalAngsuranId}]`
 }
@@ -342,6 +371,12 @@ export async function inputPembayaran(input: {
     return { error: "Tidak memiliki hak akses untuk input pembayaran." }
   }
 
+  const resolvedUserId = await resolveActorUserId(session)
+  if (!resolvedUserId) {
+    return { error: "Akun pengguna tidak ditemukan di database. Silakan login ulang." }
+  }
+
+  userId = resolvedUserId
   try {
     const jadwal = await prisma.jadwalAngsuran.findUnique({
     where: { id: input.jadwalAngsuranId },

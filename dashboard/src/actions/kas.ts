@@ -67,16 +67,6 @@ export async function getKasKategoriList() {
     { jenis: "KELUAR", nama: "PEMBATALAN_ANGSURAN" },
     { jenis: "KELUAR", nama: "GAJI" },
     { jenis: "KELUAR", nama: "OPERASIONAL" },
-    { jenis: "KELUAR", nama: "TUNJANGAN HARI RAYA DAN PARCEL" },
-    { jenis: "KELUAR", nama: "ALAT TULIS KANTOR" },
-    { jenis: "KELUAR", nama: "LISTRIK DAN PDAM" },
-    { jenis: "KELUAR", nama: "INTERNET, PULSA DAN TELEPON" },
-    { jenis: "KELUAR", nama: "BIAYA PROMOSI" },
-    { jenis: "KELUAR", nama: "MAKANAN DAN MINUMAN" },
-    { jenis: "KELUAR", nama: "PAJAK USAHA" },
-    { jenis: "KELUAR", nama: "SEWA TEMPAT" },
-    { jenis: "KELUAR", nama: "BIAYA PERAWATAN PERALATAN" },
-    { jenis: "KELUAR", nama: "CADANGAN" },
     { jenis: "KELUAR", nama: "LAINNYA_KELUAR" },
   ]
 
