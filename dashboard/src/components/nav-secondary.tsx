@@ -1,10 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTransition } from "react"
-import { useRouter } from "next/navigation"
-import { addTransitionType } from "react"
-import { useNavigationIndicator } from "@/components/navigation-indicator"
+import { AppLink } from "@/components/app-link"
 
 import {
   SidebarGroup,
@@ -24,19 +21,6 @@ export function NavSecondary({
     icon: React.ReactNode
   }[]
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
-  const router = useRouter()
-  const [, startTransition] = useTransition()
-  const { startNavigation } = useNavigationIndicator()
-
-  const navigate = (url: string) => {
-    if (url === "#") return
-    startNavigation()
-    startTransition(() => {
-      addTransitionType("nav-forward")
-      router.push(url)
-    })
-  }
-
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
@@ -45,8 +29,7 @@ export function NavSecondary({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton 
                 size="sm" 
-                onClick={() => navigate(item.url)}
-                render={<button />}
+                render={<AppLink href={item.url} />}
               >
                 {item.icon}
                 <span>{item.title}</span>

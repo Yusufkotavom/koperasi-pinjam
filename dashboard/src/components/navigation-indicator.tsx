@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { usePathname } from "next/navigation"
+import { addTransitionType, useTransition } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 type NavigationIndicatorContextValue = {
@@ -18,6 +19,8 @@ export function NavigationIndicatorProvider({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const [, startTransition] = useTransition()
 
   const [navigationFromPath, setNavigationFromPath] = React.useState<string | null>(
     null,
@@ -52,22 +55,28 @@ export function NavigationIndicatorProvider({
       if (href.startsWith("#")) return
       if (href.startsWith("mailto:") || href.startsWith("tel:")) return
 
+      let targetUrl: URL
       try {
-        const url = new URL(href, window.location.href)
-        if (url.origin !== window.location.origin) return
-        if (url.pathname === window.location.pathname && url.search === window.location.search) {
+        targetUrl = new URL(href, window.location.href)
+        if (targetUrl.origin !== window.location.origin) return
+        if (targetUrl.pathname === window.location.pathname && targetUrl.search === window.location.search) {
           return
         }
       } catch {
         return
       }
 
+      event.preventDefault()
       startNavigation()
+      startTransition(() => {
+        addTransitionType("nav-forward")
+        router.push(`${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`)
+      })
     }
 
     document.addEventListener("click", onClick, true)
     return () => document.removeEventListener("click", onClick, true)
-  }, [startNavigation])
+  }, [router, startNavigation])
 
   React.useEffect(() => {
     return () => {
@@ -103,13 +112,12 @@ function NavigationProgressBar({ active }: { active: boolean }) {
     <div
       aria-hidden="true"
       className={cn(
-        "pointer-events-none fixed inset-x-0 top-0 z-[60] h-0.5 bg-transparent transition-opacity duration-150",
+        "pointer-events-none fixed inset-x-0 top-0 z-[60] h-0.5 bg-transparent transition-opacity duration-150 motion-reduce:transition-none",
         active ? "opacity-100" : "opacity-0",
       )}
     >
       <div
-        className="h-full w-1/3 bg-primary will-change-transform"
-        style={{ animation: "nav-indeterminate 900ms ease-in-out infinite" }}
+        className="h-full w-1/3 animate-[nav-indeterminate_900ms_ease-in-out_infinite] bg-primary will-change-transform motion-reduce:animate-none"
       />
     </div>
   )

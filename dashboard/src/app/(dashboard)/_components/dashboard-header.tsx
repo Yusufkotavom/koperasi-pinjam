@@ -39,29 +39,29 @@ export function DashboardHeader({
   }, [])
 
   return (
-    <div className="rounded-3xl border border-slate-200/70 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-[0_24px_80px_-40px_rgba(15,23,42,0.85)]">
+    <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950 via-teal-950 to-slate-900 text-white shadow-[0_24px_80px_-40px_rgba(15,23,42,0.85)]">
       <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200 backdrop-blur">
+        <div className="flex flex-col gap-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/80 backdrop-blur">
             <span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_0_6px_rgba(52,211,153,0.12)]" />
-            Header cepat dashboard
+            Operasional Hari Ini
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
-            <p className="max-w-2xl text-sm text-slate-300 sm:text-base">{description}</p>
+            <p className="max-w-2xl text-sm text-white/70 sm:text-base">{description}</p>
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[26rem]">
           <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-slate-400">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-white/50">
               <CalendarDays className="size-3.5" />
               Tanggal
             </div>
             <p className="mt-2 text-sm font-semibold text-white">{dateLabel}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-slate-400">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-white/50">
               <Clock3 className="size-3.5" />
               Jam
             </div>

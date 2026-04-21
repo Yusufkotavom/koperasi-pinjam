@@ -1,9 +1,7 @@
 "use client"
 
-import { useTransition, ViewTransition } from "react"
-import { useRouter } from "next/navigation"
-import { addTransitionType } from "react"
-import { useNavigationIndicator } from "@/components/navigation-indicator"
+import { ViewTransition } from "react"
+import { AppLink } from "@/components/app-link"
 import {
   Collapsible,
   CollapsibleContent,
@@ -35,19 +33,6 @@ export function NavMain({
     }[]
   }[]
 }) {
-  const router = useRouter()
-  const [, startTransition] = useTransition()
-  const { startNavigation } = useNavigationIndicator()
-
-  const navigate = (url: string) => {
-    if (url === "#") return
-    startNavigation()
-    startTransition(() => {
-      addTransitionType("nav-forward")
-      router.push(url)
-    })
-  }
-
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -93,8 +78,7 @@ export function NavMain({
                     {item.items?.map((subItem) => (
                       <SidebarMenuSubItem key={subItem.title}>
                         <SidebarMenuSubButton 
-                          onClick={() => navigate(subItem.url)}
-                          render={<button />}
+                          render={<AppLink href={subItem.url} />}
                         >
                           <span>{subItem.title}</span>
                         </SidebarMenuSubButton>
@@ -106,8 +90,7 @@ export function NavMain({
             ) : (
               <SidebarMenuButton
                 tooltip={item.title}
-                onClick={() => navigate(item.url)}
-                render={item.url !== "#" ? <button /> : undefined}
+                render={item.url !== "#" ? <AppLink href={item.url} /> : undefined}
               >
                 <ViewTransition
                   name={`nav-icon-${item.title.toLowerCase().replace(/\s+/g, "-")}`}

@@ -26,7 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <SidebarInset className="bg-background">
           <div className="flex flex-col min-h-screen relative">
             <TopBar />
-            <div className="flex-1 overflow-auto bg-gradient-to-br from-background via-slate-50/50 to-slate-100/50 dark:via-slate-950 dark:to-slate-900 p-4 md:p-6 lg:p-8">
+            <div className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.08),transparent_26rem),linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.55))] p-4 md:p-6 lg:p-8">
               <div className="mx-auto max-w-7xl">
                 {children}
               </div>

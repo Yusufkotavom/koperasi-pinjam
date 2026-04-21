@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition, addTransitionType } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -9,8 +9,13 @@ import { z } from "zod"
 import { Building2, Eye, EyeOff, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 
 const loginSchema = z.object({
   email: z.string().email("Email tidak valid"),
@@ -24,6 +29,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [, startTransition] = useTransition()
   const demoText = "admin@koperasi.id / admin123"
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
@@ -42,22 +48,24 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Email atau password salah.")
     } else {
-      router.push("/")
-      router.refresh()
+      startTransition(() => {
+        addTransitionType("nav-forward")
+        router.push("/")
+        router.refresh()
+      })
     }
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-emerald-800 to-emerald-600 flex-col justify-between p-12 text-white">
+    <div className="flex min-h-screen bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.14),transparent_24rem),linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.55))]">
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-gradient-to-br from-emerald-800 via-teal-700 to-cyan-800 p-12 text-white">
         <div className="flex items-center gap-3">
-          <div className="bg-white/20 rounded-xl p-2">
+          <div className="rounded-xl border border-white/15 bg-white/20 p-2 backdrop-blur">
             <Building2 className="size-7" />
           </div>
           <span className="text-2xl font-bold tracking-tight">KoperasiApp</span>
         </div>
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           <h1 className="text-4xl font-bold leading-tight">
             Sistem Informasi<br />Koperasi Simpan Pinjam
           </h1>
@@ -70,7 +78,7 @@ export default function LoginPage() {
               { label: "Pinjaman", value: "840+" },
               { label: "Akurasi Data", value: "99.9%" },
             ].map((stat) => (
-              <div key={stat.label} className="bg-white/10 rounded-xl p-4">
+              <div key={stat.label} className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur">
                 <div className="text-2xl font-bold">{stat.value}</div>
                 <div className="text-emerald-200 text-sm">{stat.label}</div>
               </div>
@@ -80,9 +88,8 @@ export default function LoginPage() {
         <p className="text-emerald-200 text-sm">© 2024 KoperasiApp. All rights reserved.</p>
       </div>
 
-      {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
-        <div className="w-full max-w-md space-y-8">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-8">
+        <div className="flex w-full max-w-md flex-col gap-8">
           <div className="lg:hidden flex items-center gap-3 mb-8">
             <div className="bg-emerald-600 rounded-xl p-2 text-white">
               <Building2 className="size-6" />
@@ -95,51 +102,56 @@ export default function LoginPage() {
             <p className="text-muted-foreground mt-2">Masuk ke akun Anda untuk melanjutkan</p>
           </div>
 
-          <Card className="border-0 shadow-none">
-            <CardContent className="p-0">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-                {error && (
-                  <div className="bg-destructive/10 text-destructive text-sm rounded-lg p-3 flex items-center gap-2">
-                    <span>⚠️</span> {error}
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="email@koperasi.id"
-                    autoComplete="email"
-                    {...register("email")}
-                    className={errors.email ? "border-destructive" : ""}
-                  />
-                  {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="relative">
+          <Card>
+            <CardContent>
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <FieldGroup className="gap-5">
+                  {error && (
+                    <div role="alert" aria-live="polite" className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                      {error}
+                    </div>
+                  )}
+                  <Field data-invalid={!!errors.email}>
+                    <FieldLabel htmlFor="email">Email</FieldLabel>
                     <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
-                      autoComplete="current-password"
-                      {...register("password")}
-                      className={errors.password ? "border-destructive pr-10" : "pr-10"}
+                      id="email"
+                      type="email"
+                      placeholder="admin@koperasi.id…"
+                      autoComplete="email"
+                      spellCheck={false}
+                      aria-invalid={!!errors.email}
+                      {...register("email")}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                    </button>
-                  </div>
-                  {errors.password && <p className="text-destructive text-xs">{errors.password.message}</p>}
-                </div>
-                <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={isLoading} size="lg">
-                  {isLoading && <Loader2 className="size-4 animate-spin" />}
-                  {isLoading ? "Masuk..." : "Masuk"}
-                </Button>
+                    <FieldError>{errors.email?.message}</FieldError>
+                  </Field>
+                  <Field data-invalid={!!errors.password}>
+                    <FieldLabel htmlFor="password">Password</FieldLabel>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Masukkan password…"
+                        autoComplete="current-password"
+                        aria-invalid={!!errors.password}
+                        {...register("password")}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                        onClick={() => setShowPassword((current) => !current)}
+                        className="absolute right-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
+                    <FieldError>{errors.password?.message}</FieldError>
+                  </Field>
+                  <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={isLoading} size="lg">
+                    {isLoading && <Loader2 className="animate-spin" data-icon="inline-start" />}
+                    {isLoading ? "Masuk…" : "Masuk"}
+                  </Button>
+                </FieldGroup>
               </form>
             </CardContent>
           </Card>

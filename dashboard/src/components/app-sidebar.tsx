@@ -128,7 +128,7 @@ export function AppSidebar({ user, company, accountingMode, ...props }: AppSideb
                 <img
                   src={company.logoDataUrl}
                   alt="Logo"
-                  className="flex aspect-square size-8 items-center justify-center rounded-lg border border-slate-200 bg-white object-contain p-1 dark:border-slate-800"
+                  className="flex aspect-square size-8 items-center justify-center rounded-lg border border-border bg-background object-contain p-1"
                 />
               ) : (
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">

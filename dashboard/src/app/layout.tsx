@@ -1,9 +1,10 @@
 import type { Metadata } from "next"
-import { Inter, Manrope } from "next/font/google"
+import { Geist_Mono, Inter, Manrope } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 import { NavigationIndicatorProvider } from "@/components/navigation-indicator"
+import { PageViewTransition } from "@/components/page-view-transition"
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -15,6 +16,11 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+})
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
 })
 
 export const metadata: Metadata = {
@@ -32,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="id"
-      className={`${manrope.variable} ${inter.variable} antialiased`}
+      className={`${manrope.variable} ${inter.variable} ${geistMono.variable} antialiased`}
       suppressHydrationWarning
     >
       <body>
@@ -43,7 +49,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <NavigationIndicatorProvider>
-            {children}
+            <PageViewTransition>{children}</PageViewTransition>
             <Toaster richColors position="top-right" />
           </NavigationIndicatorProvider>
         </ThemeProvider>

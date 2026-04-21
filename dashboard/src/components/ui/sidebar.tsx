@@ -138,7 +138,7 @@ function SidebarProvider({
           } as React.CSSProperties
         }
         className={cn(
-          "group/sidebar-wrapper flex min-h-svh w-full bg-slate-50 has-data-[variant=inset]:bg-slate-50 dark:bg-slate-950",
+          "group/sidebar-wrapper flex min-h-svh w-full bg-sidebar has-data-[variant=inset]:bg-background",
           className
         )}
         {...props}
@@ -169,7 +169,7 @@ function Sidebar({
       <div
         data-slot="sidebar"
         className={cn(
-          "flex h-full w-(--sidebar-width) flex-col bg-slate-50 text-sidebar-foreground dark:bg-slate-950",
+          "flex h-full w-(--sidebar-width) flex-col bg-sidebar text-sidebar-foreground",
           className
         )}
         {...props}
@@ -187,7 +187,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-slate-50 p-0 text-sidebar-foreground dark:bg-slate-950 [&>button]:hidden"
+          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -225,7 +225,7 @@ function Sidebar({
       />
       <div
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) bg-slate-50 text-sidebar-foreground transition-[left,right,width] duration-200 ease-linear dark:bg-slate-950 md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) bg-sidebar/85 text-sidebar-foreground backdrop-blur-xl transition-[left,right,width,background-color] duration-200 ease-linear md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -243,7 +243,7 @@ function Sidebar({
       >
         <div
           data-sidebar="sidebar"
-          className="flex h-full w-full flex-col bg-slate-50 group-data-[variant=floating]:rounded-xl dark:bg-slate-950"
+          className="flex h-full w-full flex-col bg-sidebar/85 group-data-[variant=floating]:rounded-xl"
         >
           {children}
         </div>
@@ -290,7 +290,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
       onClick={toggleSidebar}
       title="Toggle Sidebar"
       className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
+        "absolute inset-y-0 z-20 hidden w-4 transition-[background-color,transform] ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
         "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full hover:group-data-[collapsible=offcanvas]:bg-sidebar",
