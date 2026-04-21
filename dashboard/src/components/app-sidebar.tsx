@@ -30,6 +30,8 @@ const baseNavMain = [
     isActive: true,
     items: [
       { title: "Dashboard", url: "/" },
+      { title: "Roadmap Fitur", url: "/roadmap" },
+      { title: "Panduan Pengguna", url: "/docs/panduan-pengguna" },
     ],
   },
   {
