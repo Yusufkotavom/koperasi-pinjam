@@ -8,6 +8,7 @@ import { requireRoles } from "@/lib/roles"
 import { RoleType } from "@prisma/client"
 import { DEFAULT_RANKING_CONFIG, type RankingConfig } from "@/lib/ranking"
 import { DEFAULT_TIME_ZONE, normalizeTimeZone } from "@/lib/datetime"
+import { requireCompanyId } from "@/lib/tenant"
 import {
   ACCOUNTING_MODE_KEY,
   DEFAULT_ACCOUNTING_MODE,
@@ -68,8 +69,9 @@ const companyInfoSchema = z.object({
 export async function getRankingConfig(): Promise<RankingConfig> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  const row = await prisma.appSetting.findUnique({ where: { key: RANKING_KEY } })
+  const row = await prisma.companySetting.findUnique({ where: { companyId_key: { companyId, key: RANKING_KEY } } })
   if (!row) return DEFAULT_RANKING_CONFIG
 
   const parsed = rankingConfigSchema.safeParse(row.value)
@@ -99,6 +101,7 @@ export async function getRankingConfig(): Promise<RankingConfig> {
 export async function updateRankingConfig(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   try {
     requireRoles(session, [RoleType.ADMIN, RoleType.PIMPINAN])
@@ -123,9 +126,9 @@ export async function updateRankingConfig(input: unknown) {
     cMaxTunggakan: parsed.data.cMaxTunggakan ?? legacyCMaxKurang,
   }
 
-  await prisma.appSetting.upsert({
-    where: { key: RANKING_KEY },
-    create: { key: RANKING_KEY, value: dataToSave },
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId, key: RANKING_KEY } },
+    create: { companyId, key: RANKING_KEY, value: dataToSave },
     update: { value: dataToSave },
   })
 
@@ -139,8 +142,9 @@ const accountingModeSchema = z.enum(["SIMPLE", "PROPER"])
 export async function getAccountingMode(): Promise<AccountingMode> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  const row = await prisma.appSetting.findUnique({ where: { key: ACCOUNTING_MODE_KEY } })
+  const row = await prisma.companySetting.findUnique({ where: { companyId_key: { companyId, key: ACCOUNTING_MODE_KEY } } })
   if (!row) return DEFAULT_ACCOUNTING_MODE
 
   return normalizeAccountingMode(typeof row.value === "string" ? row.value : null)
@@ -149,6 +153,7 @@ export async function getAccountingMode(): Promise<AccountingMode> {
 export async function updateAccountingMode(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   try {
     requireRoles(session, [RoleType.ADMIN])
@@ -159,9 +164,9 @@ export async function updateAccountingMode(input: unknown) {
   const parsed = accountingModeSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  await prisma.appSetting.upsert({
-    where: { key: ACCOUNTING_MODE_KEY },
-    create: { key: ACCOUNTING_MODE_KEY, value: parsed.data },
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId, key: ACCOUNTING_MODE_KEY } },
+    create: { companyId, key: ACCOUNTING_MODE_KEY, value: parsed.data },
     update: { value: parsed.data },
   })
 
@@ -172,8 +177,9 @@ export async function updateAccountingMode(input: unknown) {
 export async function getCompanyInfo(): Promise<CompanyInfo> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  const row = await prisma.appSetting.findUnique({ where: { key: COMPANY_KEY } })
+  const row = await prisma.companySetting.findUnique({ where: { companyId_key: { companyId, key: COMPANY_KEY } } })
   if (!row) return DEFAULT_COMPANY_INFO
 
   const parsed = companyInfoSchema.safeParse(row.value)
@@ -189,6 +195,7 @@ export async function getCompanyInfo(): Promise<CompanyInfo> {
 export async function updateCompanyInfo(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   try {
     requireRoles(session, [RoleType.ADMIN, RoleType.PIMPINAN])
@@ -199,9 +206,9 @@ export async function updateCompanyInfo(input: unknown) {
   const parsed = companyInfoSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  await prisma.appSetting.upsert({
-    where: { key: COMPANY_KEY },
-    create: { key: COMPANY_KEY, value: parsed.data },
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId, key: COMPANY_KEY } },
+    create: { companyId, key: COMPANY_KEY, value: parsed.data },
     update: { value: parsed.data },
   })
 

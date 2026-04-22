@@ -106,6 +106,7 @@ async function main() {
   await prisma.kelompok.createMany({
     data: [
       {
+        companyId: company.id,
         kode: "KL-001",
         nama: "Kelompok Mentari",
         ketua: "Pak Suryo",
@@ -113,6 +114,7 @@ async function main() {
         jadwalPertemuan: "Senin",
       },
       {
+        companyId: company.id,
         kode: "KL-002",
         nama: "Mitra Sejahtera",
         ketua: "Bu Siti",
@@ -120,6 +122,7 @@ async function main() {
         jadwalPertemuan: "Selasa",
       },
       {
+        companyId: company.id,
         kode: "KL-003",
         nama: "Guyub Rukun",
         ketua: "Pak Slamet",

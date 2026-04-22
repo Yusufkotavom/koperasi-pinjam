@@ -57,12 +57,10 @@ export function DbMaintenanceCard({ canEdit }: { canEdit: boolean }) {
           </div>
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             {[
-              ["APPROVAL_AUDIT", "Approval & audit"],
               ["NOTIFIKASI", "Notifikasi"],
               ["TRANSAKSI", "Transaksi pinjaman/kas"],
               ["MASTER", "Master nasabah/kelompok"],
               ["AKUNTANSI", "COA & setting akuntansi"],
-              ["USERS", "User & role"],
             ].map(([value, label]) => (
               <label key={value} className="flex items-center gap-2 rounded-lg border bg-background/70 px-3 py-2">
                 <input type="checkbox" name="scope" value={value} className="size-4" />
@@ -86,16 +84,12 @@ export function DbMaintenanceCard({ canEdit }: { canEdit: boolean }) {
           <div>
             <p className="font-semibold">Import Demo Data</p>
             <p className="text-sm text-muted-foreground">
-              Membuat user demo, kelompok, puluhan nasabah, simpanan, pinjaman, jadwal angsuran,
-              pembayaran, kas, akun, dan kategori.
+              Membuat kelompok, puluhan nasabah, simpanan, pinjaman, jadwal angsuran, pembayaran, kas,
+              akun akuntansi, dan kategori untuk company Anda saat ini.
             </p>
           </div>
           <div className="rounded-lg border bg-background/70 p-3 text-sm text-muted-foreground">
             Volume demo: 36 nasabah, 24 pinjaman, dan 100+ transaksi pembayaran/kas agar dashboard dan laporan terlihat terisi.
-          </div>
-          <div className="rounded-lg border bg-background/70 p-3 text-sm text-muted-foreground">
-            Login demo: `admin@koperasi.id / admin123`, `teller@koperasi.id / teller123`,
-            `manager@koperasi.id / manager123`, `akuntansi@koperasi.id / akuntansi123`.
           </div>
           <Input name="confirmation" placeholder="Ketik DEMO" />
           <Button type="submit" disabled={isPending}>Import Demo Data</Button>

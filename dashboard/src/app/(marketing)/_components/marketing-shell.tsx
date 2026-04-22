@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, BarChart3, Layers3, LogIn, Mail, PhoneCall } from "lucide-react"
+import { ArrowRight, BarChart3, Layers3, LogIn, Mail, MessageCircle, PhoneCall } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const navItems = [
@@ -11,6 +11,8 @@ const navItems = [
 ]
 
 export function MarketingHeader() {
+  const whatsappUrl = "https://wa.me/6281200002026?text=Halo%20KoperasiApp%2C%20saya%20ingin%20demo%20dan%20tanya%20fitur."
+
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-[#f8fbf5]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f8fbf5]/80">
       <a
@@ -50,12 +52,22 @@ export function MarketingHeader() {
           <Button
             asChild
             variant="ghost"
-            className="hidden text-slate-700 hover:bg-white hover:text-[#0f766e] focus-visible:ring-[#0f766e] sm:inline-flex"
+            className="text-slate-700 hover:bg-white hover:text-[#0f766e] focus-visible:ring-[#0f766e]"
           >
             <Link href="/login">
               <LogIn className="size-4" aria-hidden="true" />
               Masuk
             </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="hidden bg-white/70 text-slate-700 hover:bg-white hover:text-[#0f766e] focus-visible:ring-[#0f766e] md:inline-flex"
+          >
+            <a href={whatsappUrl} target="_blank" rel="noreferrer">
+              <MessageCircle className="size-4" aria-hidden="true" />
+              WhatsApp
+            </a>
           </Button>
           <Button asChild className="bg-[#f97316] text-white hover:bg-[#ea580c] focus-visible:ring-[#f97316]">
             <Link href="/contact">

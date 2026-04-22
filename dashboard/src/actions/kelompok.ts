@@ -6,21 +6,24 @@ import { prisma } from "@/lib/prisma"
 import { kelompokSchema } from "@/lib/validations/kelompok"
 import { requireRoles } from "@/lib/roles"
 import { RoleType } from "@prisma/client"
+import { requireCompanyId } from "@/lib/tenant"
 
 export async function getKelompokList(params?: { search?: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   return prisma.kelompok.findMany({
     where: params?.search
       ? {
+          companyId,
           OR: [
             { kode: { contains: params.search, mode: "insensitive" } },
             { nama: { contains: params.search, mode: "insensitive" } },
             { wilayah: { contains: params.search, mode: "insensitive" } },
           ],
         }
-      : undefined,
+      : { companyId },
     orderBy: { nama: "asc" },
   })
 }
@@ -28,9 +31,10 @@ export async function getKelompokList(params?: { search?: string }) {
 export async function getKelompokById(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  return prisma.kelompok.findUnique({
-    where: { id },
+  return prisma.kelompok.findFirst({
+    where: { id, companyId },
     include: {
       nasabah: {
         select: {
@@ -46,9 +50,10 @@ export async function getKelompokById(id: string) {
 export async function getNasabahOptionsForKelompok() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   return prisma.nasabah.findMany({
-    where: { status: "AKTIF" },
+    where: { companyId, status: "AKTIF" },
     select: {
       id: true,
       namaLengkap: true,
@@ -58,10 +63,10 @@ export async function getNasabahOptionsForKelompok() {
   })
 }
 
-async function resolveKetuaNama(ketuaNasabahId?: string, ketuaManual?: string) {
+async function resolveKetuaNama(companyId: string, ketuaNasabahId?: string, ketuaManual?: string) {
   if (!ketuaNasabahId) return ketuaManual || null
-  const ketuaNasabah = await prisma.nasabah.findUnique({
-    where: { id: ketuaNasabahId },
+  const ketuaNasabah = await prisma.nasabah.findFirst({
+    where: { id: ketuaNasabahId, companyId },
     select: { namaLengkap: true },
   })
   return ketuaNasabah?.namaLengkap ?? ketuaManual ?? null
@@ -70,12 +75,13 @@ async function resolveKetuaNama(ketuaNasabahId?: string, ketuaManual?: string) {
 export async function createKelompok(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const parsed = kelompokSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
   const existing = await prisma.kelompok.findUnique({
-    where: { kode: parsed.data.kode },
+    where: { companyId_kode: { companyId, kode: parsed.data.kode } },
     select: { id: true },
   })
   if (existing) return { error: { kode: ["Kode kelompok sudah digunakan."] } }
@@ -84,11 +90,12 @@ export async function createKelompok(input: unknown) {
   if (parsed.data.ketuaNasabahId) anggotaSet.add(parsed.data.ketuaNasabahId)
   const anggotaIds = Array.from(anggotaSet)
 
-  const ketuaNama = await resolveKetuaNama(parsed.data.ketuaNasabahId, parsed.data.ketua)
+  const ketuaNama = await resolveKetuaNama(companyId, parsed.data.ketuaNasabahId, parsed.data.ketua)
 
   const kelompok = await prisma.$transaction(async (tx) => {
     const created = await tx.kelompok.create({
       data: {
+        companyId,
         kode: parsed.data.kode,
         nama: parsed.data.nama,
         ketua: ketuaNama,
@@ -99,7 +106,7 @@ export async function createKelompok(input: unknown) {
 
     if (anggotaIds.length > 0) {
       await tx.nasabah.updateMany({
-        where: { id: { in: anggotaIds } },
+        where: { companyId, id: { in: anggotaIds } },
         data: { kelompokId: created.id },
       })
     }
@@ -115,12 +122,13 @@ export async function createKelompok(input: unknown) {
 export async function updateKelompok(id: string, input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const parsed = kelompokSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
   const existing = await prisma.kelompok.findFirst({
-    where: { kode: parsed.data.kode, id: { not: id } },
+    where: { companyId, kode: parsed.data.kode, id: { not: id } },
     select: { id: true },
   })
   if (existing) return { error: { kode: ["Kode kelompok sudah digunakan."] } }
@@ -129,9 +137,12 @@ export async function updateKelompok(id: string, input: unknown) {
   if (parsed.data.ketuaNasabahId) anggotaSet.add(parsed.data.ketuaNasabahId)
   const anggotaIds = Array.from(anggotaSet)
 
-  const ketuaNama = await resolveKetuaNama(parsed.data.ketuaNasabahId, parsed.data.ketua)
+  const ketuaNama = await resolveKetuaNama(companyId, parsed.data.ketuaNasabahId, parsed.data.ketua)
 
   await prisma.$transaction(async (tx) => {
+    const current = await tx.kelompok.findFirst({ where: { id, companyId }, select: { id: true } })
+    if (!current) throw new Error("Kelompok tidak ditemukan.")
+
     await tx.kelompok.update({
       where: { id },
       data: {
@@ -144,13 +155,13 @@ export async function updateKelompok(id: string, input: unknown) {
     })
 
     await tx.nasabah.updateMany({
-      where: { kelompokId: id, ...(anggotaIds.length > 0 ? { id: { notIn: anggotaIds } } : {}) },
+      where: { companyId, kelompokId: id, ...(anggotaIds.length > 0 ? { id: { notIn: anggotaIds } } : {}) },
       data: { kelompokId: null },
     })
 
     if (anggotaIds.length > 0) {
       await tx.nasabah.updateMany({
-        where: { id: { in: anggotaIds } },
+        where: { companyId, id: { in: anggotaIds } },
         data: { kelompokId: id },
       })
     }
@@ -165,6 +176,7 @@ export async function updateKelompok(id: string, input: unknown) {
 export async function deleteKelompok(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   try {
     requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -172,8 +184,8 @@ export async function deleteKelompok(id: string) {
     return { success: false, error: "Tidak memiliki hak akses untuk menghapus kelompok." }
   }
 
-  const kelompok = await prisma.kelompok.findUnique({
-    where: { id },
+  const kelompok = await prisma.kelompok.findFirst({
+    where: { id, companyId },
     select: {
       id: true,
       _count: {
@@ -199,7 +211,7 @@ export async function deleteKelompok(id: string) {
   await prisma.$transaction(async (tx) => {
     if (kelompok._count.nasabah > 0) {
       await tx.nasabah.updateMany({
-        where: { kelompokId: id },
+        where: { companyId, kelompokId: id },
         data: { kelompokId: null },
       })
     }

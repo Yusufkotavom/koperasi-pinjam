@@ -96,7 +96,11 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-              onSelect={() => signOut({ callbackUrl: "/login" })}
+              onSelect={async (e) => {
+                e.preventDefault()
+                await signOut({ redirect: false })
+                window.location.assign("/login")
+              }}
             >
               <LogOutIcon className="size-4" />
               Log out

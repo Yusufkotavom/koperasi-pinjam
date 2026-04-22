@@ -10,9 +10,10 @@ import { writeAuditLog } from "@/lib/audit"
 import { ensureAccountingAccounts } from "@/lib/accounting"
 import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { serializeData } from "@/lib/utils"
+import { requireCompanyId } from "@/lib/tenant"
 
-async function ensureDefaultAccounts() {
-  await ensureAccountingAccounts()
+async function ensureDefaultAccounts(companyId: string) {
+  await ensureAccountingAccounts(companyId)
 }
 
 type SessionLike = { user?: { id?: string; roles?: string[] } } | null
@@ -25,11 +26,12 @@ export async function getAccountList() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   requireFinanceRoles(session as unknown as SessionLike)
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  await ensureDefaultAccounts()
+  await ensureDefaultAccounts(companyId)
 
   const result = await prisma.account.findMany({
-    where: { isActive: true },
+    where: { companyId, isActive: true },
     orderBy: [{ type: "asc" }, { code: "asc" }],
   })
 
@@ -50,15 +52,17 @@ export async function createAccount(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { userId } = requireRoles(session as unknown as SessionLike, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN, RoleType.AKUNTANSI])
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const parsed = accountCreateSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const existing = await prisma.account.findUnique({ where: { code: parsed.data.code } })
+  const existing = await prisma.account.findUnique({ where: { companyId_code: { companyId, code: parsed.data.code } } })
   if (existing) return { error: `Kode akun "${existing.code}" sudah ada.` }
 
   const row = await prisma.account.create({
     data: {
+      companyId,
       code: parsed.data.code,
       name: parsed.data.name,
       type: parsed.data.type,
@@ -82,13 +86,14 @@ export async function getKasKategoriMappingList() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   requireFinanceRoles(session as unknown as SessionLike)
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  await ensureDefaultAccounts()
+  await ensureDefaultAccounts(companyId)
 
   const [accounts, kategori] = await Promise.all([
-    prisma.account.findMany({ where: { isActive: true }, orderBy: [{ type: "asc" }, { code: "asc" }] }),
+    prisma.account.findMany({ where: { companyId, isActive: true }, orderBy: [{ type: "asc" }, { code: "asc" }] }),
     prisma.kasKategori.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       include: { account: true },
       orderBy: [{ jenis: "asc" }, { nama: "asc" }],
     }),
@@ -106,15 +111,16 @@ export async function updateKasKategoriMapping(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { userId } = requireRoles(session as unknown as SessionLike, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN, RoleType.AKUNTANSI])
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const parsed = mappingSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const existing = await prisma.kasKategori.findUnique({ where: { id: parsed.data.kategoriId } })
+  const existing = await prisma.kasKategori.findFirst({ where: { id: parsed.data.kategoriId, companyId } })
   if (!existing) return { error: "Kategori kas tidak ditemukan." }
 
   if (parsed.data.accountId) {
-    const acc = await prisma.account.findUnique({ where: { id: parsed.data.accountId } })
+    const acc = await prisma.account.findFirst({ where: { id: parsed.data.accountId, companyId } })
     if (!acc) return { error: "Akun tidak ditemukan." }
   }
 
@@ -139,10 +145,10 @@ export async function updateKasKategoriMapping(input: unknown) {
   return { success: true, data: updated }
 }
 
-async function getCashSaldoBookByJenis(kasJenis: "TUNAI" | "BANK", endExclusive: Date) {
+async function getCashSaldoBookByJenis(companyId: string, kasJenis: "TUNAI" | "BANK", endExclusive: Date) {
   const result = await prisma.kasTransaksi.groupBy({
     by: ["jenis"],
-    where: { tanggal: { lt: endExclusive }, kasJenis, isApproved: true },
+    where: { companyId, tanggal: { lt: endExclusive }, kasJenis, isApproved: true },
     _sum: { jumlah: true },
   })
 
@@ -165,17 +171,18 @@ export async function getRekonsiliasiKasList(params?: { year?: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   requireFinanceRoles(session as unknown as SessionLike)
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const year = params?.year ? Number(params.year) : undefined
 
   const rows = await prisma.rekonsiliasiKas.findMany({
-    where: year ? { periodYear: year } : undefined,
+    where: year ? { companyId, periodYear: year } : { companyId },
     include: { account: true, createdBy: { select: { id: true, name: true } } },
     orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }, { createdAt: "desc" }],
   })
 
   const cashAccounts = await prisma.account.findMany({
-    where: { code: { in: ["CASH_TUNAI", "CASH_BANK"] }, isActive: true },
+    where: { companyId, code: { in: ["CASH_TUNAI", "CASH_BANK"] }, isActive: true },
     orderBy: { code: "asc" },
   })
 
@@ -186,11 +193,12 @@ export async function createRekonsiliasiKas(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { userId } = requireFinanceRoles(session as unknown as SessionLike)
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const parsed = rekonsiliasiCreateSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const account = await prisma.account.findUnique({ where: { id: parsed.data.accountId } })
+  const account = await prisma.account.findFirst({ where: { id: parsed.data.accountId, companyId } })
   if (!account) return { error: "Akun tidak ditemukan." }
   if (account.code !== "CASH_TUNAI" && account.code !== "CASH_BANK") {
     return { error: "Rekonsiliasi saat ini hanya untuk akun kas tunai dan kas bank." }
@@ -198,7 +206,7 @@ export async function createRekonsiliasiKas(input: unknown) {
 
   const endExclusive = new Date(parsed.data.year, parsed.data.month, 1)
   const kasJenis = account.code === "CASH_BANK" ? "BANK" : "TUNAI"
-  const saldoBook = await getCashSaldoBookByJenis(kasJenis, endExclusive)
+  const saldoBook = await getCashSaldoBookByJenis(companyId, kasJenis, endExclusive)
   const selisih = parsed.data.saldoStatement - saldoBook
 
   const row = await prisma.rekonsiliasiKas.upsert({
@@ -210,6 +218,7 @@ export async function createRekonsiliasiKas(input: unknown) {
       },
     },
     create: {
+      companyId,
       accountId: account.id,
       periodMonth: parsed.data.month,
       periodYear: parsed.data.year,
@@ -292,7 +301,8 @@ export async function getLedgerKasReport(params?: { kasJenis?: string; accountId
   if (!session) throw new Error("Unauthorized")
   requireFinanceRoles(session as unknown as SessionLike)
 
-  await ensureDefaultAccounts()
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+  await ensureDefaultAccounts(companyId)
 
   const fallbackAccountCode = params?.kasJenis === "BANK" ? "CASH_BANK" : "CASH_TUNAI"
   const requestedAccountCode = params?.accountCode?.trim() || fallbackAccountCode
@@ -386,7 +396,8 @@ export async function getNeracaSederhana(params?: ReportPeriodInput) {
 
   const period = resolveReportPeriod(params)
 
-  await ensureDefaultAccounts()
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+  await ensureDefaultAccounts(companyId)
 
   const rows = await prisma.journalLine.findMany({
     where: {

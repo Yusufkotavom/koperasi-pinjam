@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CalendarDays, Plus, Bell, User, Search, UserPlus, ClipboardList, CreditCard, PiggyBank, Sun, Moon, Laptop } from "lucide-react"
+import { CalendarDays, Plus, Bell, Search, Settings, UserPlus, ClipboardList, CreditCard, PiggyBank, Sun, Moon, Laptop } from "lucide-react"
 import { format } from "date-fns"
 import { id } from "date-fns/locale"
 import { useTransition, addTransitionType } from "react"
@@ -167,8 +167,14 @@ export function TopBar() {
           <Button variant="ghost" size="icon" className="size-8 rounded-full" aria-label="Buka notifikasi">
             <Bell />
           </Button>
-          <Button variant="ghost" size="icon" className="size-8 rounded-full" aria-label="Buka profil pengguna">
-            <User />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-full"
+            aria-label="Buka pengaturan"
+            onClick={() => navigate("/settings")}
+          >
+            <Settings />
           </Button>
         </div>
       </div>

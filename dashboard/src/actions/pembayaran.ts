@@ -11,6 +11,7 @@ import { postJournalEntry, postPembayaranJournal } from "@/lib/accounting"
 import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { computeRanking } from "@/lib/ranking"
 import { getRankingConfig } from "@/actions/settings"
+import { requireCompanyId } from "@/lib/tenant"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
 
@@ -81,11 +82,14 @@ async function getPaidForJadwal(pinjamanId: string, jadwalAngsuranId: string) {
 export async function getAngsuranJatuhTempo(pinjamanId?: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const today = new Date()
   const where = pinjamanId
-    ? { pinjamanId, sudahDibayar: false }
-    : { sudahDibayar: false, tanggalJatuhTempo: { lte: today } }
+    ? { companyId, pinjamanId, sudahDibayar: false }
+    : { companyId, sudahDibayar: false, tanggalJatuhTempo: { lte: today } }
 
   const result = await prisma.jadwalAngsuran.findMany({
     where,
@@ -110,6 +114,9 @@ export async function getAngsuranJatuhTempo(pinjamanId?: string) {
 export async function getJadwalPembayaran(params?: { search?: string; limit?: number; windowDays?: number | "all" }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const limit = params?.limit ?? 50
   const search = params?.search?.trim()
@@ -121,6 +128,7 @@ export async function getJadwalPembayaran(params?: { search?: string; limit?: nu
       : new Date(today.getTime() + windowDays * 24 * 60 * 60 * 1000)
 
   const where: Prisma.JadwalAngsuranWhereInput = {
+    companyId,
     sudahDibayar: false,
     ...(end ? { tanggalJatuhTempo: { lte: end } } : {}),
     pinjaman: { status: { not: "LUNAS" } },
@@ -205,10 +213,14 @@ export type ActiveLoanBorrowerOption = {
 export async function getActiveLoanBorrowers(params?: { search?: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const search = params?.search?.trim()
 
   const where: Prisma.PinjamanWhereInput = {
+    companyId,
     status: { not: "LUNAS" },
     ...(search
       ? {
@@ -296,6 +308,9 @@ export async function getActiveLoanBorrowers(params?: { search?: string }) {
 export async function searchJadwalAngsuranManual(params: { search: string; nasabahId?: string; limit?: number }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const search = params.search.trim()
   const nasabahId = params.nasabahId?.trim()
@@ -305,6 +320,7 @@ export async function searchJadwalAngsuranManual(params: { search: string; nasab
 
   const where: Prisma.JadwalAngsuranWhereInput = {
     AND: [
+      { companyId },
       { sudahDibayar: false },
       { pinjaman: { status: { not: "LUNAS" } } },
       nasabahId ? { pinjaman: { pengajuan: { nasabahId } } } : {},
@@ -364,6 +380,9 @@ export async function inputPembayaran(input: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   let userId: string
   try {
@@ -380,12 +399,12 @@ export async function inputPembayaran(input: {
 
   userId = resolvedUserId
   try {
-    const jadwal = await prisma.jadwalAngsuran.findUnique({
-    where: { id: input.jadwalAngsuranId },
-    include: {
-      pinjaman: true,
-    },
-  })
+    const jadwal = await prisma.jadwalAngsuran.findFirst({
+      where: { id: input.jadwalAngsuranId, companyId },
+      include: {
+        pinjaman: true,
+      },
+    })
 
   if (!jadwal) return { error: "Data angsuran tidak ditemukan." }
   if (jadwal.sudahDibayar && input.mode !== "PELUNASAN") {
@@ -444,6 +463,7 @@ export async function inputPembayaran(input: {
   const result = await prisma.$transaction(async (tx) => {
     const pembayaran = await tx.pembayaran.create({
       data: {
+        companyId,
         pinjamanId: jadwal.pinjamanId,
         tanggalBayar,
         pokok: new Prisma.Decimal(alokasiPokok),
@@ -462,6 +482,7 @@ export async function inputPembayaran(input: {
     if (mode === "PELUNASAN") {
       await tx.jadwalAngsuran.updateMany({
         where: {
+          companyId,
           pinjamanId: jadwal.pinjamanId,
           sudahDibayar: false,
         },
@@ -485,8 +506,8 @@ export async function inputPembayaran(input: {
       }
     }
 
-    await tx.pinjaman.update({
-      where: { id: jadwal.pinjamanId },
+    await tx.pinjaman.updateMany({
+      where: { id: jadwal.pinjamanId, companyId },
       data: {
         sisaPinjaman: new Prisma.Decimal(sisaBaru),
         status: sisaBaru <= 0 ? "LUNAS" : "AKTIF",
@@ -498,8 +519,10 @@ export async function inputPembayaran(input: {
 
     await tx.kasTransaksi.create({
       data: {
+        companyId,
         jenis: "MASUK",
-        kategori: ensured.key,
+        kategoriId: ensured.kategoriId,
+        kategoriKey: ensured.key,
         deskripsi: `${mode} angsuran ke-${jadwal.angsuranKe} ${jadwal.pinjaman.nomorKontrak}`,
         jumlah: new Prisma.Decimal(jumlahBayar),
         kasJenis,
@@ -510,6 +533,7 @@ export async function inputPembayaran(input: {
     })
 
     await postPembayaranJournal(tx, {
+      companyId,
       pembayaranId: pembayaran.id,
       tanggalBayar,
       kasJenis,
@@ -519,7 +543,7 @@ export async function inputPembayaran(input: {
       totalBayar: jumlahBayar,
       description: `${mode} angsuran ke-${jadwal.angsuranKe} ${jadwal.pinjaman.nomorKontrak}`,
       postedById: userId,
-    })
+    }, { ensureAccounts: false })
 
     return {
       pembayaranId: pembayaran.id,
@@ -565,9 +589,12 @@ export async function inputPembayaran(input: {
 export async function getRiwayatPembayaran(pinjamanId: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const result = await prisma.pembayaran.findMany({
-    where: { pinjamanId, isBatalkan: false },
+    where: { companyId, pinjamanId, isBatalkan: false },
     orderBy: { tanggalBayar: "desc" },
     include: { inputOleh: { select: { name: true } } },
   })
@@ -578,8 +605,11 @@ export async function getRiwayatPembayaran(pinjamanId: string) {
 export async function getRecentPembayaran(limit = 20, query?: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
-  const where: Prisma.PembayaranWhereInput = { isBatalkan: false }
+  const where: Prisma.PembayaranWhereInput = { companyId, isBatalkan: false }
   
   if (query) {
     where.OR = [
@@ -640,7 +670,7 @@ export async function getRecentPembayaran(limit = 20, query?: string) {
 
   if (jadwalIds.length > 0) {
     const jadwalRows = await prisma.jadwalAngsuran.findMany({
-      where: { id: { in: jadwalIds } },
+      where: { companyId, id: { in: jadwalIds } },
       select: { id: true, angsuranKe: true, tanggalJatuhTempo: true },
     })
     for (const j of jadwalRows) {
@@ -666,6 +696,9 @@ export async function getRecentPembayaran(limit = 20, query?: string) {
 export async function getHistoryPembayaranNasabahReport(params?: { page?: number; limit?: number; search?: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const page = params?.page ?? 1
   const limit = params?.limit ?? 50
@@ -675,12 +708,17 @@ export async function getHistoryPembayaranNasabahReport(params?: { page?: number
   const today = new Date()
   const rankingConfig = await getRankingConfig()
 
-  const where = search ? {
-    OR: [
-      { namaLengkap: { contains: search, mode: "insensitive" as const } },
-      { nomorAnggota: { contains: search, mode: "insensitive" as const } },
-    ]
-  } : {}
+  const where: Prisma.NasabahWhereInput = {
+    companyId,
+    ...(search
+      ? {
+          OR: [
+            { namaLengkap: { contains: search, mode: "insensitive" as const } },
+            { nomorAnggota: { contains: search, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  }
 
   const [nasabahList, total] = await Promise.all([
     prisma.nasabah.findMany({
@@ -1097,6 +1135,9 @@ export async function approvePembatalanPembayaran(input: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   let userId: string
   try {
@@ -1145,8 +1186,8 @@ export async function approvePembatalanPembayaran(input: {
     return { success: true }
   }
 
-  const pembayaran = await prisma.pembayaran.findUnique({
-    where: { id: approval.entityId },
+  const pembayaran = await prisma.pembayaran.findFirst({
+    where: { id: approval.entityId, companyId },
     include: { pinjaman: true },
   })
   if (!pembayaran) return { error: "Pembayaran tidak ditemukan." }
@@ -1156,8 +1197,8 @@ export async function approvePembatalanPembayaran(input: {
   if ("error" in ensured) return { error: ensured.error }
 
   await prisma.$transaction(async (tx) => {
-    await tx.pembayaran.update({
-      where: { id: pembayaran.id },
+    await tx.pembayaran.updateMany({
+      where: { id: pembayaran.id, companyId },
       data: {
         isBatalkan: true,
         alasanBatal: input.catatan ?? approval.catatan ?? "Pembatalan disetujui manager",
@@ -1167,8 +1208,8 @@ export async function approvePembatalanPembayaran(input: {
     const tagMatch = pembayaran.catatan?.match(/\[JADWAL:([^\]]+)\]/)
     const jadwalId = tagMatch?.[1]
     if (jadwalId) {
-      await tx.jadwalAngsuran.update({
-        where: { id: jadwalId },
+      await tx.jadwalAngsuran.updateMany({
+        where: { id: jadwalId, companyId },
         data: {
           sudahDibayar: false,
           tanggalBayar: null,
@@ -1177,8 +1218,8 @@ export async function approvePembatalanPembayaran(input: {
     }
 
     const sisaBaru = Number(pembayaran.pinjaman.sisaPinjaman) + Number(pembayaran.pokok)
-    await tx.pinjaman.update({
-      where: { id: pembayaran.pinjamanId },
+    await tx.pinjaman.updateMany({
+      where: { id: pembayaran.pinjamanId, companyId },
       data: {
         sisaPinjaman: new Prisma.Decimal(sisaBaru),
         status: sisaBaru <= 0 ? "LUNAS" : "AKTIF",
@@ -1187,17 +1228,21 @@ export async function approvePembatalanPembayaran(input: {
 
     await tx.kasTransaksi.create({
       data: {
+        companyId,
         jenis: "KELUAR",
-        kategori: ensured.key,
+        kategoriId: ensured.kategoriId,
+        kategoriKey: ensured.key,
         deskripsi: `Pembatalan pembayaran ${pembayaran.nomorTransaksi}`,
         jumlah: pembayaran.totalBayar,
         kasJenis: pembayaran.metode === "TRANSFER" ? "BANK" : "TUNAI",
         inputOlehId: userId,
+        tanggal: new Date(),
         referensiId: pembayaran.id,
       },
     })
 
     await postJournalEntry(tx, {
+      companyId,
       sourceType: "REVERSAL",
       sourceId: pembayaran.id,
       entryDate: new Date(),
@@ -1213,7 +1258,7 @@ export async function approvePembatalanPembayaran(input: {
           memo: "Kas keluar pembatalan",
         },
       ],
-    })
+    }, { ensureAccounts: false })
 
     await tx.approvalLog.update({
       where: { id: approval.id },

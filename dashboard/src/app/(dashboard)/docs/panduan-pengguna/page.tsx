@@ -46,7 +46,7 @@ export default function PanduanPenggunaPage() {
             <CardContent className="space-y-6">
               <div className="rounded-xl border overflow-hidden bg-muted">
                 <Image 
-                  src="/docs/screenshots/dashboard.png" 
+                  src="/snitch/project/cooperative_manager_dashboard/dashboard.png" 
                   alt="Dashboard KoperasiApp" 
                   width={1200} 
                   height={675}
@@ -88,7 +88,7 @@ export default function PanduanPenggunaPage() {
                 <h3 className="text-lg font-semibold">1. Daftar Nasabah</h3>
                 <div className="rounded-xl border overflow-hidden bg-muted">
                   <Image 
-                    src="/docs/screenshots/nasabah.png" 
+                    src="/snitch/project/master_nasabah_client_data_management/nasabah.png" 
                     alt="Manajemen Nasabah" 
                     width={1200} 
                     height={675}
@@ -130,7 +130,7 @@ export default function PanduanPenggunaPage() {
                 <h3 className="text-lg font-semibold">1. Form Pengajuan Baru</h3>
                 <div className="rounded-xl border overflow-hidden bg-muted">
                   <Image 
-                    src="/docs/screenshots/pengajuan.png" 
+                    src="/snitch/project/pengajuan_pinjaman_loan_application_form/pengajuan.png" 
                     alt="Form Pengajuan Pinjaman" 
                     width={1200} 
                     height={675}
@@ -182,7 +182,7 @@ export default function PanduanPenggunaPage() {
             <CardContent className="space-y-6">
               <div className="rounded-xl border overflow-hidden bg-muted">
                 <Image 
-                  src="/docs/screenshots/pembayaran.png" 
+                  src="/snitch/project/data_tunggakan_arrears_monitoring/pembayaran.png" 
                   alt="Modul Pembayaran" 
                   width={1200} 
                   height={675}
@@ -221,7 +221,7 @@ export default function PanduanPenggunaPage() {
             <CardContent className="space-y-6">
               <div className="rounded-xl border overflow-hidden bg-muted">
                 <Image 
-                  src="/docs/screenshots/kas.png" 
+                  src="/snitch/project/kas_masuk_keluar_cash_flow_management/kas.png" 
                   alt="Manajemen Arus Kas" 
                   width={1200} 
                   height={675}
@@ -250,7 +250,7 @@ export default function PanduanPenggunaPage() {
             <CardContent className="space-y-8">
               <div className="rounded-xl border overflow-hidden bg-muted">
                 <Image 
-                  src="/docs/screenshots/laporan.png" 
+                  src="/snitch/project/laporan_laba_rugi_profit_loss_report/laporan.png" 
                   alt="Laporan Keuangan" 
                   width={1200} 
                   height={675}
@@ -288,7 +288,7 @@ export default function PanduanPenggunaPage() {
             <CardContent className="space-y-6">
               <div className="rounded-xl border overflow-hidden bg-muted">
                 <Image 
-                  src="/docs/screenshots/settings.png" 
+                  src="/snitch/project/settings_user_role_management/settings.png" 
                   alt="Pengaturan Sistem" 
                   width={1200} 
                   height={675}

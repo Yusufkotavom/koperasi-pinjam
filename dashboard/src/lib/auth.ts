@@ -38,11 +38,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: parsed.data.email },
           include: {
             roles: true,
-            company: { select: { id: true, name: true, slug: true } },
+            company: { select: { id: true, name: true, slug: true, status: true, isActive: true } },
           },
         })
 
         if (!user || !user.isActive) return null
+        if (user.company && (!user.company.isActive || user.company.status !== "ACTIVE")) return null
 
         const passwordMatch = await bcrypt.compare(parsed.data.password, user.password)
         if (!passwordMatch) return null
