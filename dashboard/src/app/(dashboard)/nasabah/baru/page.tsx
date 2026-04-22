@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -42,7 +42,6 @@ export default function NasabahBaruPage() {
   const [uploadedDokumen, setUploadedDokumen] = useState<string[]>([])
   const [kelompokList, setKelompokList] = useState<Option[]>([])
   const [kolektorList, setKolektorList] = useState<KolektorOption[]>([])
-  const submitIntentRef = useRef(false)
   const router = useRouter()
 
   const {
@@ -107,7 +106,6 @@ export default function NasabahBaruPage() {
   }
 
   const handleNext = async () => {
-    submitIntentRef.current = false
     const fields: (keyof NasabahInput)[] =
       step === 0
         ? ["namaLengkap", "nik", "alamat"]
@@ -123,14 +121,6 @@ export default function NasabahBaruPage() {
     if (step < STEPS.length - 1) {
       event.preventDefault()
       void handleNext()
-      return
-    }
-
-    const shouldSubmit = submitIntentRef.current
-    submitIntentRef.current = false
-
-    if (!shouldSubmit) {
-      event.preventDefault()
       return
     }
 
@@ -369,9 +359,6 @@ export default function NasabahBaruPage() {
               type="submit"
               className="bg-emerald-600 hover:bg-emerald-700"
               disabled={isPending}
-              onClick={() => {
-                submitIntentRef.current = true
-              }}
             >
               <Save className="size-4" /> {isPending ? "Menyimpan..." : "Simpan Nasabah"}
             </Button>
