@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { OpenCompanyButton } from "./open-company-button"
 
 type SessionLike = { user?: { id?: string; roles?: string[] } } | null
 
@@ -43,6 +44,7 @@ export default async function PlatformCompanyWorkspacePage({
           <Button asChild>
             <Link href="/platform/companies">Daftar Company</Link>
           </Button>
+          <OpenCompanyButton companyId={data.company.id} companyName={data.company.name} />
         </div>
       </div>
 

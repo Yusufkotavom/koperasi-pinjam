@@ -61,7 +61,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       const t = token as typeof token & {
         id?: string
         roles?: string[]
@@ -84,6 +84,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       if (!t.id && token.sub) {
         t.id = token.sub
+      }
+
+      if (trigger === "update" && Array.isArray(t.roles) && t.roles.includes("SUPER_ADMIN")) {
+        const next = session as { actingCompanyId?: unknown; clearActingCompany?: unknown } | undefined
+        const clearActing = next?.clearActingCompany === true || next?.actingCompanyId === null || next?.actingCompanyId === ""
+        if (clearActing) {
+          t.companyId = null
+          t.companyName = null
+          t.companySlug = null
+        } else if (typeof next?.actingCompanyId === "string" && next.actingCompanyId.length > 0) {
+          const company = await prisma.company.findUnique({
+            where: { id: next.actingCompanyId },
+            select: { id: true, name: true, slug: true },
+          })
+          if (company) {
+            t.companyId = company.id
+            t.companyName = company.name
+            t.companySlug = company.slug
+          }
+        }
       }
 
       const needsHydration =
