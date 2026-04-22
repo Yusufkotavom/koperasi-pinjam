@@ -62,30 +62,73 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
+      const t = token as typeof token & {
+        id?: string
+        roles?: string[]
+        companyId?: string | null
+        companyName?: string | null
+        companySlug?: string | null
+      }
+
       if (user) {
         // @ts-expect-error custom field
-        token.roles = user.roles
-        token.id = user.id
+        t.roles = user.roles
+        t.id = user.id
         // @ts-expect-error custom field
-        token.companyId = user.companyId
+        t.companyId = user.companyId
         // @ts-expect-error custom field
-        token.companyName = user.companyName
+        t.companyName = user.companyName
         // @ts-expect-error custom field
-        token.companySlug = user.companySlug
+        t.companySlug = user.companySlug
+      }
+
+      if (!t.id && token.sub) {
+        t.id = token.sub
+      }
+
+      const needsHydration =
+        !Array.isArray(t.roles) ||
+        typeof t.id !== "string" ||
+        t.id.length === 0 ||
+        t.companyId === undefined
+
+      if (needsHydration && typeof token.email === "string" && token.email.length > 0) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email.toLowerCase() },
+          include: {
+            roles: true,
+            company: { select: { id: true, name: true, slug: true } },
+          },
+        })
+
+        if (dbUser) {
+          t.id = dbUser.id
+          t.roles = dbUser.roles.map((r) => r.role)
+          t.companyId = dbUser.companyId
+          t.companyName = dbUser.company?.name ?? null
+          t.companySlug = dbUser.company?.slug ?? null
+        }
       }
       return token
     },
     async session({ session, token }) {
       if (token) {
+        const t = token as typeof token & {
+          id?: string
+          roles?: string[]
+          companyId?: string | null
+          companyName?: string | null
+          companySlug?: string | null
+        }
         // @ts-expect-error custom field
-        session.user.roles = token.roles
-        session.user.id = token.id as string
+        session.user.roles = Array.isArray(t.roles) ? t.roles : []
+        session.user.id = (t.id ?? token.sub ?? "") as string
         // @ts-expect-error custom field
-        session.user.companyId = token.companyId as string | null
+        session.user.companyId = (t.companyId ?? null) as string | null
         // @ts-expect-error custom field
-        session.user.companyName = token.companyName as string | null
+        session.user.companyName = (t.companyName ?? null) as string | null
         // @ts-expect-error custom field
-        session.user.companySlug = token.companySlug as string | null
+        session.user.companySlug = (t.companySlug ?? null) as string | null
       }
       return session
     },

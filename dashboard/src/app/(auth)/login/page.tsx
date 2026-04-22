@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore, useTransition, addTransitionType } from "react"
 import Link from "next/link"
-import { signIn } from "next-auth/react"
+import { getSession, signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -30,6 +30,15 @@ const getDemoTextSnapshot = () => "admin@koperasi.id / admin123"
 // Keep server + client snapshot identical to avoid hydration mismatch.
 const getEmptySnapshot = getDemoTextSnapshot
 
+async function waitForSession(maxRetry = 6, delayMs = 150) {
+  for (let i = 0; i < maxRetry; i += 1) {
+    const session = await getSession()
+    if (session?.user?.id) return true
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+  return false
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
@@ -46,13 +55,23 @@ export default function LoginPage() {
     setIsLoading(true)
     setError("")
     const res = await signIn("credentials", {
-      email: data.email,
+      email: data.email.trim().toLowerCase(),
       password: data.password,
       redirect: false,
+      callbackUrl: "/dashboard",
     })
-    setIsLoading(false)
+
     if (res?.error) {
+      setIsLoading(false)
       setError("Email atau password salah.")
+      return
+    }
+
+    const hasSession = await waitForSession()
+    setIsLoading(false)
+    if (!hasSession) {
+      setError("Login berhasil, tetapi sesi belum aktif. Silakan klik masuk sekali lagi.")
+      return
     } else {
       startTransition(() => {
         addTransitionType("nav-forward")

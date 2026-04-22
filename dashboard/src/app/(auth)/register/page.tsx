@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useActionState, useEffect, useRef, useState, useTransition, addTransitionType } from "react"
-import { signIn } from "next-auth/react"
+import { getSession, signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Building2, Eye, EyeOff, Loader2 } from "lucide-react"
 import { registerUser, type RegisterState } from "@/actions/auth-registration"
@@ -17,6 +17,15 @@ import {
 import { Input } from "@/components/ui/input"
 
 const initialState: RegisterState = {}
+
+async function waitForSession(maxRetry = 6, delayMs = 150) {
+  for (let i = 0; i < maxRetry; i += 1) {
+    const session = await getSession()
+    if (session?.user?.id) return true
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+  return false
+}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -34,16 +43,25 @@ export default function RegisterPage() {
 
     async function loginAfterRegister() {
       setLoginError("")
+      const email = state.email ?? ""
       const res = await signIn("credentials", {
-        email: state.email,
+        email: email.trim().toLowerCase(),
         password: passwordRef.current,
         redirect: false,
+        callbackUrl: "/settings",
       })
 
       if (cancelled) return
 
       if (res?.error) {
         setLoginError("Akun dibuat, tetapi login otomatis gagal. Silakan masuk manual.")
+        return
+      }
+
+      const hasSession = await waitForSession()
+      if (cancelled) return
+      if (!hasSession) {
+        setLoginError("Akun berhasil dibuat, tetapi sesi belum aktif. Silakan login manual.")
         return
       }
 
