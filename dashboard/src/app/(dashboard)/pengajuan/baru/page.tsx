@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useForm, useWatch, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -17,7 +17,6 @@ import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { ArrowLeft, Calculator, Save, Upload, X } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
 
 type NasabahOption = {
   id: string
@@ -57,6 +56,13 @@ function KalkulatorAngsuran({
   const total = pokok + bungaPerPeriode
   const totalKeseluruhan = total * tenor
   const unit = tenorType === "MINGGUAN" ? "minggu" : "bulan"
+  const [draftBungaPerPeriode, setDraftBungaPerPeriode] = useState(bungaPerPeriode)
+  const [draftTotalPerPeriode, setDraftTotalPerPeriode] = useState(total)
+
+  useEffect(() => {
+    setDraftBungaPerPeriode(bungaPerPeriode)
+    setDraftTotalPerPeriode(total)
+  }, [bungaPerPeriode, total])
 
   return (
     <Card className="bg-emerald-50 border-emerald-200">
@@ -77,10 +83,14 @@ function KalkulatorAngsuran({
             customInput={Input}
             thousandSeparator="."
             decimalSeparator=","
-            value={bungaPerPeriode}
+            value={draftBungaPerPeriode}
             onValueChange={(values) => {
               const nextBungaPerPeriode = Math.max(0, values.floatValue || 0)
-              const nextPersen = plafon > 0 ? (nextBungaPerPeriode / plafon) * 100 : 0
+              setDraftBungaPerPeriode(nextBungaPerPeriode)
+              setDraftTotalPerPeriode(pokok + nextBungaPerPeriode)
+            }}
+            onBlur={() => {
+              const nextPersen = plafon > 0 ? (draftBungaPerPeriode / plafon) * 100 : 0
               onBungaPersenChange(nextPersen)
             }}
             className="h-8 bg-white"
@@ -93,10 +103,14 @@ function KalkulatorAngsuran({
             customInput={Input}
             thousandSeparator="."
             decimalSeparator=","
-            value={total}
+            value={draftTotalPerPeriode}
             onValueChange={(values) => {
               const nextTotal = Math.max(0, values.floatValue || 0)
-              const nextBungaPerPeriode = Math.max(0, nextTotal - pokok)
+              setDraftTotalPerPeriode(nextTotal)
+              setDraftBungaPerPeriode(Math.max(0, nextTotal - pokok))
+            }}
+            onBlur={() => {
+              const nextBungaPerPeriode = Math.max(0, draftTotalPerPeriode - pokok)
               const nextPersen = plafon > 0 ? (nextBungaPerPeriode / plafon) * 100 : 0
               onBungaPersenChange(nextPersen)
             }}
