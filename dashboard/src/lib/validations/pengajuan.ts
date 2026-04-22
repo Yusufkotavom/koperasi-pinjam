@@ -7,7 +7,7 @@ export const pengajuanSchema = z.object({
   tenorType: z.enum(["BULANAN", "MINGGUAN"]).default("BULANAN"),
   plafonDiajukan: z.coerce.number().min(1, "Harus isi nominal positif").max(100000000, "Maksimal Rp 100 juta"),
   tenor: z.coerce.number().min(1).max(36),
-  bungaPerBulan: z.coerce.number().min(0.1).max(5),
+  bungaPerBulan: z.coerce.number().min(0),
   tujuanPinjaman: z.string().min(5, "Tujuan harus diisi"),
   agunan: z.string().optional(),
   catatanPengajuan: z.string().optional(),
