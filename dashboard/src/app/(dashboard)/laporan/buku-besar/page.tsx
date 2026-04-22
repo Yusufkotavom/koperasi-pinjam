@@ -12,17 +12,25 @@ function fmt(n: number) {
 export default async function BukuBesarPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ kasJenis?: string; month?: string; year?: string }>
+  searchParams?: Promise<{ kasJenis?: string; accountId?: string; periodMode?: string; month?: string; year?: string; week?: string; from?: string; to?: string }>
 }) {
   const sp = await searchParams
-  const kasJenis = sp?.kasJenis === "BANK" ? "BANK" : "TUNAI"
-  const report = await getLedgerKasReport({ kasJenis, month: sp?.month, year: sp?.year })
+  const report = await getLedgerKasReport({
+    kasJenis: sp?.kasJenis,
+    accountId: sp?.accountId,
+    periodMode: sp?.periodMode,
+    month: sp?.month,
+    year: sp?.year,
+    week: sp?.week,
+    from: sp?.from,
+    to: sp?.to,
+  })
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Buku Besar Kas</h1>
-        <p className="text-muted-foreground text-sm">Mutasi kas per periode (Approved only)</p>
+        <h1 className="text-2xl font-bold tracking-tight">Buku Besar</h1>
+        <p className="text-muted-foreground text-sm">Mutasi akun dari jurnal double-entry</p>
       </div>
 
       <Card>
@@ -30,13 +38,24 @@ export default async function BukuBesarPage({
           <CardTitle className="text-base">Filter Periode</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action="/laporan/buku-besar" className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <select name="kasJenis" defaultValue={kasJenis} className="h-9 rounded-md border bg-background px-3 text-sm">
-              <option value="TUNAI">Kas Tunai</option>
-              <option value="BANK">Kas Bank</option>
+          <form action="/laporan/buku-besar" className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            <select name="accountId" defaultValue={report.account?.id ?? ""} className="h-9 rounded-md border bg-background px-3 text-sm">
+              {report.accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.code} — {account.name}
+                </option>
+              ))}
             </select>
-            <Input name="month" defaultValue={String(report.month)} placeholder="Bulan (1-12)" />
-            <Input name="year" defaultValue={String(report.year)} placeholder="Tahun (YYYY)" />
+            <select name="periodMode" defaultValue={report.period.mode} className="h-9 rounded-md border bg-background px-3 text-sm">
+              <option value="MONTH">Bulanan</option>
+              <option value="WEEK">Mingguan</option>
+              <option value="CUSTOM">Custom</option>
+            </select>
+            <Input name="month" defaultValue={String(report.period.month)} placeholder="Bulan" />
+            <Input name="year" defaultValue={String(report.period.year)} placeholder="Tahun" />
+            <Input name="week" defaultValue={String(report.period.week)} placeholder="Minggu" />
+            <Input name="from" type="date" defaultValue={report.period.fromInput} />
+            <Input name="to" type="date" defaultValue={report.period.toInput} />
             <Button type="submit">Terapkan</Button>
           </form>
         </CardContent>
@@ -66,8 +85,8 @@ export default async function BukuBesarPage({
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">
-            Periode {new Date(report.year, report.month - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })} ·{" "}
-            <Badge variant="outline">{report.kasJenis}</Badge>
+            Periode {report.period.label} ·{" "}
+            <Badge variant="outline">{report.account ? `${report.account.code} · ${report.account.name}` : "Tidak ada akun"}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -120,4 +139,3 @@ export default async function BukuBesarPage({
     </div>
   )
 }
-

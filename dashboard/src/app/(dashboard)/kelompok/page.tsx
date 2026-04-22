@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { DeleteKelompokButton } from "./delete-kelompok-button"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -118,9 +119,12 @@ export default async function KelompokPage({
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="xs" variant="outline" className="h-7 px-3 rounded-lg border-slate-200 dark:border-slate-800 text-[10px] font-bold uppercase tracking-widest" asChild>
-                        <Link href={`/kelompok/${row.id}/edit`}>Edit</Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button size="xs" variant="outline" className="h-7 px-3 rounded-lg border-slate-200 dark:border-slate-800 text-[10px] font-bold uppercase tracking-widest" asChild>
+                          <Link href={`/kelompok/${row.id}/edit`}>Edit</Link>
+                        </Button>
+                        <DeleteKelompokButton id={row.id} nama={row.nama} />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

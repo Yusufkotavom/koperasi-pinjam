@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require('fs');
 const { execSync } = require('child_process');
 
@@ -6,8 +7,7 @@ const files = execSync('find src/app -name "*.tsx"').toString().split('\n').filt
 let changedFiles = 0;
 for (const file of files) {
   let content = fs.readFileSync(file, 'utf8');
-  let changed = false;
-  
+
   const classesToRemove = [
     'bg-slate-50/20',
     'bg-slate-50',
@@ -16,9 +16,9 @@ for (const file of files) {
     'dark:border-slate-800',
     'focus-visible:bg-white'
   ];
-  
+
   const original = content;
-  
+
   content = content.replace(/<Input[^>]+className=\"[^\"]+\"[^>]*>/g, (match) => {
     let newMatch = match;
     for (const c of classesToRemove) {

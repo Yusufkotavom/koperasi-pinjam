@@ -2,6 +2,8 @@ import { getLabaRugiSummary } from "@/actions/kas"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -10,20 +12,46 @@ function fmt(n: number) {
 export default async function LabaRugiPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ month?: string; year?: string }>
+  searchParams?: Promise<{ periodMode?: string; month?: string; year?: string; week?: string; from?: string; to?: string }>
 }) {
   const sp = await searchParams
-  const data = await getLabaRugiSummary({ month: sp?.month, year: sp?.year })
+  const data = await getLabaRugiSummary({
+    periodMode: sp?.periodMode,
+    month: sp?.month,
+    year: sp?.year,
+    week: sp?.week,
+    from: sp?.from,
+    to: sp?.to,
+  })
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Laporan Laba Rugi</h1>
-          <p className="text-muted-foreground text-sm">Periode: {new Date(data.year, data.month - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</p>
+          <p className="text-muted-foreground text-sm">Periode: {data.period.label}</p>
         </div>
-        <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">Sumber: Transaksi Kas</Badge>
+        <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">Sumber: Jurnal Akuntansi</Badge>
       </div>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Filter Periode</CardTitle></CardHeader>
+        <CardContent>
+          <form action="/laporan/laba-rugi" className="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <select name="periodMode" defaultValue={data.period.mode} className="h-9 rounded-md border bg-background px-3 text-sm">
+              <option value="MONTH">Bulanan</option>
+              <option value="WEEK">Mingguan</option>
+              <option value="CUSTOM">Custom</option>
+            </select>
+            <Input name="month" defaultValue={String(data.period.month)} placeholder="Bulan" />
+            <Input name="year" defaultValue={String(data.period.year)} placeholder="Tahun" />
+            <Input name="week" defaultValue={String(data.period.week)} placeholder="Minggu" />
+            <Input name="from" type="date" defaultValue={data.period.fromInput} />
+            <Input name="to" type="date" defaultValue={data.period.toInput} />
+            <Button type="submit">Terapkan</Button>
+          </form>
+        </CardContent>
+      </Card>
 
       <div className="grid lg:grid-cols-3 gap-4">
         {[
@@ -74,6 +102,13 @@ export default async function LabaRugiPage({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-0 bg-muted/30">
+        <CardContent className="p-4 text-sm text-muted-foreground">
+          Laba rugi hanya mengambil akun pendapatan dan beban dari jurnal posted. Setoran modal, simpanan anggota,
+          pencairan pokok pinjaman, dan pelunasan pokok masuk neraca sehingga tidak menaikkan atau menurunkan laba.
+        </CardContent>
+      </Card>
     </div>
   )
 }

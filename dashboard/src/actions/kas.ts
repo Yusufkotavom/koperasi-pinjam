@@ -7,6 +7,8 @@ import { z } from "zod"
 import { ApprovalEntityType, ApprovalStatus, Prisma, RoleType } from "@prisma/client"
 import { hasAnyRole, requireRoles } from "@/lib/roles"
 import { writeAuditLog } from "@/lib/audit"
+import { ensureAccountingAccounts, getCashBalanceByJenis, postKasTransactionJournal } from "@/lib/accounting"
+import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { serializeData } from "@/lib/utils"
 
 function normalizeKasCategoryKey(raw: string) {
@@ -59,6 +61,7 @@ export async function getKasKategoriList() {
     { jenis: "MASUK", nama: "ANGSURAN" },
     { jenis: "MASUK", nama: "PELUNASAN" },
     { jenis: "MASUK", nama: "SIMPANAN" },
+    { jenis: "MASUK", nama: "MODAL" },
     { jenis: "MASUK", nama: "ADMIN" },
     { jenis: "MASUK", nama: "DENDA" },
     { jenis: "MASUK", nama: "LAINNYA" },
@@ -386,13 +389,25 @@ export async function inputKas(input: unknown) {
   const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori: rest.kategori })
   if ("error" in ensured) return { error: ensured.error }
 
+  const tanggalTransaksi = tanggal ? new Date(tanggal) : new Date()
+  if (rest.jenis === "KELUAR") {
+    await ensureAccountingAccounts()
+    const saldoKas = await getCashBalanceByJenis(rest.kasJenis, tanggalTransaksi)
+    if (saldoKas < jumlah) {
+      return {
+        error: `Saldo ${rest.kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${jumlah.toLocaleString("id-ID")}.`,
+      }
+    }
+  }
+  await ensureAccountingAccounts()
+
   const kas = await prisma.$transaction(async (tx) => {
     const row = await tx.kasTransaksi.create({
       data: {
         ...rest,
         kategori: ensured.key,
         jumlah: new Prisma.Decimal(jumlah),
-        tanggal: tanggal ? new Date(tanggal) : new Date(),
+        tanggal: tanggalTransaksi,
         inputOlehId: userId,
         buktiUrl: buktiUrl?.trim() || null,
         isApproved: isPrivileged ? true : false,
@@ -409,6 +424,8 @@ export async function inputKas(input: unknown) {
           catatan: "Menunggu persetujuan transaksi kas.",
         },
       })
+    } else {
+      await postKasTransactionJournal(tx, row.id, userId)
     }
 
     return row
@@ -416,6 +433,8 @@ export async function inputKas(input: unknown) {
 
   revalidatePath("/kas")
   revalidatePath("/laporan/laba-rugi")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/buku-besar")
   await writeAuditLog({
     actorId: userId,
     entityType: "KAS_TRANSAKSI",
@@ -452,19 +471,48 @@ export async function updateKas(id: string, input: unknown) {
     return { error: "Transaksi kas ini masih menunggu persetujuan. Selesaikan approval sebelum edit." }
   }
 
-  const kas = await prisma.kasTransaksi.update({
-    where: { id },
-    data: {
-      ...rest,
-      kategori: ensured.key,
-      jumlah: new Prisma.Decimal(jumlah),
-      tanggal: tanggal ? new Date(tanggal) : new Date(),
-      ...(buktiUrl !== undefined ? { buktiUrl: buktiUrl?.trim() || null } : {}),
-    },
+  const tanggalTransaksi = tanggal ? new Date(tanggal) : new Date()
+  if (rest.jenis === "KELUAR") {
+    await ensureAccountingAccounts()
+    const saldoKas = await getCashBalanceByJenis(rest.kasJenis, tanggalTransaksi)
+    const existingEffect =
+      existing.isApproved && existing.jenis === "KELUAR" && existing.kasJenis === rest.kasJenis
+        ? Number(existing.jumlah)
+        : 0
+    if (saldoKas + existingEffect < jumlah) {
+      return {
+        error: `Saldo ${rest.kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup untuk perubahan transaksi ini.`,
+      }
+    }
+  }
+
+  const kas = await prisma.$transaction(async (tx) => {
+    const row = await tx.kasTransaksi.update({
+      where: { id },
+      data: {
+        ...rest,
+        kategori: ensured.key,
+        jumlah: new Prisma.Decimal(jumlah),
+        tanggal: tanggalTransaksi,
+        ...(buktiUrl !== undefined ? { buktiUrl: buktiUrl?.trim() || null } : {}),
+      },
+    })
+
+    await tx.journalEntry.deleteMany({
+      where: {
+        sourceType: "KAS",
+        sourceId: id,
+      },
+    })
+    await postKasTransactionJournal(tx, row.id, userId, { ensureAccounts: false })
+
+    return row
   })
 
   revalidatePath("/kas")
   revalidatePath("/laporan/laba-rugi")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/buku-besar")
   await writeAuditLog({
     actorId: userId,
     entityType: "KAS_TRANSAKSI",
@@ -493,10 +541,20 @@ export async function deleteKas(id: string) {
     return { error: "Transaksi kas ini masih menunggu persetujuan. Selesaikan approval sebelum hapus." }
   }
 
-  await prisma.kasTransaksi.delete({ where: { id } })
+  await prisma.$transaction(async (tx) => {
+    await tx.journalEntry.deleteMany({
+      where: {
+        sourceType: "KAS",
+        sourceId: id,
+      },
+    })
+    await tx.kasTransaksi.delete({ where: { id } })
+  })
 
   revalidatePath("/kas")
   revalidatePath("/laporan/laba-rugi")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/buku-besar")
   await writeAuditLog({
     actorId: userId,
     entityType: "KAS_TRANSAKSI",
@@ -558,12 +616,24 @@ export async function approveKasTransaksi(input: { id: string; action: "APPROVE"
   const status = input.action === "APPROVE" ? ApprovalStatus.APPROVED : ApprovalStatus.REJECTED
   const catatan = input.catatan?.trim()
 
+  if (input.action === "APPROVE" && row.jenis === "KELUAR") {
+    await ensureAccountingAccounts()
+    const saldoKas = await getCashBalanceByJenis(row.kasJenis === "BANK" ? "BANK" : "TUNAI", row.tanggal)
+    const jumlah = Number(row.jumlah)
+    if (saldoKas < jumlah) {
+      return {
+        error: `Saldo ${row.kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup untuk approve transaksi ini.`,
+      }
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     if (input.action === "APPROVE") {
       await tx.kasTransaksi.update({
         where: { id: input.id },
         data: { isApproved: true },
       })
+      await postKasTransactionJournal(tx, input.id, userId)
     }
 
     if (pending) {
@@ -593,6 +663,8 @@ export async function approveKasTransaksi(input: { id: string; action: "APPROVE"
 
   revalidatePath("/kas")
   revalidatePath("/laporan/laba-rugi")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/buku-besar")
 
   await writeAuditLog({
     actorId: userId,
@@ -627,58 +699,57 @@ export async function getKasBulanan(bulan: number, tahun: number) {
   }))
 }
 
-export async function getLabaRugiSummary(params?: { month?: string; year?: string }) {
+export async function getLabaRugiSummary(params?: ReportPeriodInput) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
 
-  const now = new Date()
-  const month = Number(params?.month ?? now.getMonth() + 1)
-  const year = Number(params?.year ?? now.getFullYear())
+  const period = resolveReportPeriod(params)
 
-  const startDate = new Date(year, month - 1, 1)
-  const endDate = new Date(year, month, 1)
+  const rows = await prisma.journalLine.findMany({
+    where: {
+      account: { type: { in: ["REVENUE", "EXPENSE"] } },
+      journalEntry: { status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
+    },
+    include: { account: true },
+  })
 
-  const [pendapatanRows, bebanRows] = await Promise.all([
-    prisma.kasTransaksi.groupBy({
-      by: ["kategori"],
-      where: {
-        jenis: "MASUK",
-        tanggal: { gte: startDate, lt: endDate },
-      },
-      _sum: { jumlah: true },
-    }),
-    prisma.kasTransaksi.groupBy({
-      by: ["kategori"],
-      where: {
-        jenis: "KELUAR",
-        tanggal: { gte: startDate, lt: endDate },
-      },
-      _sum: { jumlah: true },
-    }),
-  ])
+  const grouped = new Map<string, { label: string; type: "REVENUE" | "EXPENSE"; jumlah: number }>()
+  for (const row of rows) {
+    const key = row.account.code
+    const current = grouped.get(key) ?? {
+      label: row.account.name,
+      type: row.account.type as "REVENUE" | "EXPENSE",
+      jumlah: 0,
+    }
+    current.jumlah +=
+      row.account.type === "REVENUE"
+        ? Number(row.credit) - Number(row.debit)
+        : Number(row.debit) - Number(row.credit)
+    grouped.set(key, current)
+  }
 
-  const pendapatan = pendapatanRows.map((r) => ({
-    label: r.kategori,
-    jumlah: Number(r._sum.jumlah ?? 0),
-  }))
+  const pendapatan = Array.from(grouped.values())
+    .filter((r) => r.type === "REVENUE" && Math.abs(r.jumlah) > 0.009)
+    .map(({ label, jumlah }) => ({ label, jumlah }))
 
-  const beban = bebanRows.map((r) => ({
-    label: r.kategori,
-    jumlah: Number(r._sum.jumlah ?? 0),
-  }))
+  const beban = Array.from(grouped.values())
+    .filter((r) => r.type === "EXPENSE" && Math.abs(r.jumlah) > 0.009)
+    .map(({ label, jumlah }) => ({ label, jumlah }))
 
   const totalPendapatan = pendapatan.reduce((sum, p) => sum + p.jumlah, 0)
   const totalBeban = beban.reduce((sum, b) => sum + b.jumlah, 0)
   const laba = totalPendapatan - totalBeban
 
   return {
-    month,
-    year,
+    month: period.month,
+    year: period.year,
+    period,
     pendapatan,
     beban,
     totalPendapatan,
     totalBeban,
     laba,
+    source: "JOURNAL",
   }
 }
 

@@ -48,7 +48,6 @@ function fmt(n: number) {
 
 export function KasClientPage({ initialData, initialKategori }: { initialData: KasData; initialKategori: KasKategori[] }) {
   const router = useRouter()
-  const [, startTransition] = useTransition()
   const [isPending, startLoadTransition] = useTransition()
   const [tab, setTab] = useState<"histori" | "input" | "kategori" | "approval">("histori")
   const [jenis, setJenis] = useState<"MASUK" | "KELUAR">("MASUK")

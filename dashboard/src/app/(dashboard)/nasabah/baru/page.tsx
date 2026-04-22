@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
+import type { FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -41,11 +42,13 @@ export default function NasabahBaruPage() {
   const [uploadedDokumen, setUploadedDokumen] = useState<string[]>([])
   const [kelompokList, setKelompokList] = useState<Option[]>([])
   const [kolektorList, setKolektorList] = useState<KolektorOption[]>([])
+  const submitIntentRef = useRef(false)
   const router = useRouter()
 
   const {
     register,
     handleSubmit,
+    setError,
     setValue,
     trigger,
     formState: { errors },
@@ -104,6 +107,7 @@ export default function NasabahBaruPage() {
   }
 
   const handleNext = async () => {
+    submitIntentRef.current = false
     const fields: (keyof NasabahInput)[] =
       step === 0
         ? ["namaLengkap", "nik", "alamat"]
@@ -115,11 +119,34 @@ export default function NasabahBaruPage() {
     if (valid) setStep((s) => s + 1)
   }
 
+  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (step < STEPS.length - 1) {
+      event.preventDefault()
+      void handleNext()
+      return
+    }
+
+    const shouldSubmit = submitIntentRef.current
+    submitIntentRef.current = false
+
+    if (!shouldSubmit) {
+      event.preventDefault()
+      return
+    }
+
+    void handleSubmit(onSubmit)(event)
+  }
+
   const onSubmit = (data: NasabahInput) => {
     startTransition(async () => {
       const result = await createNasabah(data)
-      if (result.error) {
-        toast.error("Gagal menyimpan data nasabah. Periksa kembali form.")
+      if ("error" in result) {
+        const nikError = result.error.nik?.[0]
+        if (nikError) {
+          setError("nik", { type: "server", message: nikError })
+          setStep(0)
+        }
+        toast.error(nikError ?? "Gagal menyimpan data nasabah. Periksa kembali form.")
         return
       }
       toast.success("Nasabah berhasil ditambahkan!")
@@ -145,7 +172,7 @@ export default function NasabahBaruPage() {
         ))}
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleFormSubmit}>
         {step === 0 && (
           <Card>
             <CardHeader>
@@ -338,7 +365,14 @@ export default function NasabahBaruPage() {
               Berikutnya <ArrowRight className="size-4" />
             </Button>
           ) : (
-            <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700" disabled={isPending}>
+            <Button
+              type="submit"
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={isPending}
+              onClick={() => {
+                submitIntentRef.current = true
+              }}
+            >
               <Save className="size-4" /> {isPending ? "Menyimpan..." : "Simpan Nasabah"}
             </Button>
           )}

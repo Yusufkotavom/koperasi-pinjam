@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Banknote } from "lucide-react"
 
@@ -40,6 +41,7 @@ export function PencairanForm({ pengajuan }: Props) {
   const [tanggalCair, setTanggalCair] = useState(() =>
     getLocalDateInputValue(new Date()),
   )
+  const [kasJenis, setKasJenis] = useState<"TUNAI" | "BANK">("TUNAI")
   const router = useRouter()
 
   const plafon = Number(pengajuan.plafonDisetujui ?? pengajuan.plafonDiajukan)
@@ -59,6 +61,7 @@ export function PencairanForm({ pengajuan }: Props) {
         potonganAdmin,
         potonganProvisi,
         tanggalCair,
+        kasJenis,
       })
       if (result.error) {
         toast.error(typeof result.error === "string" ? result.error : "Gagal mencairkan pinjaman")
@@ -131,6 +134,22 @@ export function PencairanForm({ pengajuan }: Props) {
               required
               suppressHydrationWarning
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Sumber Dana</Label>
+            <Select value={kasJenis} onValueChange={(value) => setKasJenis(value as "TUNAI" | "BANK")}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih kas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TUNAI">Kas Tunai</SelectItem>
+                <SelectItem value="BANK">Kas Bank</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Pencairan ditolak jika saldo sumber dana ini tidak cukup. Setor modal/simpanan dulu bila saldo kurang.
+            </p>
           </div>
 
           <div className="rounded-lg bg-teal-50 border border-teal-200 p-4 text-sm">

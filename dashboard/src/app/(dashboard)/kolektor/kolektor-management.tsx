@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { UserCog, UserPlus, Users, ShieldCheck, Mail, Shield } from "lucide-react"
+import { UserPlus, Users, ShieldCheck } from "lucide-react"
 
 type Props = {
   initialKolektor: {

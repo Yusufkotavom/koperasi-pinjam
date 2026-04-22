@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getKelompokList, getNasabahList } from "@/actions/nasabah"
 import { Input } from "@/components/ui/input"
+import { DeleteNasabahButton } from "./delete-nasabah-button"
 
 const statusBadge: Record<string, { label: string; cls: string }> = {
   AKTIF: { label: "Aktif", cls: "bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
@@ -245,6 +246,7 @@ export default async function NasabahPage({
                               <span className="sr-only">Edit</span>
                             </Link>
                           </Button>
+                          <DeleteNasabahButton id={row.id} nama={row.namaLengkap} />
                         </div>
                       </TableCell>
                     </TableRow>

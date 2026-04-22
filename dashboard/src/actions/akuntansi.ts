@@ -4,37 +4,15 @@ import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireRoles } from "@/lib/roles"
-import { AccountType, Prisma, RoleType, RekonsiliasiStatus } from "@prisma/client"
+import { Prisma, RoleType, RekonsiliasiStatus } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 import { writeAuditLog } from "@/lib/audit"
+import { ensureAccountingAccounts } from "@/lib/accounting"
+import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { serializeData } from "@/lib/utils"
 
-const DEFAULT_ACCOUNTS: Array<{ code: string; name: string; type: AccountType }> = [
-  { code: "CASH_TUNAI", name: "Kas Tunai", type: "ASSET" },
-  { code: "CASH_BANK", name: "Kas Bank", type: "ASSET" },
-  { code: "PIUTANG_PINJAMAN", name: "Piutang Pinjaman", type: "ASSET" },
-  { code: "PENERIMAAN_ANGSURAN", name: "Penerimaan Angsuran", type: "REVENUE" },
-  { code: "PENDAPATAN_DENDA", name: "Pendapatan Denda", type: "REVENUE" },
-  { code: "PENDAPATAN_ADMIN", name: "Pendapatan Administrasi", type: "REVENUE" },
-  { code: "BEBAN_OPERASIONAL", name: "Beban Operasional", type: "EXPENSE" },
-  { code: "BEBAN_GAJI", name: "Beban Gaji", type: "EXPENSE" },
-  { code: "PENYESUAIAN", name: "Penyesuaian", type: "EXPENSE" },
-]
-
 async function ensureDefaultAccounts() {
-  const count = await prisma.account.count()
-  if (count > 0) return
-
-  await prisma.account.createMany({
-    data: DEFAULT_ACCOUNTS.map((a) => ({
-      code: a.code,
-      name: a.name,
-      type: a.type,
-      isActive: true,
-      updatedAt: new Date(),
-    })),
-    skipDuplicates: true,
-  })
+  await ensureAccountingAccounts()
 }
 
 type SessionLike = { user?: { id?: string; roles?: string[] } } | null
@@ -159,15 +137,6 @@ export async function updateKasKategoriMapping(input: unknown) {
   })
 
   return { success: true, data: updated }
-}
-
-function monthRange(params?: { month?: string; year?: string }) {
-  const now = new Date()
-  const month = Number(params?.month ?? now.getMonth() + 1)
-  const year = Number(params?.year ?? now.getFullYear())
-  const startDate = new Date(year, month - 1, 1)
-  const endDate = new Date(year, month, 1)
-  return { month, year, startDate, endDate }
 }
 
 async function getCashSaldoBookByJenis(kasJenis: "TUNAI" | "BANK", endExclusive: Date) {
@@ -306,86 +275,173 @@ export async function setRekonsiliasiStatus(input: { id: string; status: "DRAFT"
   return { success: true }
 }
 
-export async function getLedgerKasReport(params?: { kasJenis?: string; month?: string; year?: string }) {
-  const session = await auth()
-  if (!session) throw new Error("Unauthorized")
-  requireFinanceRoles(session as unknown as SessionLike)
-
-  const kasJenis = params?.kasJenis === "BANK" ? "BANK" : "TUNAI"
-  const { month, year, startDate, endDate } = monthRange({ month: params?.month, year: params?.year })
-
-  const rows = await prisma.kasTransaksi.findMany({
-    where: { kasJenis, tanggal: { gte: startDate, lt: endDate }, isApproved: true },
-    orderBy: [{ tanggal: "asc" }, { createdAt: "asc" }],
-    include: { inputOleh: { select: { name: true } } },
-  })
-
-  let saldo = await getCashSaldoBookByJenis(kasJenis, startDate)
-  const data = rows.map((r) => {
-    const amt = Number(r.jumlah)
-    const debit = r.jenis === "MASUK" ? amt : 0
-    const kredit = r.jenis === "KELUAR" ? amt : 0
-    saldo += r.jenis === "MASUK" ? amt : -amt
-    return {
-      id: r.id,
-      tanggal: r.tanggal,
-      kategori: r.kategori,
-      deskripsi: r.deskripsi,
-      buktiUrl: r.buktiUrl,
-      debit,
-      kredit,
-      saldo,
-      inputOleh: r.inputOleh.name,
-    }
-  })
-
-  return serializeData({ kasJenis, month, year, openingBalance: saldo - data.reduce((a, b) => a + (b.debit - b.kredit), 0), data, closingBalance: saldo })
+function signedBalance(type: string, debit: number, credit: number) {
+  return type === "ASSET" || type === "EXPENSE" ? debit - credit : credit - debit
 }
 
-export async function getNeracaSederhana(params?: { month?: string; year?: string }) {
+function accountGroupLabel(type: string) {
+  if (type === "ASSET") return "aset"
+  if (type === "LIABILITY") return "kewajiban"
+  if (type === "EQUITY") return "ekuitas"
+  if (type === "REVENUE") return "pendapatan"
+  return "beban"
+}
+
+export async function getLedgerKasReport(params?: { kasJenis?: string; accountId?: string; accountCode?: string } & ReportPeriodInput) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   requireFinanceRoles(session as unknown as SessionLike)
 
-  const { month, year, endDate } = monthRange(params)
+  await ensureDefaultAccounts()
 
-  const [saldoTunai, saldoBank, outstanding, simpanan] = await Promise.all([
-    getCashSaldoBookByJenis("TUNAI", endDate),
-    getCashSaldoBookByJenis("BANK", endDate),
-    prisma.pinjaman.aggregate({
-      where: { status: { in: ["AKTIF", "MENUNGGAK", "MACET"] } },
-      _sum: { sisaPinjaman: true },
+  const fallbackAccountCode = params?.kasJenis === "BANK" ? "CASH_BANK" : "CASH_TUNAI"
+  const requestedAccountCode = params?.accountCode?.trim() || fallbackAccountCode
+  const period = resolveReportPeriod(params)
+
+  const accounts = await prisma.account.findMany({
+    where: { isActive: true },
+    orderBy: [{ type: "asc" }, { code: "asc" }],
+  })
+  const selectedAccount =
+    (params?.accountId ? accounts.find((account) => account.id === params.accountId) : null) ??
+    accounts.find((account) => account.code === requestedAccountCode) ??
+    accounts.find((account) => account.code === "CASH_TUNAI") ??
+    accounts[0]
+
+  if (!selectedAccount) {
+    return serializeData({
+      account: null,
+      accounts,
+      kasJenis: params?.kasJenis === "BANK" ? "BANK" : "TUNAI",
+      period,
+      month: period.month,
+      year: period.year,
+      openingBalance: 0,
+      data: [],
+      closingBalance: 0,
+    })
+  }
+
+  const [openingLines, rows] = await Promise.all([
+    prisma.journalLine.findMany({
+      where: {
+        accountId: selectedAccount.id,
+        journalEntry: { status: "POSTED", entryDate: { lt: period.startDate } },
+      },
+      select: { debit: true, credit: true },
     }),
-    prisma.simpanan.aggregate({
-      _sum: { jumlah: true },
+    prisma.journalLine.findMany({
+      where: {
+        accountId: selectedAccount.id,
+        journalEntry: { status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
+      },
+      orderBy: [{ journalEntry: { entryDate: "asc" } }, { createdAt: "asc" }],
+      include: {
+        journalEntry: { select: { id: true, entryDate: true, description: true, sourceType: true, sourceId: true, postedBy: { select: { name: true } } } },
+      },
     }),
   ])
 
-  const piutang = Number(outstanding._sum.sisaPinjaman ?? 0)
-  const totalKas = saldoTunai + saldoBank
-  const totalAset = totalKas + piutang
-  const totalSimpanan = Number(simpanan._sum.jumlah ?? 0)
-  const ekuitas = totalAset - totalSimpanan
+  let saldo = openingLines.reduce(
+    (sum, line) => sum + signedBalance(selectedAccount.type, Number(line.debit), Number(line.credit)),
+    0,
+  )
+  const openingBalance = saldo
+  const data = rows.map((r) => {
+    const debit = Number(r.debit)
+    const kredit = Number(r.credit)
+    saldo += signedBalance(selectedAccount.type, debit, kredit)
+    return {
+      id: r.id,
+      tanggal: r.journalEntry.entryDate,
+      kategori: r.journalEntry.sourceType,
+      deskripsi: r.memo || r.journalEntry.description,
+      buktiUrl: null,
+      debit,
+      kredit,
+      saldo,
+      inputOleh: r.journalEntry.postedBy?.name ?? "-",
+      journalEntryId: r.journalEntry.id,
+      sourceId: r.journalEntry.sourceId,
+    }
+  })
 
   return serializeData({
-    month,
-    year,
-    aset: [
-      { label: "Kas Tunai", nilai: saldoTunai },
-      { label: "Kas Bank", nilai: saldoBank },
-      { label: "Piutang Pinjaman (Outstanding)", nilai: piutang },
-    ],
-    kewajiban: [
-      { label: "Simpanan Anggota (Akumulasi)", nilai: totalSimpanan },
-    ],
-    ekuitas: [
-      { label: "Ekuitas (Selisih)", nilai: ekuitas },
-    ],
+    account: selectedAccount,
+    accounts,
+    kasJenis: selectedAccount.code === "CASH_BANK" ? "BANK" : "TUNAI",
+    period,
+    month: period.month,
+    year: period.year,
+    openingBalance,
+    data,
+    closingBalance: saldo,
+  })
+}
+
+export async function getNeracaSederhana(params?: ReportPeriodInput) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  requireFinanceRoles(session as unknown as SessionLike)
+
+  const period = resolveReportPeriod(params)
+
+  await ensureDefaultAccounts()
+
+  const rows = await prisma.journalLine.findMany({
+    where: {
+      journalEntry: { status: "POSTED", entryDate: { lt: period.endDate } },
+    },
+    include: { account: true },
+  })
+
+  const map = new Map<string, { code: string; label: string; type: string; nilai: number }>()
+  for (const row of rows) {
+    const current = map.get(row.account.code) ?? {
+      code: row.account.code,
+      label: row.account.name,
+      type: row.account.type,
+      nilai: 0,
+    }
+    current.nilai += signedBalance(row.account.type, Number(row.debit), Number(row.credit))
+    map.set(row.account.code, current)
+  }
+
+  const byType = Array.from(map.values()).filter((row) => Math.abs(row.nilai) > 0.009)
+  const sortByCode = <T extends { code: string }>(items: T[]) => items.sort((a, b) => a.code.localeCompare(b.code))
+  const aset = sortByCode(byType.filter((row) => row.type === "ASSET")).map(({ code, label, nilai }) => ({ code, label, nilai }))
+  const kewajiban = sortByCode(byType.filter((row) => row.type === "LIABILITY")).map(({ code, label, nilai }) => ({ code, label, nilai }))
+  const modal = sortByCode(byType.filter((row) => row.type === "EQUITY")).map(({ code, label, nilai }) => ({ code, label, nilai }))
+  const pendapatan = byType.filter((row) => row.type === "REVENUE").reduce((sum, row) => sum + row.nilai, 0)
+  const beban = byType.filter((row) => row.type === "EXPENSE").reduce((sum, row) => sum + row.nilai, 0)
+  const shuBerjalan = pendapatan - beban
+  const ekuitas = [...modal, { code: "SHU_BERJALAN", label: "SHU Berjalan", nilai: shuBerjalan }].filter((row) => Math.abs(row.nilai) > 0.009)
+
+  const totalKas = byType
+    .filter((row) => row.type === "ASSET" && row.label.toLowerCase().includes("kas"))
+    .reduce((sum, row) => sum + row.nilai, 0)
+  const totalAset = aset.reduce((sum, row) => sum + row.nilai, 0)
+  const totalKewajiban = kewajiban.reduce((sum, row) => sum + row.nilai, 0)
+  const totalEkuitas = ekuitas.reduce((sum, row) => sum + row.nilai, 0)
+  const totalKewajibanEkuitas = totalKewajiban + totalEkuitas
+  const selisih = totalAset - totalKewajibanEkuitas
+
+  return serializeData({
+    month: period.month,
+    year: period.year,
+    period,
+    aset,
+    kewajiban,
+    ekuitas,
+    kelompok: byType.map((row) => ({ ...row, group: accountGroupLabel(row.type) })),
     totals: {
       totalKas,
       totalAset,
-      totalKewajiban: totalSimpanan,
-      totalEkuitas: ekuitas,
+      totalKewajiban,
+      totalEkuitas,
+      totalKewajibanEkuitas,
+      selisih,
+      isBalanced: Math.abs(selisih) < 0.01,
     },
   })
 }

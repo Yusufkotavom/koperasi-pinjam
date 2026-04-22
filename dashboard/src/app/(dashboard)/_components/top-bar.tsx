@@ -63,10 +63,10 @@ export function TopBar() {
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbLink
-                href="/"
+                href="/dashboard"
                 onClick={(e) => {
                   e.preventDefault()
-                  navigate("/")
+                  navigate("/dashboard")
                 }}
                 className="text-muted-foreground transition-colors hover:text-foreground"
               >

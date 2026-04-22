@@ -7,25 +7,24 @@ import { PrintButton } from "@/components/print-button"
 import Image from "next/image"
 import {
   ArrowRight,
-  BadgeCheck,
   BarChart3,
-  ClipboardCheck,
-  FileText,
-  Fingerprint,
   Layers3,
   LineChart,
-  LockKeyhole,
   Sparkles,
   Target,
-  Upload,
   WalletCards,
+  CheckCircle2,
+  AlertCircle,
+  Zap,
+  ShieldCheck,
+  Users,
 } from "lucide-react"
 import { labelForGroup, scanPenawaranScreenshots } from "./_lib/screenshots"
 
 export const metadata = {
-  title: "Penawaran KoperasiApp",
+  title: "Proposal Penawaran KoperasiApp — Transformasi Digital Koperasi",
   description:
-    "Landing page penawaran: sistem informasi koperasi simpan pinjam yang rapi, terukur, dan siap operasional.",
+    "Dokumen resmi penawaran sistem informasi koperasi simpan pinjam: Terstruktur, aman, dan siap operasional.",
 }
 
 function normalizeRecipient(raw: string) {
@@ -40,13 +39,9 @@ function normalizeRecipient(raw: string) {
 
 function RecipientLine({ to }: { to: string }) {
   return (
-    <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/70 bg-white/60 px-4 py-2 text-sm text-slate-700 backdrop-blur">
-      <span className="text-xs font-semibold text-slate-500">Ditujukan kepada</span>
-      <span className="font-semibold text-slate-900">{to}</span>
-      <span className="text-xs text-slate-500">|</span>
-      <span className="text-xs text-slate-500">
-        Ubah lewat URL: <span className="font-mono">/penawaran?to=PT%20Adikarya</span>
-      </span>
+    <div className="flex flex-col gap-1 border-l-4 border-emerald-600 pl-4 py-1">
+      <span className="text-xs font-bold text-emerald-700 uppercase tracking-widest">Ditujukan Kepada</span>
+      <span className="text-2xl font-black text-slate-900 tracking-tight">{to}</span>
     </div>
   )
 }
@@ -61,30 +56,14 @@ function SectionTitle({
   desc: string
 }) {
   return (
-    <div className="space-y-2">
-      <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-xs font-semibold tracking-wide backdrop-blur">
-        <span className="size-1.5 rounded-full bg-cyan-500" />
+    <div className="space-y-3">
+      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold tracking-wide text-emerald-700 uppercase">
         {eyebrow}
       </div>
-      <h2 className="font-heading text-2xl font-black tracking-tight sm:text-3xl">
+      <h2 className="font-heading text-3xl font-black tracking-tight text-slate-900 sm:text-4xl text-wrap-balance">
         {title}
       </h2>
-      <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">{desc}</p>
-    </div>
-  )
-}
-
-function Pill({
-  icon: Icon,
-  label,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-}) {
-  return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/90">
-      <Icon className="size-3.5 text-cyan-200" />
-      <span className="font-medium">{label}</span>
+      <p className="max-w-3xl text-lg text-slate-600 leading-relaxed">{desc}</p>
     </div>
   )
 }
@@ -105,773 +84,376 @@ export default async function PenawaranPage({
   const groups = Object.keys(grouped).sort((a, b) => a.localeCompare(b))
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f6fbff] via-background to-[#f7f9ff] print:bg-white">
+    <div className="min-h-screen bg-slate-50 selection:bg-emerald-100 print:bg-white text-slate-900 font-sans">
       {/* Top bar */}
-      <div className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur print:hidden">
+      <nav className="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md print:hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="size-9 rounded-xl bg-gradient-to-br from-cyan-700 to-teal-900 text-white shadow-sm grid place-items-center">
-              <Layers3 className="size-4.5" />
+            <div className="size-9 rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-200 grid place-items-center">
+              <Layers3 className="size-5" aria-hidden="true" />
             </div>
             <div className="leading-tight">
-              <div className="font-heading text-sm font-extrabold tracking-tight">KoperasiApp</div>
-              <div className="text-xs text-muted-foreground">Dokumen penawaran sistem</div>
+              <div className="font-bold text-sm tracking-tight text-slate-900 uppercase">KoperasiApp</div>
+              <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">Official Proposal</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button asChild variant="outline" className="gap-2">
-              <Link href="/login">
-                Masuk
-                <ArrowRight className="size-4" />
-              </Link>
+          <div className="flex items-center gap-3">
+            <Button asChild variant="ghost" size="sm" className="hidden sm:flex font-semibold text-slate-600 hover:text-emerald-600 focus-visible:ring-emerald-500">
+              <Link href="/">Kembali</Link>
             </Button>
+            <div className="h-4 w-px bg-slate-200 hidden sm:block" aria-hidden="true" />
             <PrintButton />
+            <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold focus-visible:ring-emerald-500">
+              <Link href="/login">Coba Demo</Link>
+            </Button>
           </div>
         </div>
-      </div>
+      </nav>
 
-      {/* Hero */}
-      <header className="relative overflow-hidden">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-80"
-          style={{
-            background:
-              "radial-gradient(900px 500px at 20% 10%, rgba(68,216,241,0.35), transparent 60%), radial-gradient(750px 420px at 80% 20%, rgba(244,187,140,0.22), transparent 55%), radial-gradient(700px 520px at 50% 100%, rgba(0,104,118,0.16), transparent 60%)",
-          }}
-        />
-        <div
-          className="pointer-events-none absolute -top-24 left-1/2 h-[520px] w-[920px] -translate-x-1/2 rounded-[64px] border border-slate-200/70 bg-white/40 blur-3xl"
-          aria-hidden="true"
-        />
-        <div className="relative mx-auto max-w-6xl px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-14 print:pt-8">
-          <div className="grid gap-10 lg:grid-cols-12 lg:items-end">
-            <div className="space-y-6 lg:col-span-7">
-              <div className="flex flex-wrap gap-2">
-                <Badge className="bg-slate-900 text-white hover:bg-slate-900">
-                  Penawaran Sistem
+      {/* Proposal Header / Hero */}
+      <header className="relative bg-white pt-16 pb-24 border-b overflow-hidden print:pt-4 print:pb-12">
+        <div className="absolute top-0 right-0 w-1/3 h-full bg-slate-50 -skew-x-12 translate-x-1/2 print:hidden" aria-hidden="true" />
+        
+        <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="grid gap-16 lg:grid-cols-12 lg:items-center">
+            <div className="space-y-8 lg:col-span-8">
+              <div className="space-y-4">
+                <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 px-3 py-1 text-xs font-black uppercase tracking-widest rounded-md">
+                  PROPOSAL SISTEM INFORMASI
                 </Badge>
-                <Badge variant="outline">Koperasi Simpan Pinjam</Badge>
-                <Badge variant="outline">Web Dashboard</Badge>
+                <h1 className="font-heading text-5xl font-black tracking-tight text-slate-950 sm:text-6xl leading-[1.05] text-wrap-balance">
+                  Modernisasi Operasional & <span className="text-emerald-600">Digitalisasi Finansial</span> Koperasi.
+                </h1>
               </div>
 
-              <h1 className="font-heading text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
-                Portal operasional koperasi yang rapi, terukur, dan siap dipakai harian.
-              </h1>
               <RecipientLine to={recipient} />
-              <p className="max-w-2xl text-base text-slate-700 sm:text-lg">
-                KoperasiApp menyatukan alur <strong>nasabah</strong>, <strong>pengajuan</strong>,{" "}
-                <strong>pencairan</strong>, <strong>pembayaran</strong>, <strong>arus kas</strong>,
-                monitoring, dan laporan, dengan dokumen otomatis dan indikator ranking yang bisa dijelaskan.
-                Targetnya sederhana: tim lapangan cepat jalan, tim kantor bisa audit, pimpinan bisa memantau.
+
+              <p className="max-w-2xl text-xl text-slate-600 leading-relaxed italic border-l-2 border-slate-200 pl-6 text-pretty">
+                “Mengubah tumpukan kertas menjadi wawasan digital yang akurat. Kami hadir untuk memastikan setiap transaksi tercatat, setiap risiko terukur, dan setiap laporan siap dipertanggungjawabkan.”
               </p>
 
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild className="h-11 gap-2 bg-[#004250] hover:bg-[#00313b]">
-                  <Link href="/login">
-                    Coba Dashboard
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="h-11 gap-2">
-                  <Link href="#scope">
-                    Lihat Ruang Lingkup
-                    <FileText className="size-4" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="h-11 gap-2">
+              <div className="flex flex-wrap gap-4 pt-4 print:hidden">
+                <Button asChild size="lg" className="h-14 px-8 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-xl shadow-xl shadow-slate-200 focus-visible:ring-slate-400">
                   <Link href="#fitur">
-                    Fitur + Screenshot
-                    <ArrowRight className="size-4" />
+                    Review Spesifikasi Modul
+                    <ArrowRight className="ml-2 size-5" aria-hidden="true" />
                   </Link>
                 </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200/70 bg-white/50 p-4 backdrop-blur">
-                <div className="text-xs font-semibold text-slate-700">Yang kita optimalkan:</div>
-                <Badge variant="secondary" className="bg-cyan-900 text-white hover:bg-cyan-900">
-                  Kecepatan input
-                </Badge>
-                <Badge variant="secondary" className="bg-slate-900 text-white hover:bg-slate-900">
-                  Audit trail
-                </Badge>
-                <Badge variant="secondary" className="bg-amber-600 text-white hover:bg-amber-600">
-                  Dokumen siap print
-                </Badge>
-                <Badge variant="secondary" className="bg-teal-700 text-white hover:bg-teal-700">
-                  Monitoring real-time
-                </Badge>
+                <Button asChild variant="outline" size="lg" className="h-14 px-8 border-slate-200 hover:bg-slate-50 font-bold rounded-xl text-slate-700 focus-visible:ring-slate-400">
+                  <Link href="#pricing">Lihat Skema Harga</Link>
+                </Button>
               </div>
             </div>
 
-            <div className="lg:col-span-5">
-              <div className="rounded-3xl border border-slate-200/70 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-[0_28px_90px_-50px_rgba(2,6,23,0.8)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <Sparkles className="size-4 text-cyan-200" />
-                      Paket Penawaran
-                    </div>
-                    <div className="text-2xl font-black tracking-tight">KoperasiApp Core</div>
-                    <div className="text-xs text-white/70">
-                      Fokus: operasional pinjaman dan kontrol arus kas harian.
-                    </div>
-                  </div>
-                  <Badge className="bg-white/10 text-white hover:bg-white/10">v1</Badge>
+            <div className="lg:col-span-4 print:hidden">
+              <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl shadow-emerald-100 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4">
+                  <Sparkles className="size-6 text-emerald-200 animate-pulse" aria-hidden="true" />
                 </div>
-
-                <div className="mt-5 grid gap-2">
-                  <Pill icon={Upload} label="Upload dokumen pendukung pengajuan" />
-                  <Pill icon={FileText} label="Dokumen bukti pencairan + kartu angsuran" />
-                  <Pill icon={BarChart3} label="Laporan: by user dan by kelompok" />
-                  <Pill icon={Target} label="Ranking A/B/C/D dengan alasan (tooltip)" />
-                </div>
-
-                <Separator className="my-5 bg-white/10" />
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white/70">Metode implementasi</span>
-                    <span className="font-semibold">Bertahap, minim gangguan</span>
+                <div className="space-y-6 relative">
+                  <div className="space-y-2">
+                    <div className="text-xs font-black text-emerald-600 uppercase tracking-widest">Target Utama</div>
+                    <div className="text-3xl font-black tracking-tight text-slate-900">Zero Chaos</div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white/70">Output dokumen</span>
-                    <span className="font-semibold">Siap print / PDF</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white/70">Kontrol akses</span>
-                    <span className="font-semibold">Role-based</span>
+                  <ul className="space-y-4">
+                    {[
+                      { icon: <Zap className="size-4 text-amber-500" aria-hidden="true" />, text: "Input data 3x lebih cepat" },
+                      { icon: <ShieldCheck className="size-4 text-emerald-500" aria-hidden="true" />, text: "Audit trail di tiap klik" },
+                      { icon: <BarChart3 className="size-4 text-blue-500" aria-hidden="true" />, text: "Laporan instan (One-click)" },
+                      { icon: <Target className="size-4 text-red-500" aria-hidden="true" />, text: "Reduksi NPL (Kredit Macet)" }
+                    ].map((item, i) => (
+                      <li key={i} className="flex items-center gap-3 text-sm font-bold text-slate-700">
+                        <div className="size-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:scale-110 transition-transform">
+                          {item.icon}
+                        </div>
+                        {item.text}
+                      </li>
+                    ))}
+                  </ul>
+                  <Separator aria-hidden="true" />
+                  <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                     <div className="text-[10px] font-black text-emerald-700 uppercase mb-1">Status Penawaran</div>
+                     <div className="text-sm font-bold text-emerald-900">Berlaku s/d Akhir Tahun 2024</div>
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-slate-200/70 bg-white/60 p-4 text-sm text-slate-700 backdrop-blur">
-                <span className="font-semibold">Catatan penawaran:</span> halaman ini memang ditulis seperti dokumen.
-                Tombol <span className="font-semibold">Cetak / Simpan PDF</span> akan menghasilkan format rapi untuk dibagikan.
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-14 px-4 pb-16 sm:px-6 print:space-y-10 print:pb-0">
-        {/* Scope */}
-        <section id="scope" className="space-y-6">
-          <SectionTitle
-            eyebrow="Ruang Lingkup"
-            title="Fitur yang dipakai harian, bukan sekadar demo."
-            desc="KoperasiApp dirancang untuk meringkas langkah, memperjelas status, dan mengunci bukti. Setiap modul punya output yang bisa dipertanggungjawabkan."
-          />
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            {[
-              {
-                icon: ClipboardCheck,
-                title: "Pengajuan Pinjaman",
-                points: [
-                  "Form cepat dengan simulasi angsuran",
-                  "Upload dokumen pendukung (PDF/gambar)",
-                  "Catatan pengajuan untuk konteks keputusan",
-                ],
-              },
-              {
-                icon: WalletCards,
-                title: "Pencairan & Pembayaran",
-                points: [
-                  "Pencairan menghasilkan pinjaman + jadwal otomatis",
-                  "Pembayaran terekam dan bisa diaudit",
-                  "Dokumen bukti pencairan dan kartu angsuran siap print",
-                ],
-              },
-              {
-                icon: LineChart,
-                title: "Monitoring & Laporan",
-                points: [
-                  "Tunggakan, telat, outstanding, dan anomali pencatatan",
-                  "Laporan transaksi: by user atau by kelompok",
-                  "Ranking A/B/C/D lengkap dengan alasan",
-                ],
-              },
-            ].map((c) => (
-              <Card key={c.title} className="border-slate-200/70 bg-white/70 backdrop-blur">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <span className="grid size-9 place-items-center rounded-xl bg-muted text-foreground">
-                      <c.icon className="size-4" />
-                    </span>
-                    {c.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {c.points.map((p) => (
-                    <div key={p} className="flex items-start gap-2">
-                      <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                      <span className="text-slate-700">{p}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        {/* Fitur + Screenshot */}
-        <section id="fitur" className="space-y-6">
-          <SectionTitle
-            eyebrow="Fitur Lengkap"
-            title="Modul lengkap sesuai operasional koperasi, ditulis per alur kerja."
-            desc="Di bawah ini adalah breakdown fitur berdasarkan modul yang memang sudah ada di codebase saat ini. Screenshot dipakai sebagai bukti visual sementara."
-          />
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-slate-200/70 bg-white/70 backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">1. Master Data (Nasabah, Kelompok, Kolektor)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <div className="rounded-2xl border bg-white/70 p-4">
-                  <div className="text-xs font-semibold text-slate-600">Menu</div>
-                  <div className="mt-1 font-mono text-xs">/nasabah • /kelompok • /kolektor</div>
-                </div>
-                {[
-                  "Nasabah: tambah/edit profil, relasi ke kelompok dan kolektor, lampiran dokumen (upload).",
-                  "Profil nasabah menampilkan indikator: telat, kurang angsuran, outstanding, anomali pencatatan, dan ranking A/B/C/D beserta alasan.",
-                  "Kelompok: data kelompok, wilayah, dan pengelompokan nasabah untuk reporting.",
-                  "Kolektor: manajemen data kolektor dan tabel role user untuk kontrol akses lapangan vs kantor.",
-                ].map((t) => (
-                  <div key={t} className="flex items-start gap-2">
-                    <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                    <span>{t}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200/70 bg-white/70 backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">2. Workflow Pinjaman (Pengajuan → Approval → Pencairan)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <div className="rounded-2xl border bg-white/70 p-4">
-                  <div className="text-xs font-semibold text-slate-600">Menu</div>
-                  <div className="mt-1 font-mono text-xs">/pengajuan • /pencairan • /dokumen</div>
-                </div>
-                {[
-                  "Pengajuan pinjaman: form cepat + simulasi angsuran, field catatan, dan upload dokumen pendukung (PDF/gambar, max 5MB/file).",
-                  "Approval: setujui/tolak, simpan catatan approval, dan jejak siapa yang approve.",
-                  "Pencairan: membentuk pinjaman + jadwal angsuran otomatis, sekaligus mencatat transaksi kas keluar kategori PENCAIRAN.",
-                  "Dokumen: kartu angsuran/cicilan dan bukti pencairan siap print/PDF setelah pencairan diproses.",
-                ].map((t) => (
-                  <div key={t} className="flex items-start gap-2">
-                    <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                    <span>{t}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200/70 bg-white/70 backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">3. Pembayaran Angsuran (Jatuh Tempo, Denda, Kuitansi)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <div className="rounded-2xl border bg-white/70 p-4">
-                  <div className="text-xs font-semibold text-slate-600">Menu</div>
-                  <div className="mt-1 font-mono text-xs">/pembayaran • /dokumen/kuitansi</div>
-                </div>
-                {[
-                  "Daftar angsuran jatuh tempo yang belum dibayar, lengkap dengan aging dan estimasi denda.",
-                  "Input pembayaran untuk jadwal tertentu, dukung penyesuaian metadata (tanggal/metode/bukti/catatan).",
-                  "Kuitansi pembayaran siap print/PDF untuk arsip dan nasabah.",
-                  "Alur pembatalan pembayaran tersedia untuk koreksi transaksi yang salah input (dengan alasan).",
-                ].map((t) => (
-                  <div key={t} className="flex items-start gap-2">
-                    <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                    <span>{t}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200/70 bg-white/70 backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">4. Arus Kas (Kas Masuk/Keluar + Manajemen Kategori)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <div className="rounded-2xl border bg-white/70 p-4">
-                  <div className="text-xs font-semibold text-slate-600">Menu</div>
-                  <div className="mt-1 font-mono text-xs">/kas</div>
-                </div>
-                {[
-                  "Input kas masuk/keluar harian dengan histori transaksi dan ringkasan saldo.",
-                  "Kategori pembukuan dikelola lewat tab Add Category (master data) agar konsisten.",
-                  "Aturan penting: kategori MASUK dan KELUAR tidak boleh sama (dikunci di sisi server).",
-                  "Transaksi pencairan otomatis tercatat sebagai kas keluar kategori PENCAIRAN.",
-                ].map((t) => (
-                  <div key={t} className="flex items-start gap-2">
-                    <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                    <span>{t}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="border-slate-200/70 bg-white/70 backdrop-blur lg:col-span-1">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">5. Monitoring</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-slate-700">
-                <div className="rounded-2xl border bg-white/70 p-4">
-                  <div className="text-xs font-semibold text-slate-600">Menu</div>
-                  <div className="mt-1 font-mono text-xs">/monitoring/tunggakan • /monitoring/kolektor</div>
-                </div>
-                {[
-                  "Aging report tunggakan (1-7, 8-30, 31-60, >60/NPL).",
-                  "Filter: tanggal, kolektor, kelompok, wilayah.",
-                  "Ringkasan NPL ratio untuk kontrol kualitas portofolio.",
-                ].map((t) => (
-                  <div key={t} className="flex items-start gap-2">
-                    <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                    <span>{t}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200/70 bg-white/70 backdrop-blur lg:col-span-2">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">6. Laporan</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <div className="rounded-2xl border bg-white/70 p-4">
-                  <div className="text-xs font-semibold text-slate-600">Menu</div>
-                  <div className="mt-1 font-mono text-xs">
-                    /laporan/transaksi-per-user • /laporan/laba-rugi • /laporan/history-pembayaran • /laporan/per-kelompok • /laporan/arus-kas
-                  </div>
-                </div>
-                {[
-                  "Laporan Transaksi User: view by user atau by kelompok, lengkap ranking + tooltip alasan ranking.",
-                  "Laporan Laba Rugi: ringkasan pendapatan/beban per kategori kas.",
-                  "History pembayaran dan laporan per kelompok untuk kebutuhan evaluasi operasional.",
-                  "Template laporan arus kas (bisa dihubungkan ke data transaksi untuk periode lebih panjang).",
-                ].map((t) => (
-                  <div key={t} className="flex items-start gap-2">
-                    <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                    <span>{t}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="border-slate-200/70 bg-gradient-to-br from-white to-[#f2fbff]">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">7. Governance (Role, Audit, Konfigurasi Ranking)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-slate-700">
-              <div className="rounded-2xl border bg-white/70 p-4">
-                <div className="text-xs font-semibold text-slate-600">Menu</div>
-                <div className="mt-1 font-mono text-xs">/settings</div>
+      <main className="mx-auto max-w-6xl space-y-24 px-4 py-24 sm:px-6 print:space-y-12 print:py-12">
+        {/* The Problem SECTION */}
+        <section className="grid lg:grid-cols-2 gap-16 items-center">
+           <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 text-rose-600 text-xs font-black uppercase tracking-widest">
+                <AlertCircle className="size-4" aria-hidden="true" /> Tantangan Operasional
               </div>
-              {[
-                "Role-based access: ADMIN/TELLER/MANAGER/PIMPINAN/KOLEKTOR/SURVEYOR/AKUNTANSI sesuai kebutuhan.",
-                "Audit & approval log (fondasi) untuk jejak aksi penting: approval pengajuan, pencairan, pembayaran, kas.",
-                "Konfigurasi threshold ranking A/B/C/D dapat diubah di Settings, dan setiap badge ranking memiliki alasan yang transparan (tooltip).",
-              ].map((t) => (
-                <div key={t} className="flex items-start gap-2">
-                  <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                  <span>{t}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {shots.length === 0 ? (
-            <Card className="border-slate-200/70 bg-white/70 backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Screenshot belum tersedia</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <p>
-                  Saya belum menemukan gambar di{" "}
-                  <span className="font-mono">dashboard/public/snitch/project</span>.
-                </p>
-                <div className="rounded-2xl border bg-white/70 p-4 text-xs">
-                  <div className="font-semibold">Struktur yang didukung</div>
-                  <div className="mt-2 font-mono">
-                    public/snitch/project/dashboard.png
-                    <br />
-                    public/snitch/project/pengajuan/form.png
-                    <br />
-                    public/snitch/project/kas/input.webp
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-10">
-              {groups.map((g) => (
-                <section key={g} className="space-y-4">
-                  <div className="flex items-end justify-between gap-3">
-                    <div className="space-y-1">
-                      <h3 className="font-heading text-2xl font-black tracking-tight">{labelForGroup(g)}</h3>
-                      <p className="text-xs text-muted-foreground">{grouped[g].length} layar</p>
-                    </div>
-                    <Badge variant="outline" className="hidden sm:inline-flex">Module</Badge>
-                  </div>
-                  <Separator />
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {grouped[g].map((s) => (
-                      <Card key={s.url} className="overflow-hidden border-slate-200/70 bg-white/70 backdrop-blur">
-                          <CardContent className="p-0">
-                            <a href={s.url} target="_blank" rel="noreferrer" className="block">
-                              <Image
-                                src={s.url}
-                                alt={s.name}
-                                width={1280}
-                                height={800}
-                                className="aspect-[16/10] w-full object-cover"
-                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                              />
-                            </a>
-                            <div className="border-t p-3">
-                              <div className="text-sm font-semibold truncate">{s.name}</div>
-                              <div className="text-xs text-muted-foreground truncate">{s.url}</div>
-                            </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Why not generic */}
-        <section className="space-y-6">
-          <SectionTitle
-            eyebrow="Yang Dibedakan"
-            title="Desain keputusan: cepat di input, jelas di audit."
-            desc="Landing page ini bukan brosur kosongan. Di bawah ini adalah detail yang biasanya bikin sistem koperasi gagal dipakai, lalu kita benahi dari akar."
-          />
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="border-slate-200/70 bg-gradient-to-br from-white to-[#f2fbff]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Dokumen bukan pelengkap</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <p>
-                  Saat pencairan disetujui, sistem menutup “ruang abu-abu” dengan output dokumen:
-                  <strong> bukti pencairan</strong> (untuk arsip dan nasabah) dan{" "}
-                  <strong>kartu angsuran</strong> (untuk kontrol pembayaran). Ini mengurangi “transaksi lisan”
-                  dan mempercepat pembuktian saat ada selisih.
-                </p>
-                <div className="rounded-xl border bg-white/70 p-3">
-                  <div className="text-xs font-semibold text-slate-600">Hasil yang diharapkan:</div>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <Badge className="justify-center bg-slate-900 text-white hover:bg-slate-900">Arsip rapi</Badge>
-                    <Badge className="justify-center bg-amber-600 text-white hover:bg-amber-600">Print siap</Badge>
-                    <Badge className="justify-center bg-teal-700 text-white hover:bg-teal-700">Minim dispute</Badge>
-                    <Badge className="justify-center bg-cyan-900 text-white hover:bg-cyan-900">Audit cepat</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200/70 bg-gradient-to-br from-white to-[#fff7f0]">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Kategori kas yang disiplin</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                <p>
-                  Arus kas sering rusak bukan karena angka, tapi karena{" "}
-                  <strong>kategori yang tidak konsisten</strong>. Di sini, kategori masuk dan keluar{" "}
-                  <strong>tidak boleh sama</strong> dan dikelola lewat tab <strong>Add Category</strong>.
-                  Akibatnya, laporan lebih stabil dan perbandingan bulan-ke-bulan lebih “bersih”.
-                </p>
-                <div className="rounded-xl border bg-white/70 p-3">
-                  <div className="text-xs font-semibold text-slate-600">Contoh yang kita cegah:</div>
-                  <p className="mt-1 text-xs text-slate-600">
-                    “OPERASIONAL” dipakai untuk pemasukan dan pengeluaran sekaligus, lalu laporan jadi tidak jelas.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        {/* Security / control */}
-        <section className="space-y-6">
-          <SectionTitle
-            eyebrow="Kontrol & Keamanan"
-            title="Akses berbasis peran + jejak audit."
-            desc="Bukan soal jargon. Tujuannya supaya perubahan status, input transaksi, dan keputusan punya penanggung jawab."
-          />
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            {[
-              {
-                icon: LockKeyhole,
-                title: "Role-based access",
-                desc: "Hak akses dipisahkan: admin, teller, manager/pimpinan, kolektor, dan lainnya.",
-              },
-              {
-                icon: Fingerprint,
-                title: "Audit log",
-                desc: "Setiap aksi penting dapat dicatat: create/update/delete, approval, pencairan, kas.",
-              },
-              {
-                icon: FileText,
-                title: "Bukti & dokumen",
-                desc: "Upload dokumen pendukung pengajuan dan dokumen hasil pencairan untuk arsip.",
-              },
-            ].map((i) => (
-              <Card key={i.title} className="border-slate-200/70 bg-white/70">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <span className="grid size-9 place-items-center rounded-xl bg-muted">
-                      <i.icon className="size-4" />
-                    </span>
-                    {i.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-slate-700">{i.desc}</CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        {/* Delivery */}
-        <section className="space-y-6">
-          <SectionTitle
-            eyebrow="Metode Deliver"
-            title="Bukan build lalu ditinggal: kita rancang supaya dipakai."
-            desc="Penawaran ini diasumsikan untuk kebutuhan operasional. Fokusnya mengurangi langkah, memperjelas status, dan membuat output yang bisa dibawa ke rapat."
-          />
-
-          <div className="grid gap-4 lg:grid-cols-12">
-            <Card className="border-slate-200/70 bg-white/70 lg:col-span-7">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Tahapan implementasi yang realistis</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-slate-700">
-                {[
-                  {
-                    step: "1",
-                    title: "Mapping proses & data",
-                    desc: "Konfirmasi alur: pengajuan, survey, approval, pencairan, pembayaran, kas, laporan.",
-                  },
-                  {
-                    step: "2",
-                    title: "Konfigurasi akses per role",
-                    desc: "Definisikan siapa bisa approval, siapa input kas, dan standar bukti dokumen.",
-                  },
-                  {
-                    step: "3",
-                    title: "Onboarding pemakaian",
-                    desc: "Training singkat: input yang benar, cara baca ranking, dan cara tarik dokumen.",
-                  },
-                ].map((t) => (
-                  <div key={t.step} className="flex gap-3 rounded-2xl border bg-white/70 p-3">
-                    <div className="grid size-8 place-items-center rounded-xl bg-slate-900 text-white text-xs font-black">
-                      {t.step}
-                    </div>
-                    <div>
-                      <div className="font-semibold">{t.title}</div>
-                      <div className="text-xs text-muted-foreground">{t.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200/70 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white lg:col-span-5">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Sparkles className="size-4 text-cyan-200" />
-                  Stack & Teknologi
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-white/85">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">Frontend</span>
-                  <span className="font-semibold">Next.js (App Router) + React</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">UI</span>
-                  <span className="font-semibold">Tailwind + shadcn</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">Backend</span>
-                  <span className="font-semibold">Server Actions</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">Database</span>
-                  <span className="font-semibold">PostgreSQL + Prisma</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">Auth</span>
-                  <span className="font-semibold">NextAuth</span>
-                </div>
-                <Separator className="my-3 bg-white/10" />
-                <p className="text-xs text-white/70">
-                  Catatan: pilihan stack ini membuat perubahan alur bisnis cepat diimplementasi,
-                  namun tetap terstruktur karena skema data terdefinisi dan migrasi terkontrol.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        {/* Pricing */}
-        <section id="pricing" className="space-y-6">
-          <SectionTitle
-            eyebrow="Pricing Plan"
-            title="Harga yang bisa dipertanggungjawabkan, bukan angka asal."
-            desc="Kisaran di bawah mengikuti pola pasar jasa pembuatan aplikasi web di Indonesia: sederhana puluhan juta, menengah hingga ratusan juta, enterprise di atas itu. Finalnya ditentukan oleh scope, integrasi, dan SLA."
-          />
-
-          <div className="grid gap-4 lg:grid-cols-4">
-            {[
-              {
-                name: "Basic",
-                price: "Rp 75–120 juta",
-                sub: "Untuk koperasi kecil yang butuh operasional inti cepat jalan.",
-                tags: ["Core modules", "Dokumen print", "1 lingkungan (prod)"],
-                bullets: [
-                  "Nasabah, pengajuan, pencairan, pembayaran, arus kas",
-                  "Dokumen: bukti pencairan + kartu angsuran",
-                  "Laporan dasar + ranking tooltip",
-                  "Training 1 sesi + handover",
-                ],
-              },
-              {
-                name: "Premium",
-                price: "Rp 150–250 juta",
-                sub: "Untuk tim yang butuh kontrol lebih ketat + laporan lebih kaya.",
-                tags: ["Workflow", "Audit & role", "Hardening"],
-                bullets: [
-                  "Semua Basic + penyesuaian SOP (approval, kategori, dokumen)",
-                  "Audit trail lebih lengkap + aturan data lebih ketat",
-                  "Laporan by user/by kelompok + monitoring tunggakan",
-                  "UAT terstruktur + perbaikan pasca UAT",
-                ],
-              },
-              {
-                name: "Enterprise",
-                price: "Mulai Rp 300 juta",
-                sub: "Untuk kebutuhan multi-cabang, integrasi, dan SLA.",
-                tags: ["Integrasi", "SLA", "Observability"],
-                bullets: [
-                  "Integrasi (API/legacy), SSO/role kompleks (opsional)",
-                  "Audit & approval multi-level (opsional)",
-                  "Monitoring + dashboard KPI pimpinan",
-                  "SLA support + incident response",
-                ],
-              },
-              {
-                name: "Custom",
-                price: "Sesuai scope",
-                sub: "Jika Anda ingin roadmap bertahap seperti product development.",
-                tags: ["Sprint", "Backlog", "Retainer"],
-                bullets: [
-                  "Pengerjaan sprint dengan backlog prioritas",
-                  "Estimasi per fitur + change request jelas",
-                  "Retainer maintenance bulanan (opsional)",
-                  "Continuous improvement + analitik penggunaan",
-                ],
-              },
-            ].map((p) => (
-              <Card key={p.name} className="border-slate-200/70 bg-white/70 backdrop-blur">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-base">
-                    <span>{p.name}</span>
-                    <Badge variant="outline">Plan</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="space-y-1">
-                    <div className="text-xl font-black tracking-tight text-slate-950">{p.price}</div>
-                    <div className="text-xs text-muted-foreground">{p.sub}</div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {p.tags.map((t) => (
-                      <Badge key={t} className="bg-muted text-foreground hover:bg-muted">{t}</Badge>
-                    ))}
-                  </div>
-                  <Separator />
-                  <div className="space-y-2 text-xs text-slate-700">
-                    {p.bullets.map((b) => (
-                      <div key={b} className="flex items-start gap-2">
-                        <BadgeCheck className="mt-0.5 size-4 text-emerald-600" />
-                        <span>{b}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <Card className="border-slate-200/70 bg-gradient-to-br from-white to-[#f2fbff]">
-            <CardContent className="p-5 text-sm text-slate-700">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1">
-                  <div className="font-semibold">Maintenance (opsional)</div>
-                  <div className="text-xs text-muted-foreground">
-                    Umumnya 10–20% dari biaya awal per tahun, atau retainer bulanan (support + bugfix + minor improvement).
-                  </div>
-                </div>
-                <div className="rounded-2xl border bg-white/70 px-4 py-3 text-xs">
-                  <div className="font-semibold">Contoh retainer</div>
-                  <div className="mt-1">Rp 3–10 juta/bulan (jam support + SLA dasar)</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* CTA */}
-        <section className="rounded-3xl border border-slate-200/70 bg-white/70 p-6 backdrop-blur print:border-slate-300 print:bg-white">
-          <div className="grid gap-6 lg:grid-cols-12 lg:items-center">
-            <div className="space-y-2 lg:col-span-8">
-              <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-xs font-semibold">
-                <Sparkles className="size-3.5 text-cyan-600" />
-                Next step
-              </div>
-              <h3 className="font-heading text-2xl font-black tracking-tight">
-                Mau versi yang sesuai SOP koperasi Anda?
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Kita bisa kunci nama kategori, format dokumen, rule ranking, dan alur approval sesuai SOP koperasi.
+              <h2 className="text-4xl font-black tracking-tight leading-tight text-wrap-balance">Masalah Klasik yang Menghambat Pertumbuhan Koperasi.</h2>
+              <p className="text-lg text-slate-600 leading-relaxed">
+                Tanpa sistem yang terintegrasi, tim Anda akan terus terjebak dalam siklus yang tidak efisien:
               </p>
+              <div className="space-y-4">
+                 {[
+                   "Data nasabah tersebar di berbagai buku/excel (berisiko hilang/double).",
+                   "Proses approval pinjaman yang lambat karena dokumen fisik harus berpindah tangan.",
+                   "Kesulitan memantau NPL (Kredit Macet) secara real-time per wilayah.",
+                   "Pembuatan laporan bulanan yang memakan waktu berhari-hari."
+                 ].map((text, i) => (
+                   <div key={i} className="flex gap-4 p-4 rounded-xl border border-slate-100 bg-white shadow-sm">
+                      <div className="font-bold text-slate-400 text-lg" aria-hidden="true">0{i+1}</div>
+                      <div className="text-sm font-medium text-slate-700 leading-relaxed">{text}</div>
+                   </div>
+                 ))}
+              </div>
+           </div>
+           <div className="bg-slate-900 rounded-[2rem] p-10 text-white space-y-8 relative overflow-hidden shadow-2xl">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500" aria-hidden="true" />
+              <div className="space-y-2">
+                <div className="text-emerald-500 text-xs font-black uppercase">Solusi Kami</div>
+                <h3 className="text-3xl font-bold tracking-tight italic">“Satu Kebenaran Data.”</h3>
+              </div>
+              <p className="text-slate-400 leading-relaxed text-pretty">
+                KoperasiApp menggabungkan semua titik data ke dalam satu dashboard tunggal. Tidak ada lagi duplikasi, tidak ada lagi perdebatan data.
+              </p>
+              <div className="grid grid-cols-2 gap-6">
+                 <div className="space-y-1">
+                    <div className="text-3xl font-black text-emerald-500">100%</div>
+                    <div className="text-xs text-slate-400 uppercase font-bold">Paperless Ready</div>
+                 </div>
+                 <div className="space-y-1">
+                    <div className="text-3xl font-black text-emerald-500">Real-time</div>
+                    <div className="text-xs text-slate-400 uppercase font-bold">Reporting Speed</div>
+                 </div>
+              </div>
+           </div>
+        </section>
+
+        {/* Fitur + Screenshot SECTION */}
+        <section id="fitur" className="space-y-12">
+          <SectionTitle
+            eyebrow="Eksplorasi Modul"
+            title="Fitur yang Dirancang Khusus untuk Koperasi."
+            desc="Setiap baris kode ditulis untuk mempercepat langkah kerja Anda. Di bawah ini adalah ringkasan modul utama yang akan Anda dapatkan."
+          />
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {[
+              {
+                title: "1. Manajemen Master Data & Nasabah",
+                icon: <Users className="size-5" aria-hidden="true" />,
+                menus: "/nasabah • /kelompok • /kolektor",
+                items: [
+                  "Profil Nasabah 360°: Riwayat pinjaman, tunggakan, and dokumen.",
+                  "Validasi NPL: Deteksi risiko sejak dini berdasarkan histori.",
+                  "Group Management: Kelola nasabah berbasis wilayah/kelompok.",
+                  "Role-based Access: Batasi akses data sesuai jabatan petugas."
+                ]
+              },
+              {
+                title: "2. Workflow Pinjaman & Pencairan",
+                icon: <WalletCards className="size-5" aria-hidden="true" />,
+                menus: "/pengajuan • /pencairan • /dokumen",
+                items: [
+                  "Digital Application: Form pengajuan cepat + upload jaminan.",
+                  "Auto-Schedule: Jadwal angsuran terbuat otomatis saat pencairan.",
+                  "Print-Ready: Cetak Bukti Pencairan & Kartu Angsuran dalam detik.",
+                  "Approval Log: Jejak audit siapa yang menyetujui setiap plafon."
+                ]
+              },
+              {
+                title: "3. Penerimaan Angsuran & Kas",
+                icon: <BarChart3 className="size-5" aria-hidden="true" />,
+                menus: "/pembayaran • /kas",
+                items: [
+                  "Smart Search: Cari tagihan via Nama, NIK, atau No. Kontrak.",
+                  "Payment Proof: Upload bukti transfer atau input tunai harian.",
+                  "Double Entry Logic: Kas masuk/keluar terkunci per kategori.",
+                  "Digital Receipt: Generate kuitansi resmi untuk setiap transaksi."
+                ]
+              },
+              {
+                title: "4. Monitoring & Pelaporan Keuangan",
+                icon: <LineChart className="size-5" aria-hidden="true" />,
+                menus: "/monitoring • /laporan",
+                items: [
+                  "Aging Report: Pantau tunggakan 1–7, 8–30, s/d NPL > 60 hari.",
+                  "Ranking Risiko: Klasifikasi nasabah A/B/C/D secara otomatis.",
+                  "Financial Reports: Laba Rugi, Neraca, and Buku Besar Kas.",
+                  "Collector Performance: Pantau efektivitas penagihan per petugas."
+                ]
+              }
+            ].map((modul, i) => (
+              <Card key={i} className="border-slate-200 bg-white hover:border-emerald-200 transition-colors group shadow-sm">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-emerald-600 transition-colors border border-slate-100 shadow-inner" aria-hidden="true">
+                      {modul.icon}
+                    </div>
+                    <CardTitle className="text-lg font-bold">{modul.title}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                   <div className="bg-slate-50 px-3 py-2 rounded-lg font-mono text-[10px] text-slate-500 uppercase tracking-tighter border border-slate-100">
+                     Sitemap: {modul.menus}
+                   </div>
+                   <ul className="space-y-3">
+                     {modul.items.map((item, j) => (
+                       <li key={j} className="flex gap-3 text-sm text-slate-600 leading-relaxed">
+                         <CheckCircle2 className="size-4 text-emerald-500 shrink-0 mt-0.5" aria-hidden="true" />
+                         {item}
+                       </li>
+                     ))}
+                   </ul>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="space-y-12 pt-12">
+            <div className="text-center space-y-2">
+               <h3 className="text-2xl font-black tracking-tight">Antarmuka Sistem (Visual Proof)</h3>
+               <p className="text-slate-500">Cuplikan layar nyata dari KoperasiApp Dashboard</p>
             </div>
-            <div className="flex flex-col gap-3 lg:col-span-4">
-              <Button asChild className="h-11 gap-2 bg-[#004250] hover:bg-[#00313b]">
-                <Link href="/login">
-                  Masuk dan mulai
-                  <ArrowRight className="size-4" />
-                </Link>
+            
+            {groups.length === 0 ? (
+              <div className="p-12 text-center border-2 border-dashed rounded-3xl text-slate-400">
+                Gambar dashboard sedang di-generate…
+              </div>
+            ) : (
+              <div className="grid gap-12 sm:grid-cols-2">
+                {shots.map((s, i) => (
+                  <div key={i} className="group space-y-3">
+                    <div className="relative aspect-[16/10] rounded-2xl border border-slate-200 overflow-hidden shadow-sm group-hover:shadow-xl group-hover:border-emerald-200 transition-all duration-500">
+                      <Image
+                        src={s.url}
+                        alt={`Screenshot of ${s.name.split('.')[0].replace(/-/g, ' ')} module`}
+                        fill
+                        className="object-cover transition-transform duration-700 group-hover:scale-105"
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+                    </div>
+                    <div className="flex items-center justify-between px-2">
+                      <div className="font-bold text-sm tracking-tight text-slate-800 uppercase">{s.name.split('.')[0].replace(/-/g, ' ')}</div>
+                      <Badge variant="outline" className="text-[10px] uppercase font-black">{labelForGroup(s.group)}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Pricing SECTION */}
+        <section id="pricing" className="space-y-12">
+          <SectionTitle
+            eyebrow="Investasi Sistem"
+            title="Skema Harga yang Transparan & Kompetitif."
+            desc="Pilih paket yang paling sesuai dengan kapasitas anggota dan kebutuhan fitur koperasi Anda saat ini."
+          />
+
+          <div className="grid gap-8 lg:grid-cols-3">
+            {[
+              {
+                name: "CORE",
+                price: "Rp 75 Juta",
+                desc: "Solusi esensial untuk koperasi yang ingin mulai digitalisasi.",
+                features: ["Master Data (500 Anggota)", "Workflow Pinjaman Dasar", "Laporan Kas Harian", "Handover & Training 1x"],
+                color: "slate"
+              },
+              {
+                name: "PRO",
+                popular: true,
+                price: "Rp 150 Juta",
+                desc: "Paket lengkap untuk kontrol operasional yang lebih ketat.",
+                features: ["Unlimited Anggota", "Full Accounting Mode", "Monitoring NPL & Aging", "Support Priority 3 Bulan"],
+                color: "emerald"
+              },
+              {
+                name: "ENTERPRISE",
+                price: "Mulai Rp 250 Juta",
+                desc: "Kustomisasi penuh untuk skala besar atau multi-cabang.",
+                features: ["Multi-Branch System", "Custom Document Workflow", "Integration API Support", "On-site Implementation"],
+                color: "slate"
+              }
+            ].map((p, i) => (
+              <div key={i} className={`relative p-8 rounded-3xl border ${p.popular ? 'border-emerald-600 bg-white shadow-2xl shadow-emerald-100' : 'border-slate-200 bg-slate-50/50'} flex flex-col h-full`}>
+                {p.popular && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg">
+                    Paling Banyak Dipilih
+                  </div>
+                )}
+                <div className="mb-8">
+                  <div className={`text-xs font-black mb-2 ${p.popular ? 'text-emerald-600' : 'text-slate-400'} uppercase tracking-widest`}>{p.name}</div>
+                  <div className="text-4xl font-black text-slate-950 mb-4 tracking-tighter">{p.price}</div>
+                  <p className="text-sm text-slate-500 leading-relaxed font-medium">{p.desc}</p>
+                </div>
+                <Separator className="mb-8" aria-hidden="true" />
+                <ul className="space-y-4 mb-10 flex-grow">
+                   {p.features.map((f, j) => (
+                     <li key={j} className="flex gap-3 text-sm font-semibold text-slate-700">
+                       <CheckCircle2 className={`size-4 ${p.popular ? 'text-emerald-600' : 'text-slate-400'} shrink-0`} aria-hidden="true" />
+                       {f}
+                     </li>
+                   ))}
+                </ul>
+                <Button className={`w-full h-12 font-bold rounded-xl focus-visible:ring-emerald-500 ${p.popular ? 'bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-200' : 'bg-slate-950 hover:bg-slate-900'}`}>
+                  Pilih Paket {p.name}
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <div className="p-8 rounded-3xl border border-emerald-100 bg-emerald-50/50 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+             <div className="space-y-1">
+                <div className="font-bold text-emerald-900 italic">“Butuh Penyesuaian Khusus?”</div>
+                <p className="text-sm text-emerald-700 font-medium">Kami siap mendiskusikan kustomisasi fitur yang sesuai dengan SOP unik koperasi Anda.</p>
+             </div>
+             <Button variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-bold whitespace-nowrap h-12 px-8 rounded-xl focus-visible:ring-emerald-500">
+                Jadwalkan Konsultasi
+             </Button>
+          </div>
+        </section>
+
+        {/* Closing / Final CTA */}
+        <section className="bg-slate-950 rounded-[3rem] p-12 lg:p-20 text-center space-y-10 relative overflow-hidden shadow-2xl shadow-slate-200">
+           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full bg-emerald-600/10 blur-[120px]" aria-hidden="true" />
+           <div className="relative space-y-6 max-w-3xl mx-auto">
+              <h2 className="text-4xl lg:text-5xl font-black text-white tracking-tight leading-[1.1] text-wrap-balance">Siap Bertransformasi Menjadi Koperasi Digital?</h2>
+              <p className="text-slate-400 text-lg leading-relaxed text-pretty">
+                Ribuan data sudah kami kelola, ratusan jam operasional sudah kami pangkas. Sekarang giliran Anda memberikan pelayanan terbaik untuk anggota.
+              </p>
+           </div>
+           <div className="relative flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+              <Button asChild size="lg" className="h-14 px-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg rounded-2xl shadow-2xl shadow-emerald-500/20 focus-visible:ring-emerald-500">
+                <Link href="/login">Mulai Demo Sekarang</Link>
               </Button>
               <div className="print:hidden">
-                <PrintButton />
+                <PrintButton variant="outline" size="lg" className="h-14 px-10 border-white/20 text-white hover:bg-white/5 font-bold rounded-2xl focus-visible:ring-white/40" />
               </div>
-            </div>
-          </div>
+           </div>
+           <p className="relative text-xs text-slate-500 font-bold uppercase tracking-widest pt-4">
+              © 2024 KoperasiApp • Enterprise Grade Software
+           </p>
         </section>
-
-        <footer className="pb-10 text-xs text-muted-foreground print:pb-0">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>Dokumen penawaran KoperasiApp.</div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex size-1.5 rounded-full bg-cyan-500" />
-              Fokus: operasional, audit, dan dokumen.
-            </div>
-          </div>
-        </footer>
       </main>
+
+      <footer className="py-12 border-t bg-white print:hidden">
+        <div className="mx-auto max-w-6xl px-4 flex flex-col md:flex-row justify-between items-center gap-6">
+           <div className="flex items-center gap-2">
+              <div className="size-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold shadow-sm" aria-hidden="true">K</div>
+              <span className="font-black text-slate-900 tracking-tight">KoperasiApp Official</span>
+           </div>
+           <div className="flex gap-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <span>Security Audited</span>
+              <span>•</span>
+              <span>SLA Guaranteed</span>
+              <span>•</span>
+              <span>24/7 Support</span>
+           </div>
+        </div>
+      </footer>
     </div>
   )
 }

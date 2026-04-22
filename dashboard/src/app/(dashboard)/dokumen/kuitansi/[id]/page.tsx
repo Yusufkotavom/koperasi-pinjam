@@ -7,6 +7,7 @@ import Link from "next/link"
 import { PrintButton } from "@/components/print-button"
 import { ArrowLeft } from "lucide-react"
 import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { formatPembayaranModeLabel, parsePembayaranCatatan } from "@/lib/pembayaran-notes"
 
 export const metadata = {
   title: "Kuitansi Pembayaran",
@@ -27,6 +28,8 @@ export default async function KuitansiPage({ params }: { params: Promise<{ id: s
   const { pinjaman } = pembayaran
   const { pengajuan } = pinjaman
   const { nasabah, kelompok } = pengajuan
+  const parsedCatatan = parsePembayaranCatatan(pembayaran.catatan)
+  const modeLabel = formatPembayaranModeLabel(parsedCatatan.mode)
 
   return (
     <div className="p-6 md:p-12 space-y-6 max-w-4xl mx-auto bg-white min-h-screen text-slate-900">
@@ -60,9 +63,12 @@ export default async function KuitansiPage({ params }: { params: Promise<{ id: s
             <div>
               <p className="text-slate-500 font-medium mb-1">Total Pembayaran:</p>
               <p className="text-2xl font-bold text-slate-900">{fmt(Number(pembayaran.totalBayar))}</p>
-              <div className="mt-2 text-slate-700 italic bg-slate-50 p-2 rounded border border-slate-200">
-                Catatan: {pembayaran.catatan || "-"}
-              </div>
+              {(parsedCatatan.userNote || modeLabel) && (
+                <div className="mt-2 text-slate-700 italic bg-slate-50 p-2 rounded border border-slate-200">
+                  {modeLabel ? <p>Mode: {modeLabel}</p> : null}
+                  {parsedCatatan.userNote ? <p>Catatan: {parsedCatatan.userNote}</p> : null}
+                </div>
+              )}
             </div>
           </div>
           

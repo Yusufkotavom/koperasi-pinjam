@@ -122,7 +122,7 @@ export function AppSidebar({ user, company, accountingMode, ...props }: AppSideb
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<AppLink href="/" />}>
+            <SidebarMenuButton size="lg" render={<AppLink href="/dashboard" />}>
               {company?.logoDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

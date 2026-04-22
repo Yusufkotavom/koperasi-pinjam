@@ -10,6 +10,7 @@ import { requireRoles } from "@/lib/roles"
 import { writeApprovalLog, writeAuditLog } from "@/lib/audit"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
+import { ensureAccountingAccounts, getCashBalanceByJenis, postPencairanJournal } from "@/lib/accounting"
 
 // ========================
 // PENGAJUAN
@@ -198,7 +199,7 @@ export async function cairkanPinjaman(input: unknown) {
   const parsed = pencairanSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { pengajuanId, potonganAdmin, potonganProvisi, tanggalCair } = parsed.data
+  const { pengajuanId, potonganAdmin, potonganProvisi, tanggalCair, kasJenis } = parsed.data
 
   const pengajuan = await prisma.pengajuan.findUnique({
     where: { id: pengajuanId, status: "DISETUJUI" },
@@ -218,6 +219,14 @@ export async function cairkanPinjaman(input: unknown) {
   const tglCair = new Date(tanggalCair)
   const tglJatuhTempo = tenorType === "MINGGUAN" ? addWeeks(tglCair, tenor) : addMonths(tglCair, tenor)
   const nomorKontrak = `KNT-${Date.now().toString(36).toUpperCase()}`
+
+  await ensureAccountingAccounts()
+  const saldoKas = await getCashBalanceByJenis(kasJenis, tglCair)
+  if (saldoKas < nilaiCair) {
+    return {
+      error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}. Setor modal/simpanan dulu sebelum pencairan.`,
+    }
+  }
 
   // Pastikan kategori kas tersedia sebelum transaksi
   const ensured = await ensureKasKategori({ jenis: "KELUAR", kategori: "PENCAIRAN" })
@@ -274,10 +283,23 @@ export async function cairkanPinjaman(input: unknown) {
         kategori: ensured.key,
         deskripsi: `Pencairan pinjaman ${nomorKontrak}`,
         jumlah: new Prisma.Decimal(nilaiCair),
-        kasJenis: "TUNAI",
+        kasJenis,
         inputOlehId: userId,
         tanggal: tglCair,
+        referensiId: pin.id,
       },
+    })
+
+    await postPencairanJournal(tx, {
+      pinjamanId: pin.id,
+      tanggalCair: tglCair,
+      kasJenis,
+      pokokPinjaman: plafon,
+      nilaiCair,
+      potonganAdmin,
+      potonganProvisi,
+      description: `Pencairan pinjaman ${nomorKontrak}`,
+      postedById: userId,
     })
 
     return pin
@@ -285,6 +307,10 @@ export async function cairkanPinjaman(input: unknown) {
 
   revalidatePath("/pengajuan")
   revalidatePath("/pencairan")
+  revalidatePath("/kas")
+  revalidatePath("/laporan/buku-besar")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/laba-rugi")
   await writeAuditLog({
     actorId: userId,
     entityType: "PINJAMAN",

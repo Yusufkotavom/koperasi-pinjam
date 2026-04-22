@@ -8,6 +8,7 @@ import { getAccountingMode, getCompanyInfo, getRankingConfig } from "@/actions/s
 import { RankingSettingsForm } from "./ranking-settings-form"
 import { CompanySettingsForm } from "./company-settings-form"
 import { AccountingModeCard } from "./accounting-mode-card"
+import { DbMaintenanceCard } from "./db-maintenance-card"
 
 const roleLabels: Record<string, { label: string; color: string }> = {
   ADMIN: { label: "Admin", color: "bg-purple-100 text-purple-700" },
@@ -106,6 +107,7 @@ export default async function SettingsPage() {
 
       <RankingSettingsForm initial={rankingConfig} />
       <AccountingModeCard initialMode={accountingMode} canEdit={canEditAccountingMode} />
+      <DbMaintenanceCard canEdit={canEditAccountingMode} />
       <CompanySettingsForm initial={companyInfo} />
     </div>
   )

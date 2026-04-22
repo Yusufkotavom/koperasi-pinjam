@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useTransition, addTransitionType } from "react"
+import { useState, useSyncExternalStore, useTransition, addTransitionType } from "react"
+import Link from "next/link"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -24,13 +25,17 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>
 
+const subscribeNoop = () => () => {}
+const getDemoTextSnapshot = () => "admin@koperasi.id / admin123"
+const getEmptySnapshot = () => ""
+
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const demoText = useSyncExternalStore(subscribeNoop, getDemoTextSnapshot, getEmptySnapshot)
   const [, startTransition] = useTransition()
-  const demoText = "admin@koperasi.id / admin123"
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -50,7 +55,7 @@ export default function LoginPage() {
     } else {
       startTransition(() => {
         addTransitionType("nav-forward")
-        router.push("/")
+        router.push("/dashboard")
         router.refresh()
       })
     }
@@ -155,6 +160,13 @@ export default function LoginPage() {
               </form>
             </CardContent>
           </Card>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Belum punya akun?{" "}
+            <Link href="/register" className="font-medium text-emerald-700 hover:text-emerald-800">
+              Daftar
+            </Link>
+          </p>
 
           <p className="text-center text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Demo:</span>{" "}

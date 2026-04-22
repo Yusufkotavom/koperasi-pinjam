@@ -7,6 +7,14 @@ import { nasabahSchema, type NasabahInput } from "@/lib/validations/nasabah"
 import { computeRanking } from "@/lib/ranking"
 import { getRankingConfig } from "@/actions/settings"
 import { serializeData } from "@/lib/utils"
+import { Prisma, RoleType } from "@prisma/client"
+import { requireRoles } from "@/lib/roles"
+
+type NasabahActionError = Partial<Record<keyof NasabahInput | "nomorAnggota", string[]>>
+type CreateNasabahResult =
+  | { success: true; data: Awaited<ReturnType<typeof prisma.nasabah.create>> }
+  | { error: NasabahActionError }
+type UpdateNasabahResult = { success: true } | { error: NasabahActionError }
 
 function parseJadwalTags(catatan?: string | null) {
   return catatan?.match(/\[JADWAL:([^\]]+)\]/g) ?? []
@@ -18,6 +26,15 @@ async function generateNomorAnggota(): Promise<string> {
   const seq = String(count + 1).padStart(4, "0")
   const year = new Date().getFullYear().toString().slice(2)
   return `N-${year}-${seq}`
+}
+
+function getUniqueConstraintFields(error: unknown): string[] {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    const target = error.meta?.target
+    if (Array.isArray(target)) return target.filter((field): field is string => typeof field === "string")
+  }
+
+  return []
 }
 
 export async function getNasabahList(params: {
@@ -235,7 +252,7 @@ export async function getNasabahById(id: string) {
   return serializeData(result)
 }
 
-export async function createNasabah(input: NasabahInput) {
+export async function createNasabah(input: NasabahInput): Promise<CreateNasabahResult> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
 
@@ -245,25 +262,50 @@ export async function createNasabah(input: NasabahInput) {
   }
 
   const { tanggalLahir, kelompokId, kolektorId, dokumenUrls, ...rest } = parsed.data
-  const nomorAnggota = await generateNomorAnggota()
-
-  const nasabah = await prisma.nasabah.create({
-    data: {
-      ...rest,
-      nomorAnggota,
-      tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
-      kelompokId: kelompokId || null,
-      kolektorId: kolektorId || null,
-      dokumenUrls: dokumenUrls ?? [],
-      tanggalGabung: new Date(),
-    },
+  const existingNik = await prisma.nasabah.findUnique({
+    where: { nik: parsed.data.nik },
+    select: { namaLengkap: true },
   })
 
-  revalidatePath("/nasabah")
-  return { success: true, data: nasabah }
+  if (existingNik) {
+    return {
+      error: {
+        nik: [`NIK sudah terdaftar atas nama ${existingNik.namaLengkap}.`],
+      },
+    }
+  }
+
+  const nomorAnggota = await generateNomorAnggota()
+
+  try {
+    const nasabah = await prisma.nasabah.create({
+      data: {
+        ...rest,
+        nomorAnggota,
+        tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
+        kelompokId: kelompokId || null,
+        kolektorId: kolektorId || null,
+        dokumenUrls: dokumenUrls ?? [],
+        tanggalGabung: new Date(),
+      },
+    })
+
+    revalidatePath("/nasabah")
+    return { success: true, data: nasabah }
+  } catch (error) {
+    const fields = getUniqueConstraintFields(error)
+    if (fields.includes("nik")) {
+      return { error: { nik: ["NIK sudah terdaftar."] } }
+    }
+    if (fields.includes("nomorAnggota")) {
+      return { error: { nomorAnggota: ["Nomor anggota bentrok. Silakan coba simpan lagi."] } }
+    }
+
+    throw error
+  }
 }
 
-export async function updateNasabah(id: string, input: Partial<NasabahInput>) {
+export async function updateNasabah(id: string, input: Partial<NasabahInput>): Promise<UpdateNasabahResult> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
 
@@ -272,14 +314,41 @@ export async function updateNasabah(id: string, input: Partial<NasabahInput>) {
   if ("kelompokId" in normalized && !normalized.kelompokId) normalized.kelompokId = null
   if ("kolektorId" in normalized && !normalized.kolektorId) normalized.kolektorId = null
 
-  await prisma.nasabah.update({
-    where: { id },
-    data: {
-      ...normalized,
-      tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
-      ...(dokumenUrls ? { dokumenUrls } : {}),
-    },
-  })
+  if (typeof normalized.nik === "string") {
+    const existingNik = await prisma.nasabah.findFirst({
+      where: {
+        nik: normalized.nik,
+        NOT: { id },
+      },
+      select: { namaLengkap: true },
+    })
+
+    if (existingNik) {
+      return {
+        error: {
+          nik: [`NIK sudah terdaftar atas nama ${existingNik.namaLengkap}.`],
+        },
+      }
+    }
+  }
+
+  try {
+    await prisma.nasabah.update({
+      where: { id },
+      data: {
+        ...normalized,
+        tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
+        ...(dokumenUrls ? { dokumenUrls } : {}),
+      },
+    })
+  } catch (error) {
+    const fields = getUniqueConstraintFields(error)
+    if (fields.includes("nik")) {
+      return { error: { nik: ["NIK sudah terdaftar."] } }
+    }
+
+    throw error
+  }
 
   revalidatePath("/nasabah")
   revalidatePath(`/nasabah/${id}`)
@@ -292,6 +361,49 @@ export async function ubahStatusNasabah(id: string, status: "AKTIF" | "NON_AKTIF
 
   await prisma.nasabah.update({ where: { id }, data: { status } })
   revalidatePath("/nasabah")
+  return { success: true }
+}
+
+export async function deleteNasabah(id: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  try {
+    requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+  } catch {
+    return { success: false, error: "Tidak memiliki hak akses untuk menghapus nasabah." }
+  }
+
+  const nasabah = await prisma.nasabah.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      namaLengkap: true,
+      _count: {
+        select: {
+          pengajuan: true,
+          simpanan: true,
+        },
+      },
+    },
+  })
+
+  if (!nasabah) {
+    return { success: false, error: "Nasabah tidak ditemukan." }
+  }
+
+  if (nasabah._count.pengajuan > 0 || nasabah._count.simpanan > 0) {
+    return {
+      success: false,
+      error: "Nasabah sudah memiliki histori pengajuan/simpanan. Gunakan status Non Aktif agar histori tetap aman.",
+    }
+  }
+
+  await prisma.nasabah.delete({ where: { id } })
+
+  revalidatePath("/nasabah")
+  revalidatePath("/dashboard")
+  revalidatePath("/kelompok")
   return { success: true }
 }
 

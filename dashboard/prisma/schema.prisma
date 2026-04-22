@@ -44,17 +44,18 @@ model User {
   updatedAt DateTime   @updatedAt
 
   // Relasi
-  nasabahSebagaiKolektor Nasabah[]      @relation("KolektorNasabah")
+  nasabahSebagaiKolektor Nasabah[]         @relation("KolektorNasabah")
   pembayaranDiinput      Pembayaran[]
   kasDiinput             KasTransaksi[]
   rekonsiliasiDibuat     RekonsiliasiKas[] @relation("RekonsiliasiCreatedBy")
-  pengajuanDisurvey      Pengajuan[]    @relation("SurveyorPengajuan")
-  pengajuanDisetujui     Pengajuan[]    @relation("ApproverPengajuan")
-  auditLogs              AuditLog[]     @relation("AuditActor")
-  approvalRequested      ApprovalLog[]  @relation("ApprovalRequester")
-  approvalApproved       ApprovalLog[]  @relation("ApprovalApprover")
-  kolektorTargets        KolektorTarget[] @relation("KolektorTargetUser")
-  notifikasi             Notifikasi[]   @relation("UserNotifikasi")
+  journalPosted          JournalEntry[]    @relation("JournalPostedBy")
+  pengajuanDisurvey      Pengajuan[]       @relation("SurveyorPengajuan")
+  pengajuanDisetujui     Pengajuan[]       @relation("ApproverPengajuan")
+  auditLogs              AuditLog[]        @relation("AuditActor")
+  approvalRequested      ApprovalLog[]     @relation("ApprovalRequester")
+  approvalApproved       ApprovalLog[]     @relation("ApprovalApprover")
+  kolektorTargets        KolektorTarget[]  @relation("KolektorTargetUser")
+  notifikasi             Notifikasi[]      @relation("UserNotifikasi")
 
   @@map("users")
 }
@@ -88,17 +89,17 @@ model Nasabah {
   fotoUrl       String?
   dokumenUrls   String[]
 
-  kolektorId    String?
-  kolektor      User?         @relation("KolektorNasabah", fields: [kolektorId], references: [id])
-  kelompokId    String?
-  kelompok      Kelompok?     @relation(fields: [kelompokId], references: [id])
+  kolektorId String?
+  kolektor   User?     @relation("KolektorNasabah", fields: [kolektorId], references: [id])
+  kelompokId String?
+  kelompok   Kelompok? @relation(fields: [kelompokId], references: [id])
 
-  penjamin      Penjamin[]
-  pengajuan     Pengajuan[]
-  simpanan      Simpanan[]
+  penjamin  Penjamin[]
+  pengajuan Pengajuan[]
+  simpanan  Simpanan[]
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("nasabah")
 }
@@ -117,18 +118,18 @@ model Penjamin {
 }
 
 model Kelompok {
-  id              String      @id @default(cuid())
-  kode            String      @unique
+  id              String  @id @default(cuid())
+  kode            String  @unique
   nama            String
   ketua           String?
   wilayah         String?
   jadwalPertemuan String?
 
-  nasabah         Nasabah[]
-  pengajuan       Pengajuan[]
+  nasabah   Nasabah[]
+  pengajuan Pengajuan[]
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("kelompok")
 }
@@ -159,27 +160,27 @@ enum StatusPengajuan {
 }
 
 model Pengajuan {
-  id              String          @id @default(cuid())
-  nomorPengajuan  String          @unique @default(cuid())
-  nasabahId       String
-  nasabah         Nasabah         @relation(fields: [nasabahId], references: [id])
-  kelompokId      String?
-  kelompok        Kelompok?       @relation(fields: [kelompokId], references: [id])
-  jenisPinjaman   JenisPinjaman   @default(REGULAR)
-  tenorType       TenorType       @default(BULANAN)
-  plafonDiajukan  Decimal         @db.Decimal(15, 2)
-  plafonDisetujui Decimal?        @db.Decimal(15, 2)
-  tenor           Int
-  bungaPerBulan   Decimal         @db.Decimal(5, 4)
-  tujuanPinjaman  String?
-  agunan          String?
-  catatanPengajuan String?
+  id                   String          @id @default(cuid())
+  nomorPengajuan       String          @unique @default(cuid())
+  nasabahId            String
+  nasabah              Nasabah         @relation(fields: [nasabahId], references: [id])
+  kelompokId           String?
+  kelompok             Kelompok?       @relation(fields: [kelompokId], references: [id])
+  jenisPinjaman        JenisPinjaman   @default(REGULAR)
+  tenorType            TenorType       @default(BULANAN)
+  plafonDiajukan       Decimal         @db.Decimal(15, 2)
+  plafonDisetujui      Decimal?        @db.Decimal(15, 2)
+  tenor                Int
+  bungaPerBulan        Decimal         @db.Decimal(5, 4)
+  tujuanPinjaman       String?
+  agunan               String?
+  catatanPengajuan     String?
   dokumenPendukungUrls String[]
-  hasilSurvey     String?
-  catatanApproval String?
-  status          StatusPengajuan @default(DRAFT)
+  hasilSurvey          String?
+  catatanApproval      String?
+  status               StatusPengajuan @default(DRAFT)
 
-  tanggalPengajuan DateTime @default(now())
+  tanggalPengajuan DateTime  @default(now())
   tanggalSurvey    DateTime?
   tanggalApproval  DateTime?
 
@@ -204,24 +205,24 @@ enum StatusPinjaman {
 }
 
 model Pinjaman {
-  id              String         @id @default(cuid())
-  nomorKontrak    String         @unique
-  pengajuanId     String         @unique
-  pengajuan       Pengajuan      @relation(fields: [pengajuanId], references: [id])
-  pokokPinjaman   Decimal        @db.Decimal(15, 2)
-  tenorType       TenorType      @default(BULANAN)
-  tenor           Int
-  bungaPerBulan   Decimal        @db.Decimal(5, 4)
-  angsuranPokok   Decimal        @db.Decimal(15, 2)
-  angsuranBunga   Decimal        @db.Decimal(15, 2)
-  totalAngsuran   Decimal        @db.Decimal(15, 2)
-  potonganAdmin   Decimal        @db.Decimal(15, 2) @default(0)
-  potonganProvisi Decimal        @db.Decimal(15, 2) @default(0)
-  nilaiCair       Decimal        @db.Decimal(15, 2)
-  tanggalCair     DateTime
+  id                String         @id @default(cuid())
+  nomorKontrak      String         @unique
+  pengajuanId       String         @unique
+  pengajuan         Pengajuan      @relation(fields: [pengajuanId], references: [id])
+  pokokPinjaman     Decimal        @db.Decimal(15, 2)
+  tenorType         TenorType      @default(BULANAN)
+  tenor             Int
+  bungaPerBulan     Decimal        @db.Decimal(5, 4)
+  angsuranPokok     Decimal        @db.Decimal(15, 2)
+  angsuranBunga     Decimal        @db.Decimal(15, 2)
+  totalAngsuran     Decimal        @db.Decimal(15, 2)
+  potonganAdmin     Decimal        @default(0) @db.Decimal(15, 2)
+  potonganProvisi   Decimal        @default(0) @db.Decimal(15, 2)
+  nilaiCair         Decimal        @db.Decimal(15, 2)
+  tanggalCair       DateTime
   tanggalJatuhTempo DateTime
-  sisaPinjaman    Decimal        @db.Decimal(15, 2)
-  status          StatusPinjaman @default(AKTIF)
+  sisaPinjaman      Decimal        @db.Decimal(15, 2)
+  status            StatusPinjaman @default(AKTIF)
 
   jadwalAngsuran JadwalAngsuran[]
   pembayaran     Pembayaran[]
@@ -233,17 +234,17 @@ model Pinjaman {
 }
 
 model JadwalAngsuran {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   pinjamanId        String
-  pinjaman          Pinjaman @relation(fields: [pinjamanId], references: [id], onDelete: Cascade)
+  pinjaman          Pinjaman  @relation(fields: [pinjamanId], references: [id], onDelete: Cascade)
   angsuranKe        Int
   tanggalJatuhTempo DateTime
-  pokok             Decimal  @db.Decimal(15, 2)
-  bunga             Decimal  @db.Decimal(15, 2)
-  total             Decimal  @db.Decimal(15, 2)
-  sudahDibayar      Boolean  @default(false)
+  pokok             Decimal   @db.Decimal(15, 2)
+  bunga             Decimal   @db.Decimal(15, 2)
+  total             Decimal   @db.Decimal(15, 2)
+  sudahDibayar      Boolean   @default(false)
   tanggalBayar      DateTime?
-  dendaHarian       Decimal  @db.Decimal(15, 2) @default(0)
+  dendaHarian       Decimal   @default(0) @db.Decimal(15, 2)
 
   @@map("jadwal_angsuran")
 }
@@ -265,7 +266,7 @@ model Pembayaran {
   tanggalBayar   DateTime    @default(now())
   pokok          Decimal     @db.Decimal(15, 2)
   bunga          Decimal     @db.Decimal(15, 2)
-  denda          Decimal     @db.Decimal(15, 2) @default(0)
+  denda          Decimal     @default(0) @db.Decimal(15, 2)
   totalBayar     Decimal     @db.Decimal(15, 2)
   metode         MetodeBayar @default(TUNAI)
   buktiBayarUrl  String?
@@ -285,11 +286,11 @@ model Pembayaran {
 // ========================
 
 model Simpanan {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   nasabahId String
-  nasabah   Nasabah @relation(fields: [nasabahId], references: [id])
-  jenis     String  // "WAJIB" | "SUKARELA" | "POKOK"
-  jumlah    Decimal @db.Decimal(15, 2)
+  nasabah   Nasabah  @relation(fields: [nasabahId], references: [id])
+  jenis     String // "WAJIB" | "SUKARELA" | "POKOK"
+  jumlah    Decimal  @db.Decimal(15, 2)
   tanggal   DateTime @default(now())
 
   @@map("simpanan")
@@ -316,15 +317,32 @@ enum AccountType {
   EXPENSE
 }
 
-model Account {
-  id        String      @id @default(cuid())
-  code      String      @unique
-  name      String
-  type      AccountType
-  isActive  Boolean     @default(true)
+enum JournalSourceType {
+  PEMBAYARAN
+  PENCAIRAN
+  KAS
+  SIMPANAN
+  ADJUSTMENT
+  REVERSAL
+  DEMO_IMPORT
+}
 
-  kasKategori KasKategori[]
+enum JournalStatus {
+  DRAFT
+  POSTED
+  VOIDED
+}
+
+model Account {
+  id       String      @id @default(cuid())
+  code     String      @unique
+  name     String
+  type     AccountType
+  isActive Boolean     @default(true)
+
+  kasKategori  KasKategori[]
   rekonsiliasi RekonsiliasiKas[]
+  journalLines JournalLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -333,15 +351,53 @@ model Account {
   @@map("accounts")
 }
 
+model JournalEntry {
+  id          String            @id @default(cuid())
+  entryNo     String            @unique @default(cuid())
+  entryDate   DateTime
+  description String
+  sourceType  JournalSourceType
+  sourceId    String?
+  status      JournalStatus     @default(POSTED)
+
+  postedById String?
+  postedBy   User?         @relation("JournalPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  lines      JournalLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceType, sourceId])
+  @@index([entryDate])
+  @@index([sourceType, sourceId])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id             String       @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  debit          Decimal      @default(0) @db.Decimal(15, 2)
+  credit         Decimal      @default(0) @db.Decimal(15, 2)
+  memo           String?
+  createdAt      DateTime     @default(now())
+
+  @@index([journalEntryId])
+  @@index([accountId])
+  @@map("journal_lines")
+}
+
 enum RekonsiliasiStatus {
   DRAFT
   SELESAI
 }
 
 model RekonsiliasiKas {
-  id          String             @id @default(cuid())
+  id          String  @id @default(cuid())
   accountId   String
-  account     Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   periodMonth Int
   periodYear  Int
 
@@ -349,12 +405,12 @@ model RekonsiliasiKas {
   saldoBook      Decimal @db.Decimal(15, 2)
   selisih        Decimal @db.Decimal(15, 2)
 
-  catatan     String?
-  buktiUrl    String?
-  status      RekonsiliasiStatus @default(DRAFT)
+  catatan  String?
+  buktiUrl String?
+  status   RekonsiliasiStatus @default(DRAFT)
 
   createdById String
-  createdBy   User               @relation("RekonsiliasiCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy   User   @relation("RekonsiliasiCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -381,19 +437,19 @@ model KasKategori {
 }
 
 model KasTransaksi {
-  id          String   @id @default(cuid())
-  tanggal     DateTime @default(now())
+  id          String      @id @default(cuid())
+  tanggal     DateTime    @default(now())
   jenis       JenisKas
-  kategori    String   // FK to KasKategori.key
+  kategori    String // FK to KasKategori.key
   kat         KasKategori @relation(fields: [kategori], references: [key])
   deskripsi   String
-  jumlah      Decimal  @db.Decimal(15, 2)
-  kasJenis    String   @default("TUNAI") // "TUNAI" | "BANK"
+  jumlah      Decimal     @db.Decimal(15, 2)
+  kasJenis    String      @default("TUNAI") // "TUNAI" | "BANK"
   buktiUrl    String?
   inputOlehId String
-  inputOleh   User     @relation(fields: [inputOlehId], references: [id])
-  isApproved  Boolean  @default(true)
-  referensiId String?  // opsional: link ke Pembayaran/Pinjaman ID
+  inputOleh   User        @relation(fields: [inputOlehId], references: [id])
+  isApproved  Boolean     @default(true)
+  referensiId String? // opsional: link ke Pembayaran/Pinjaman ID
 
   createdAt DateTime @default(now())
 
@@ -462,17 +518,17 @@ model ApprovalLog {
 }
 
 model KolektorTarget {
-  id                String   @id @default(cuid())
-  kolektorId        String
-  kolektor          User     @relation("KolektorTargetUser", fields: [kolektorId], references: [id], onDelete: Cascade)
-  periodMonth       Int
-  periodYear        Int
-  targetTagihan     Decimal  @db.Decimal(15, 2)
-  realisasiTagihan  Decimal  @db.Decimal(15, 2) @default(0)
-  targetKunjungan   Int      @default(0)
-  realisasiKunjungan Int     @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  kolektorId         String
+  kolektor           User     @relation("KolektorTargetUser", fields: [kolektorId], references: [id], onDelete: Cascade)
+  periodMonth        Int
+  periodYear         Int
+  targetTagihan      Decimal  @db.Decimal(15, 2)
+  realisasiTagihan   Decimal  @default(0) @db.Decimal(15, 2)
+  targetKunjungan    Int      @default(0)
+  realisasiKunjungan Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@unique([kolektorId, periodMonth, periodYear])
   @@index([periodYear, periodMonth])
@@ -489,16 +545,16 @@ enum NotifikasiJenis {
 }
 
 model Notifikasi {
-  id        String         @id @default(cuid())
+  id        String          @id @default(cuid())
   userId    String?
-  user      User?          @relation("UserNotifikasi", fields: [userId], references: [id], onDelete: SetNull)
+  user      User?           @relation("UserNotifikasi", fields: [userId], references: [id], onDelete: SetNull)
   jenis     NotifikasiJenis
   judul     String
   pesan     String
   link      String?
-  isRead    Boolean        @default(false)
+  isRead    Boolean         @default(false)
   readAt    DateTime?
-  createdAt DateTime       @default(now())
+  createdAt DateTime        @default(now())
 
   @@index([userId, isRead, createdAt])
   @@map("notifikasi")

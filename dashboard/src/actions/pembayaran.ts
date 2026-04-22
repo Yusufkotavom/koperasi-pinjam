@@ -7,6 +7,8 @@ import { hitungDenda } from "@/lib/pembayaran"
 import { Prisma, RoleType, ApprovalEntityType, ApprovalStatus } from "@prisma/client"
 import { requireRoles } from "@/lib/roles"
 import { writeAuditLog } from "@/lib/audit"
+import { postJournalEntry, postPembayaranJournal } from "@/lib/accounting"
+import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { computeRanking } from "@/lib/ranking"
 import { getRankingConfig } from "@/actions/settings"
 import { ensureKasKategori } from "./kas"
@@ -492,17 +494,31 @@ export async function inputPembayaran(input: {
       },
     })
 
+    const kasJenis = input.metode === "TRANSFER" ? "BANK" : "TUNAI"
+
     await tx.kasTransaksi.create({
       data: {
         jenis: "MASUK",
         kategori: ensured.key,
         deskripsi: `${mode} angsuran ke-${jadwal.angsuranKe} ${jadwal.pinjaman.nomorKontrak}`,
         jumlah: new Prisma.Decimal(jumlahBayar),
-        kasJenis: input.metode === "TRANSFER" ? "BANK" : "TUNAI",
+        kasJenis,
         inputOlehId: userId,
         tanggal: tanggalBayar,
         referensiId: pembayaran.id,
       },
+    })
+
+    await postPembayaranJournal(tx, {
+      pembayaranId: pembayaran.id,
+      tanggalBayar,
+      kasJenis,
+      pokok: alokasiPokok,
+      bunga: alokasiBunga,
+      denda: alokasiDenda,
+      totalBayar: jumlahBayar,
+      description: `${mode} angsuran ke-${jadwal.angsuranKe} ${jadwal.pinjaman.nomorKontrak}`,
+      postedById: userId,
     })
 
     return {
@@ -778,13 +794,14 @@ export async function getHistoryPembayaranNasabahReport(params?: { page?: number
 type LaporanTransaksiUserFilter = {
   kelompokId?: string
   search?: string
-}
+} & ReportPeriodInput
 
 export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUserFilter) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
 
   const today = new Date()
+  const period = resolveReportPeriod(params)
   const rankingConfig = await getRankingConfig()
 
   const [kelompokOptions, nasabahList] = await Promise.all([
@@ -816,7 +833,10 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
                   orderBy: { angsuranKe: "asc" },
                 },
                 pembayaran: {
-                  where: { isBatalkan: false },
+                  where: {
+                    isBatalkan: false,
+                    tanggalBayar: { gte: period.startDate, lt: period.endDate },
+                  },
                   select: {
                     catatan: true,
                     totalBayar: true,
@@ -974,6 +994,7 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
     data,
     summary,
     kelompokOptions,
+    period,
   })
 }
 
@@ -1174,6 +1195,24 @@ export async function approvePembatalanPembayaran(input: {
         inputOlehId: userId,
         referensiId: pembayaran.id,
       },
+    })
+
+    await postJournalEntry(tx, {
+      sourceType: "REVERSAL",
+      sourceId: pembayaran.id,
+      entryDate: new Date(),
+      description: `Pembatalan pembayaran ${pembayaran.nomorTransaksi}`,
+      postedById: userId,
+      lines: [
+        { accountCode: "PIUTANG_PINJAMAN", debit: Number(pembayaran.pokok), memo: "Reversal pokok" },
+        { accountCode: "PENDAPATAN_BUNGA", debit: Number(pembayaran.bunga), memo: "Reversal bunga" },
+        { accountCode: "PENDAPATAN_DENDA", debit: Number(pembayaran.denda), memo: "Reversal denda" },
+        {
+          accountCode: pembayaran.metode === "TRANSFER" ? "CASH_BANK" : "CASH_TUNAI",
+          credit: Number(pembayaran.totalBayar),
+          memo: "Kas keluar pembatalan",
+        },
+      ],
     })
 
     await tx.approvalLog.update({

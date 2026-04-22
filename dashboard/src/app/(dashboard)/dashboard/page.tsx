@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { DashboardHeader } from "./_components/dashboard-header"
+import { DashboardHeader } from "../_components/dashboard-header"
 import { ViewTransition } from "react"
 import { getCompanyInfo } from "@/actions/settings"
 import { formatTimeId, normalizeTimeZone } from "@/lib/datetime"

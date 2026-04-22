@@ -55,7 +55,7 @@ export function EditNasabahForm({
   const [uploadedDokumen, setUploadedDokumen] = useState<string[]>(nasabah.dokumenUrls ?? [])
   const router = useRouter()
 
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<NasabahInput>({
+  const { register, handleSubmit, setError, setValue, formState: { errors } } = useForm<NasabahInput>({
     resolver: zodResolver(nasabahSchema) as never,
     defaultValues: {
       namaLengkap: nasabah.namaLengkap,
@@ -116,7 +116,13 @@ export function EditNasabahForm({
 
   const onSubmit = (data: NasabahInput) => {
     startTransition(async () => {
-      await updateNasabah(nasabah.id, data)
+      const result = await updateNasabah(nasabah.id, data)
+      if ("error" in result) {
+        const nikError = result.error.nik?.[0]
+        if (nikError) setError("nik", { type: "server", message: nikError })
+        toast.error(nikError ?? "Gagal memperbarui data nasabah. Periksa kembali form.")
+        return
+      }
       toast.success("Data nasabah berhasil diperbarui.")
       router.push(`/nasabah/${nasabah.id}`)
       router.refresh()

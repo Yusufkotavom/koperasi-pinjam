@@ -17,9 +17,8 @@ function hasAccess(userRoles: string[], requiredRoles: string[]): boolean {
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Redirect ke login jika belum terautentikasi (kecuali public paths)
-  // "/" as root dashboard is NOT public anymore.
-  const isPublicPath = pathname.startsWith("/api") || pathname === "/login"
+  const publicPaths = new Set(["/", "/home", "/about", "/product", "/blog", "/contact", "/penawaran", "/login", "/register"])
+  const isPublicPath = pathname.startsWith("/api") || publicPaths.has(pathname)
   if (isPublicPath) {
     return NextResponse.next()
   }
@@ -35,7 +34,7 @@ export default async function middleware(req: NextRequest) {
   for (const [routePrefix, allowedRoles] of Object.entries(routePermissions)) {
     if (pathname.startsWith(routePrefix)) {
       if (!hasAccess(userRoles, allowedRoles)) {
-        return NextResponse.redirect(new URL("/?unauthorized=true", req.url))
+        return NextResponse.redirect(new URL("/dashboard?unauthorized=true", req.url))
       }
     }
   }

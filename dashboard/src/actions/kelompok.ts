@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { kelompokSchema } from "@/lib/validations/kelompok"
+import { requireRoles } from "@/lib/roles"
+import { RoleType } from "@prisma/client"
 
 export async function getKelompokList(params?: { search?: string }) {
   const session = await auth()
@@ -157,5 +159,55 @@ export async function updateKelompok(id: string, input: unknown) {
   revalidatePath("/kelompok")
   revalidatePath(`/kelompok/${id}/edit`)
   revalidatePath("/nasabah")
+  return { success: true }
+}
+
+export async function deleteKelompok(id: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  try {
+    requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+  } catch {
+    return { success: false, error: "Tidak memiliki hak akses untuk menghapus kelompok." }
+  }
+
+  const kelompok = await prisma.kelompok.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          nasabah: true,
+          pengajuan: true,
+        },
+      },
+    },
+  })
+
+  if (!kelompok) {
+    return { success: false, error: "Kelompok tidak ditemukan." }
+  }
+
+  if (kelompok._count.pengajuan > 0) {
+    return {
+      success: false,
+      error: "Kelompok sudah dipakai di histori pengajuan. Edit atau kosongkan anggota, jangan hapus histori kelompok.",
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (kelompok._count.nasabah > 0) {
+      await tx.nasabah.updateMany({
+        where: { kelompokId: id },
+        data: { kelompokId: null },
+      })
+    }
+    await tx.kelompok.delete({ where: { id } })
+  })
+
+  revalidatePath("/kelompok")
+  revalidatePath("/nasabah")
+  revalidatePath("/dashboard")
   return { success: true }
 }

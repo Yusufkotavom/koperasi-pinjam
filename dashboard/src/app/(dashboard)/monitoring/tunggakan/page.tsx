@@ -1,10 +1,10 @@
 import { getTunggakanFilterOptions, getTunggakanList } from "@/actions/dashboard"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, AlertTriangle, Calendar, Users, LayoutGrid, MapPin, TrendingDown, Clock, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Calendar, LayoutGrid, TrendingDown, Clock, ShieldAlert } from "lucide-react"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)

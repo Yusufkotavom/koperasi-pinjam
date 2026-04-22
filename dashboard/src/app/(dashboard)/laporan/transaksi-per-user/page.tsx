@@ -1,14 +1,14 @@
 import Link from "next/link"
 import { getLaporanTransaksiUserReport } from "@/actions/pembayaran"
 import { getRankingConfig } from "@/actions/settings"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { explainRanking } from "@/lib/ranking"
-import { Filter, Users, LayoutGrid, Info, Eye, AlertCircle, TrendingUp, TrendingDown, Wallet, UserCheck } from "lucide-react"
+import { Filter, LayoutGrid, Info, Eye } from "lucide-react"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -17,13 +17,29 @@ function fmt(n: number) {
 export default async function TransaksiPerUserPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ kelompokId?: string; search?: string; view?: string }>
+  searchParams?: Promise<{
+    kelompokId?: string
+    search?: string
+    view?: string
+    periodMode?: string
+    month?: string
+    year?: string
+    week?: string
+    from?: string
+    to?: string
+  }>
 }) {
   const sp = await searchParams
   const view = sp?.view === "kelompok" ? "kelompok" : "user"
   const report = await getLaporanTransaksiUserReport({
     kelompokId: sp?.kelompokId,
     search: sp?.search,
+    periodMode: sp?.periodMode,
+    month: sp?.month,
+    year: sp?.year,
+    week: sp?.week,
+    from: sp?.from,
+    to: sp?.to,
   })
   const rankingConfig = await getRankingConfig()
 
@@ -97,7 +113,7 @@ export default async function TransaksiPerUserPage({
     <div className="p-6 space-y-8">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">Laporan Transaksi User</h1>
-        <p className="text-muted-foreground text-sm">Analisis kolektibilitas nasabah dan performa kelompok.</p>
+        <p className="text-muted-foreground text-sm">Analisis kolektibilitas nasabah dan performa kelompok. Periode: {report.period.label}</p>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
@@ -106,7 +122,7 @@ export default async function TransaksiPerUserPage({
              <Filter className="size-4 text-primary" />
              <CardTitle className="text-base font-semibold">Filter Laporan</CardTitle>
           </div>
-          <form className="grid grid-cols-1 md:grid-cols-4 gap-4" action="/laporan/transaksi-per-user">
+          <form className="grid grid-cols-1 md:grid-cols-5 gap-4" action="/laporan/transaksi-per-user">
             <Input name="search" defaultValue={search} placeholder="Nama, anggota, atau NIK..." />
             <select name="kelompokId" defaultValue={kelompokId} className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900">
               <option value="">Semua kelompok</option>
@@ -118,6 +134,16 @@ export default async function TransaksiPerUserPage({
               <option value="user">Lihat per Nasabah</option>
               <option value="kelompok">Lihat per Kelompok</option>
             </select>
+            <select name="periodMode" defaultValue={report.period.mode} className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900">
+              <option value="MONTH">Bulanan</option>
+              <option value="WEEK">Mingguan</option>
+              <option value="CUSTOM">Custom</option>
+            </select>
+            <Input name="month" defaultValue={String(report.period.month)} placeholder="Bulan" />
+            <Input name="year" defaultValue={String(report.period.year)} placeholder="Tahun" />
+            <Input name="week" defaultValue={String(report.period.week)} placeholder="Minggu" />
+            <Input name="from" type="date" defaultValue={report.period.fromInput} />
+            <Input name="to" type="date" defaultValue={report.period.toInput} />
             <Button type="submit" className="h-9 rounded-lg font-bold uppercase tracking-widest text-[10px]">Terapkan Filter</Button>
           </form>
         </CardHeader>
