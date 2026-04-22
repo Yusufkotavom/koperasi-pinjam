@@ -227,14 +227,29 @@ export async function cairkanPinjaman(input: unknown) {
   const nilaiCair = plafon - potonganAdmin - potonganProvisi
 
   const tglCair = new Date(tanggalCair)
+  const tglCairEndOfDay = new Date(tglCair)
+  tglCairEndOfDay.setHours(23, 59, 59, 999)
   const tglJatuhTempo = tenorType === "MINGGUAN" ? addWeeks(tglCair, tenor) : addMonths(tglCair, tenor)
   const nomorKontrak = `KNT-${Date.now().toString(36).toUpperCase()}`
 
   await ensureAccountingAccounts(companyId)
-  const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCair)
+  const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCairEndOfDay)
   if (saldoKas < nilaiCair) {
+    const pendingMasuk = await prisma.kasTransaksi.aggregate({
+      where: {
+        companyId,
+        jenis: "MASUK",
+        kasJenis,
+        isApproved: false,
+      },
+      _count: { id: true },
+      _sum: { jumlah: true },
+    })
+    const pendingCount = pendingMasuk._count.id
+    const pendingAmount = Number(pendingMasuk._sum.jumlah ?? 0)
+
     return {
-      error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}. Setor modal/simpanan dulu sebelum pencairan.`,
+      error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}.${pendingCount > 0 ? ` Ada ${pendingCount} transaksi kas masuk pending (Rp ${pendingAmount.toLocaleString("id-ID")}) yang belum dihitung ke saldo.` : ""} Setor modal/simpanan dan pastikan approval kas selesai sebelum pencairan.`,
     }
   }
 
