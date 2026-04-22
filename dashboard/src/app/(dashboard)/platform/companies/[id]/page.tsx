@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation"
+import Link from "next/link"
 import { RoleType } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { requireRoles } from "@/lib/roles"
 import { getCompanyById } from "@/actions/platform-admin"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { CompanyAdminPanel } from "../company-admin-panel"
 
 type SessionLike = { user?: { id?: string; roles?: string[] } } | null
@@ -28,6 +30,11 @@ export default async function PlatformCompanyDetailPage({
         <p className="text-muted-foreground text-sm">
           Slug: <span className="font-medium text-foreground">{company.slug}</span>
         </p>
+        <div className="mt-3">
+          <Button size="sm" asChild>
+            <Link href={`/platform/companies/${company.id}/workspace`}>Buka Workspace Company</Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -60,4 +67,3 @@ export default async function PlatformCompanyDetailPage({
     </div>
   )
 }
-

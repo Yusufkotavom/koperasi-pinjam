@@ -34,6 +34,26 @@ export type PlatformUserRow = {
   updatedAt: string
 }
 
+export type PlatformCompanyWorkspace = {
+  company: {
+    id: string
+    name: string
+    slug: string
+    status: CompanyStatus
+    owner: { id: string; name: string; email: string } | null
+  }
+  metrics: {
+    users: number
+    nasabahAktif: number
+    pengajuanAktif: number
+    pinjamanAktif: number
+    kasPending: number
+  }
+  recentUsers: Array<{ id: string; name: string; email: string; isActive: boolean; roles: string[]; createdAt: string }>
+  recentNasabah: Array<{ id: string; namaLengkap: string; nomorAnggota: string; createdAt: string }>
+  recentPengajuan: Array<{ id: string; nomorPengajuan: string; status: string; createdAt: string; nasabahName: string | null }>
+}
+
 function requireSuperAdmin(session: SessionLike) {
   return requireRoles(session, [RoleType.SUPER_ADMIN]).userId
 }
@@ -115,6 +135,88 @@ export async function getCompanyById(companyId: string) {
       _count: { select: { users: true } },
     },
   })
+}
+
+export async function getCompanyWorkspace(companyId: string): Promise<PlatformCompanyWorkspace | null> {
+  const session = await auth()
+  requireSuperAdmin(session as unknown as SessionLike)
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      status: true,
+      owner: { select: { id: true, name: true, email: true } },
+    },
+  })
+  if (!company) return null
+
+  const [users, nasabahAktif, pengajuanAktif, pinjamanAktif, kasPending, recentUsers, recentNasabah, recentPengajuan] = await Promise.all([
+    prisma.user.count({ where: { companyId } }),
+    prisma.nasabah.count({ where: { companyId, status: "AKTIF" } }),
+    prisma.pengajuan.count({ where: { companyId, status: { in: ["DIAJUKAN", "DISURVEY", "DISETUJUI"] } } }),
+    prisma.pinjaman.count({ where: { companyId, status: { in: ["AKTIF", "MENUNGGAK", "MACET"] } } }),
+    prisma.kasTransaksi.count({ where: { companyId, isApproved: false } }),
+    prisma.user.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        createdAt: true,
+        roles: { select: { role: true }, orderBy: { role: "asc" } },
+      },
+    }),
+    prisma.nasabah.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: { id: true, namaLengkap: true, nomorAnggota: true, createdAt: true },
+    }),
+    prisma.pengajuan.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: {
+        id: true,
+        nomorPengajuan: true,
+        status: true,
+        createdAt: true,
+        nasabah: { select: { namaLengkap: true } },
+      },
+    }),
+  ])
+
+  return {
+    company,
+    metrics: { users, nasabahAktif, pengajuanAktif, pinjamanAktif, kasPending },
+    recentUsers: recentUsers.map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      isActive: row.isActive,
+      roles: row.roles.map((r) => r.role),
+      createdAt: row.createdAt.toISOString(),
+    })),
+    recentNasabah: recentNasabah.map((row) => ({
+      id: row.id,
+      namaLengkap: row.namaLengkap,
+      nomorAnggota: row.nomorAnggota,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    recentPengajuan: recentPengajuan.map((row) => ({
+      id: row.id,
+      nomorPengajuan: row.nomorPengajuan,
+      status: row.status,
+      nasabahName: row.nasabah?.namaLengkap ?? null,
+      createdAt: row.createdAt.toISOString(),
+    })),
+  }
 }
 
 const setCompanyStatusSchema = z.object({
@@ -407,4 +509,3 @@ export async function resetUserPasswordAction(_state: PlatformUserActionState, f
     return { success: false, error: errorMessage(error) }
   }
 }
-
