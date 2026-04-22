@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { cairkanPinjaman } from "@/actions/pengajuan"
 import { Button } from "@/components/ui/button"
@@ -36,6 +36,7 @@ function getLocalDateInputValue(date: Date) {
 
 export function PencairanForm({ pengajuan }: Props) {
   const [isPending, startTransition] = useTransition()
+  const submitLockRef = useRef(false)
   const [potonganAdmin, setPotonganAdmin] = useState(0)
   const [potonganProvisi, setPotonganProvisi] = useState(0)
   const [tanggalCair, setTanggalCair] = useState(() =>
@@ -55,20 +56,27 @@ export function PencairanForm({ pengajuan }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (isPending || submitLockRef.current) return
+    submitLockRef.current = true
+    const toastId = toast.loading("Memproses pencairan...")
     startTransition(async () => {
-      const result = await cairkanPinjaman({
-        pengajuanId: pengajuan.id,
-        potonganAdmin,
-        potonganProvisi,
-        tanggalCair,
-        kasJenis,
-      })
-      if (result.error) {
-        toast.error(typeof result.error === "string" ? result.error : "Gagal mencairkan pinjaman")
-        return
+      try {
+        const result = await cairkanPinjaman({
+          pengajuanId: pengajuan.id,
+          potonganAdmin,
+          potonganProvisi,
+          tanggalCair,
+          kasJenis,
+        })
+        if (result.error) {
+          toast.error(typeof result.error === "string" ? result.error : "Gagal mencairkan pinjaman", { id: toastId })
+          return
+        }
+        toast.success(`Pinjaman berhasil dicairkan! No. Kontrak: ${result.data?.nomorKontrak}`, { id: toastId })
+        router.push(`/dokumen/pencairan/${pengajuan.id}`)
+      } finally {
+        submitLockRef.current = false
       }
-      toast.success(`Pinjaman berhasil dicairkan! No. Kontrak: ${result.data?.nomorKontrak}`)
-      router.push(`/dokumen/pencairan/${pengajuan.id}`)
     })
   }
 

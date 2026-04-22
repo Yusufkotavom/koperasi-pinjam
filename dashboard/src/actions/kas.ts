@@ -420,37 +420,46 @@ export async function inputKas(input: unknown) {
   }
   await ensureAccountingAccounts(companyId)
 
-  const kas = await prisma.$transaction(async (tx) => {
-    const row = await tx.kasTransaksi.create({
-      data: {
-        ...rest,
-        companyId,
-        kategoriId: ensured.kategoriId,
-        kategoriKey: ensured.key,
-        jumlah: new Prisma.Decimal(jumlah),
-        tanggal: tanggalTransaksi,
-        inputOlehId: userId,
-        buktiUrl: buktiUrl?.trim() || null,
-        isApproved: isPrivileged ? true : false,
-      },
-    })
-
-    if (!isPrivileged) {
-      await tx.approvalLog.create({
+  let kas: { id: string; isApproved: boolean; jenis: "MASUK" | "KELUAR"; kategoriKey: string; jumlah: Prisma.Decimal }
+  try {
+    kas = await prisma.$transaction(async (tx) => {
+      const row = await tx.kasTransaksi.create({
         data: {
-          entityType: ApprovalEntityType.KAS,
-          entityId: row.id,
-          status: ApprovalStatus.PENDING,
-          requestedById: userId,
-          catatan: "Menunggu persetujuan transaksi kas.",
+          ...rest,
+          companyId,
+          kategoriId: ensured.kategoriId,
+          kategoriKey: ensured.key,
+          jumlah: new Prisma.Decimal(jumlah),
+          tanggal: tanggalTransaksi,
+          inputOlehId: userId,
+          buktiUrl: buktiUrl?.trim() || null,
+          isApproved: isPrivileged ? true : false,
         },
       })
-    } else {
-      await postKasTransactionJournal(tx, row.id, userId)
-    }
 
-    return row
-  })
+      if (!isPrivileged) {
+        await tx.approvalLog.create({
+          data: {
+            entityType: ApprovalEntityType.KAS,
+            entityId: row.id,
+            status: ApprovalStatus.PENDING,
+            requestedById: userId,
+            catatan: "Menunggu persetujuan transaksi kas.",
+          },
+        })
+      } else {
+        // Accounts are already ensured before entering transaction.
+        await postKasTransactionJournal(tx, row.id, userId, { ensureAccounts: false })
+      }
+
+      return row
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return { error: "Gagal menyimpan kas. Silakan ulangi beberapa saat lagi." }
+    }
+    throw error
+  }
 
   revalidatePath("/kas")
   revalidatePath("/laporan/laba-rugi")
@@ -656,13 +665,14 @@ export async function approveKasTransaksi(input: { id: string; action: "APPROVE"
     }
   }
 
+  await ensureAccountingAccounts(companyId)
   await prisma.$transaction(async (tx) => {
     if (input.action === "APPROVE") {
       await tx.kasTransaksi.update({
         where: { id: input.id },
         data: { isApproved: true },
       })
-      await postKasTransactionJournal(tx, input.id, userId)
+      await postKasTransactionJournal(tx, input.id, userId, { ensureAccounts: false })
     }
 
     if (pending) {
@@ -731,13 +741,14 @@ export async function getKasBulanan(bulan: number, tahun: number) {
 export async function getLabaRugiSummary(params?: ReportPeriodInput) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const period = resolveReportPeriod(params)
 
   const rows = await prisma.journalLine.findMany({
     where: {
       account: { type: { in: ["REVENUE", "EXPENSE"] } },
-      journalEntry: { status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
+      journalEntry: { companyId, status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
     },
     include: { account: true },
   })
@@ -791,6 +802,7 @@ type TransaksiPerUserFilter = {
 export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const now = new Date()
   const month = Number(params?.month ?? now.getMonth() + 1)
@@ -801,6 +813,7 @@ export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter)
 
   const users = await prisma.user.findMany({
     where: {
+      companyId,
       isActive: true,
       ...(params?.userId ? { id: params.userId } : {}),
     },
@@ -817,6 +830,7 @@ export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter)
     prisma.kasTransaksi.groupBy({
       by: ["inputOlehId", "jenis"],
       where: {
+        companyId,
         tanggal: { gte: startDate, lt: endDate },
       },
       _sum: { jumlah: true },
@@ -825,6 +839,7 @@ export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter)
     prisma.pembayaran.groupBy({
       by: ["inputOlehId"],
       where: {
+        companyId,
         isBatalkan: false,
         tanggalBayar: { gte: startDate, lt: endDate },
       },

@@ -24,12 +24,14 @@ export async function getPengajuanList(params: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const page = params.page ?? 1
   const limit = 20
 
   const where = {
     AND: [
+      { companyId },
       params.status ? { status: params.status as "DRAFT" | "DIAJUKAN" | "DISURVEY" | "DISETUJUI" | "DITOLAK" | "DICAIRKAN" | "SELESAI" } : {},
       params.search ? {
         nasabah: { namaLengkap: { contains: params.search, mode: "insensitive" as const } }
@@ -57,8 +59,9 @@ export async function getPengajuanList(params: {
 export async function getPengajuanById(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const result = await prisma.pengajuan.findUnique({
-    where: { id },
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+  const result = await prisma.pengajuan.findFirst({
+    where: { id, companyId },
     include: {
       nasabah: true,
       kelompok: true,
@@ -74,9 +77,10 @@ export async function getPengajuanById(id: string) {
 export async function getNasabahPengajuanOptions() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   return prisma.nasabah.findMany({
-    where: { status: "AKTIF" },
+    where: { companyId, status: "AKTIF" },
     select: {
       id: true,
       nomorAnggota: true,
@@ -223,14 +227,29 @@ export async function cairkanPinjaman(input: unknown) {
   const nilaiCair = plafon - potonganAdmin - potonganProvisi
 
   const tglCair = new Date(tanggalCair)
+  const tglCairEndOfDay = new Date(tglCair)
+  tglCairEndOfDay.setHours(23, 59, 59, 999)
   const tglJatuhTempo = tenorType === "MINGGUAN" ? addWeeks(tglCair, tenor) : addMonths(tglCair, tenor)
   const nomorKontrak = `KNT-${Date.now().toString(36).toUpperCase()}`
 
   await ensureAccountingAccounts(companyId)
-  const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCair)
+  const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCairEndOfDay)
   if (saldoKas < nilaiCair) {
+    const pendingMasuk = await prisma.kasTransaksi.aggregate({
+      where: {
+        companyId,
+        jenis: "MASUK",
+        kasJenis,
+        isApproved: false,
+      },
+      _count: { id: true },
+      _sum: { jumlah: true },
+    })
+    const pendingCount = pendingMasuk._count.id
+    const pendingAmount = Number(pendingMasuk._sum.jumlah ?? 0)
+
     return {
-      error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}. Setor modal/simpanan dulu sebelum pencairan.`,
+      error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}.${pendingCount > 0 ? ` Ada ${pendingCount} transaksi kas masuk pending (Rp ${pendingAmount.toLocaleString("id-ID")}) yang belum dihitung ke saldo.` : ""} Setor modal/simpanan dan pastikan approval kas selesai sebelum pencairan.`,
     }
   }
 
@@ -335,8 +354,9 @@ export async function cairkanPinjaman(input: unknown) {
 export async function getPengajuanSiapCair() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   const result = await prisma.pengajuan.findMany({
-    where: { status: "DISETUJUI" },
+    where: { companyId, status: "DISETUJUI" },
     include: {
       nasabah: { select: { namaLengkap: true, nomorAnggota: true } },
       kelompok: { select: { nama: true } },

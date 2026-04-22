@@ -1039,9 +1039,12 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
 export async function getPembayaranById(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
-  const result = await prisma.pembayaran.findUnique({
-    where: { id },
+  const result = await prisma.pembayaran.findFirst({
+    where: { id, companyId },
     include: {
       pinjaman: {
         include: {
@@ -1063,6 +1066,9 @@ export async function getPembayaranById(id: string) {
 export async function requestPembatalanPembayaran(input: { pembayaranId: string; alasan: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   let userId: string
   try {
@@ -1072,7 +1078,7 @@ export async function requestPembatalanPembayaran(input: { pembayaranId: string;
     return { error: "Tidak memiliki hak akses untuk meminta pembatalan." }
   }
 
-  const pembayaran = await prisma.pembayaran.findUnique({ where: { id: input.pembayaranId } })
+  const pembayaran = await prisma.pembayaran.findFirst({ where: { id: input.pembayaranId, companyId } })
   if (!pembayaran) return { error: "Data pembayaran tidak ditemukan." }
   if (pembayaran.isBatalkan) return { error: "Pembayaran sudah dibatalkan." }
 
@@ -1114,6 +1120,12 @@ export async function requestPembatalanPembayaran(input: { pembayaranId: string;
 export async function getPembatalanApprovalList(pembayaranId: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
+
+  const pembayaran = await prisma.pembayaran.findFirst({ where: { id: pembayaranId, companyId }, select: { id: true } })
+  if (!pembayaran) throw new Error("Forbidden")
 
   return prisma.approvalLog.findMany({
     where: {
