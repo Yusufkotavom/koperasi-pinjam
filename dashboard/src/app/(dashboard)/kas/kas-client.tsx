@@ -46,6 +46,13 @@ function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
 }
 
+function getLocalDateInputValue(date: Date) {
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, "0")
+  const dd = String(date.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export function KasClientPage({ initialData, initialKategori }: { initialData: KasData; initialKategori: KasKategori[] }) {
   const router = useRouter()
   const [isPending, startLoadTransition] = useTransition()
@@ -55,6 +62,7 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
   const [jumlah, setJumlah] = useState<number>(0)
   const [deskripsi, setDeskripsi] = useState("")
   const [kasJenis, setKasJenis] = useState<"TUNAI" | "BANK">("TUNAI")
+  const [tanggal, setTanggal] = useState(() => getLocalDateInputValue(new Date()))
   const [isUploadingBukti, setIsUploadingBukti] = useState(false)
   const [buktiUrl, setBuktiUrl] = useState<string>("")
   const [kategoriRows, setKategoriRows] = useState<KasKategori[]>(initialKategori)
@@ -150,6 +158,7 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
         deskripsi,
         jumlah,
         kasJenis,
+        tanggal,
         ...(buktiUrl ? { buktiUrl } : {}),
       })
 
@@ -186,6 +195,7 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
       setJumlah(0)
       setDeskripsi("")
       setBuktiUrl("")
+      setTanggal(getLocalDateInputValue(new Date()))
       
       router.refresh()
       setTab("histori")
@@ -549,6 +559,19 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
                     placeholder="Contoh: 5.000.000"
                     className="h-10 text-lg font-bold tracking-tight text-primary dark:text-primary"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Tanggal Transaksi</Label>
+                  <Input
+                    type="date"
+                    value={tanggal}
+                    onChange={(event) => setTanggal(event.target.value)}
+                    className="h-10 border-slate-200 bg-slate-50 dark:bg-slate-900 dark:border-slate-800"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Default hari ini, bisa diubah ke tanggal lampau sesuai transaksi real.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Jenis Kas</Label>

@@ -134,7 +134,7 @@ export function PencairanForm({ pengajuan }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label>Tanggal Pencairan</Label>
+            <Label>Tanggal Pencairan (bisa tanggal lampau)</Label>
             <Input
               type="date"
               value={tanggalCair}
@@ -142,6 +142,9 @@ export function PencairanForm({ pengajuan }: Props) {
               required
               suppressHydrationWarning
             />
+            <p className="text-xs text-muted-foreground">
+              Gunakan tanggal real pencairan. Sistem mendukung input pencairan untuk hari sebelumnya.
+            </p>
           </div>
 
           <div className="space-y-2">
