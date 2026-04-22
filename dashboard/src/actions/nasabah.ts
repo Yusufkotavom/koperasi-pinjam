@@ -280,8 +280,6 @@ export async function createNasabah(input: NasabahInput): Promise<CreateNasabahR
     }
   }
 
-  const nomorAnggota = await generateNomorAnggota(companyId)
-
   if (kelompokId) {
     const kelompok = await prisma.kelompok.findFirst({ where: { id: kelompokId, companyId }, select: { id: true } })
     if (!kelompok) {
@@ -289,33 +287,41 @@ export async function createNasabah(input: NasabahInput): Promise<CreateNasabahR
     }
   }
 
-  try {
-    const nasabah = await prisma.nasabah.create({
-      data: {
-        companyId,
-        ...rest,
-        nomorAnggota,
-        tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
-        kelompokId: kelompokId || null,
-        kolektorId: kolektorId || null,
-        dokumenUrls: dokumenUrls ?? [],
-        tanggalGabung: new Date(),
-      },
-    })
+  // Nomor anggota dibuat otomatis. Karena generator berbasis count dapat bentrok pada concurrency,
+  // kita retry beberapa kali ketika unique constraint terjadi.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const nomorAnggota = await generateNomorAnggota(companyId)
+    try {
+      const nasabah = await prisma.nasabah.create({
+        data: {
+          companyId,
+          ...rest,
+          nomorAnggota,
+          tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
+          kelompokId: kelompokId || null,
+          kolektorId: kolektorId || null,
+          dokumenUrls: dokumenUrls ?? [],
+          tanggalGabung: new Date(),
+        },
+      })
 
-    revalidatePath("/nasabah")
-    return { success: true, data: nasabah }
-  } catch (error) {
-    const fields = getUniqueConstraintFields(error)
-    if (fields.includes("nik")) {
-      return { error: { nik: ["NIK sudah terdaftar."] } }
-    }
-    if (fields.includes("nomorAnggota")) {
-      return { error: { nomorAnggota: ["Nomor anggota bentrok. Silakan coba simpan lagi."] } }
-    }
+      revalidatePath("/nasabah")
+      return { success: true, data: nasabah }
+    } catch (error) {
+      const fields = getUniqueConstraintFields(error)
+      if (fields.includes("nik")) {
+        return { error: { nik: ["NIK sudah terdaftar."] } }
+      }
+      if (fields.includes("nomorAnggota")) {
+        if (attempt < 2) continue
+        return { error: { nomorAnggota: ["Nomor anggota bentrok. Silakan coba simpan lagi."] } }
+      }
 
-    throw error
+      throw error
+    }
   }
+
+  return { error: { nomorAnggota: ["Nomor anggota bentrok. Silakan coba simpan lagi."] } }
 }
 
 export async function updateNasabah(id: string, input: Partial<NasabahInput>): Promise<UpdateNasabahResult> {

@@ -30,6 +30,20 @@ export default async function middleware(req: NextRequest) {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const userRoles: string[] = Array.isArray((token as any)?.roles) ? (token as any).roles : []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tokenCompanyId: string | null | undefined = (token as any)?.companyId as string | null | undefined
+
+  // SUPER_ADMIN can exist without a company context. In that case, keep them inside /platform.
+  if (userRoles.includes("SUPER_ADMIN") && !tokenCompanyId) {
+    const allowed =
+      pathname.startsWith("/platform") ||
+      pathname === "/settings" ||
+      pathname.startsWith("/settings/profile") ||
+      pathname.startsWith("/docs")
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/platform", req.url))
+    }
+  }
 
   // Cek permission per route
   for (const [routePrefix, allowedRoles] of Object.entries(routePermissions)) {

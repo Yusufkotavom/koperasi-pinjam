@@ -401,7 +401,7 @@ export async function getNeracaSederhana(params?: ReportPeriodInput) {
 
   const rows = await prisma.journalLine.findMany({
     where: {
-      journalEntry: { status: "POSTED", entryDate: { lt: period.endDate } },
+      journalEntry: { companyId, status: "POSTED", entryDate: { lt: period.endDate } },
     },
     include: { account: true },
   })

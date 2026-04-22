@@ -731,13 +731,14 @@ export async function getKasBulanan(bulan: number, tahun: number) {
 export async function getLabaRugiSummary(params?: ReportPeriodInput) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const period = resolveReportPeriod(params)
 
   const rows = await prisma.journalLine.findMany({
     where: {
       account: { type: { in: ["REVENUE", "EXPENSE"] } },
-      journalEntry: { status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
+      journalEntry: { companyId, status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
     },
     include: { account: true },
   })
@@ -791,6 +792,7 @@ type TransaksiPerUserFilter = {
 export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const now = new Date()
   const month = Number(params?.month ?? now.getMonth() + 1)
@@ -801,6 +803,7 @@ export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter)
 
   const users = await prisma.user.findMany({
     where: {
+      companyId,
       isActive: true,
       ...(params?.userId ? { id: params.userId } : {}),
     },
@@ -817,6 +820,7 @@ export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter)
     prisma.kasTransaksi.groupBy({
       by: ["inputOlehId", "jenis"],
       where: {
+        companyId,
         tanggal: { gte: startDate, lt: endDate },
       },
       _sum: { jumlah: true },
@@ -825,6 +829,7 @@ export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter)
     prisma.pembayaran.groupBy({
       by: ["inputOlehId"],
       where: {
+        companyId,
         isBatalkan: false,
         tanggalBayar: { gte: startDate, lt: endDate },
       },

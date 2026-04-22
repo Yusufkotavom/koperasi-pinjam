@@ -37,6 +37,7 @@ function docTitle(url: string) {
 export default function NasabahBaruPage() {
   const [step, setStep] = useState(0)
   const [isPending, startTransition] = useTransition()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadingDokumen, setIsUploadingDokumen] = useState(false)
   const [dokumenText, setDokumenText] = useState("")
   const [uploadedDokumen, setUploadedDokumen] = useState<string[]>([])
@@ -143,19 +144,42 @@ export default function NasabahBaruPage() {
   }
 
   const onSubmit = (data: NasabahInput) => {
+    if (isSubmitting) return
+    setIsSubmitting(true)
     startTransition(async () => {
-      const result = await createNasabah(data)
-      if ("error" in result) {
-        const nikError = result.error.nik?.[0]
-        if (nikError) {
-          setError("nik", { type: "server", message: nikError })
-          setStep(0)
+      try {
+        const result = await createNasabah(data)
+        if ("error" in result) {
+          const firstField = Object.keys(result.error)[0] as keyof typeof result.error | undefined
+
+          // Apply field errors into react-hook-form so UI shows what failed.
+          for (const [key, messages] of Object.entries(result.error)) {
+            const msg = Array.isArray(messages) ? messages[0] : undefined
+            if (!msg) continue
+            if (key === "nomorAnggota") continue
+            setError(key as keyof NasabahInput, { type: "server", message: msg })
+          }
+
+          // Move user to the relevant step.
+          if (result.error.nik || result.error.namaLengkap || result.error.alamat || result.error.tanggalLahir || result.error.tempatLahir) {
+            setStep(0)
+          } else if (result.error.noHp || result.error.pekerjaan || result.error.namaUsaha || result.error.status) {
+            setStep(1)
+          } else if (result.error.kelompokId || result.error.kolektorId || result.error.dokumenUrls) {
+            setStep(2)
+          }
+
+          const nikError = result.error.nik?.[0]
+          const nomorAnggotaError = (result.error as { nomorAnggota?: string[] }).nomorAnggota?.[0]
+          toast.error(nikError ?? nomorAnggotaError ?? (firstField ? (result.error as Record<string, string[]>)[firstField as string]?.[0] : null) ?? "Gagal menyimpan data nasabah.")
+          return
         }
-        toast.error(nikError ?? "Gagal menyimpan data nasabah. Periksa kembali form.")
-        return
+
+        toast.success("Nasabah berhasil ditambahkan!")
+        router.push("/nasabah")
+      } finally {
+        setIsSubmitting(false)
       }
-      toast.success("Nasabah berhasil ditambahkan!")
-      router.push("/nasabah")
     })
   }
 
@@ -373,7 +397,7 @@ export default function NasabahBaruPage() {
             <Button
               type="submit"
               className="bg-emerald-600 hover:bg-emerald-700"
-              disabled={isPending}
+              disabled={isPending || isSubmitting}
               onClick={() => {
                 submitIntentRef.current = true
               }}

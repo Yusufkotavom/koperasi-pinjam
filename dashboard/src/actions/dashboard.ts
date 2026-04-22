@@ -19,6 +19,9 @@ function endOfDay(date: Date) {
 export async function getDashboardStats() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const company = await getCompanyInfo()
   const timeZone = normalizeTimeZone(company.timeZone)
@@ -28,14 +31,14 @@ export async function getDashboardStats() {
   const endToday = new Date(startToday.getTime() + 86400000)
 
   const [totalNasabah, pinjamanAktif, totalOutstanding, jadwalTelat, penagihanHariIni] = await Promise.all([
-    prisma.nasabah.count({ where: { status: "AKTIF" } }),
-    prisma.pinjaman.count({ where: { status: "AKTIF" } }),
+    prisma.nasabah.count({ where: { companyId, status: "AKTIF" } }),
+    prisma.pinjaman.count({ where: { companyId, status: "AKTIF" } }),
     prisma.pinjaman.aggregate({
-      where: { status: { in: ["AKTIF", "MENUNGGAK"] } },
+      where: { companyId, status: { in: ["AKTIF", "MENUNGGAK"] } },
       _sum: { sisaPinjaman: true },
     }),
     prisma.jadwalAngsuran.findMany({
-      where: { sudahDibayar: false, tanggalJatuhTempo: { lt: today } },
+      where: { companyId, sudahDibayar: false, tanggalJatuhTempo: { lt: today } },
       select: {
         total: true,
         pinjaman: {
@@ -51,7 +54,7 @@ export async function getDashboardStats() {
       take: 1000,
     }),
     prisma.jadwalAngsuran.count({
-      where: { sudahDibayar: false, tanggalJatuhTempo: { gte: startToday, lt: endToday } },
+      where: { companyId, sudahDibayar: false, tanggalJatuhTempo: { gte: startToday, lt: endToday } },
     }),
   ])
 
@@ -65,7 +68,7 @@ export async function getDashboardStats() {
     bulanQueries.push(
       prisma.kasTransaksi.groupBy({
         by: ["jenis"],
-        where: { tanggal: { gte: d, lte: endD }, isApproved: true },
+        where: { companyId, tanggal: { gte: d, lte: endD }, isApproved: true },
         _sum: { jumlah: true },
       }).then(res => ({ date: d, data: res }))
     )
@@ -118,10 +121,14 @@ type TunggakanFilter = {
 export async function getTunggakanFilterOptions() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const [kolektor, kelompok, wilayahRows] = await Promise.all([
     prisma.user.findMany({
       where: {
+        companyId,
         isActive: true,
         roles: { some: { role: "KOLEKTOR" } },
       },
@@ -129,11 +136,12 @@ export async function getTunggakanFilterOptions() {
       orderBy: { name: "asc" },
     }),
     prisma.kelompok.findMany({
+      where: { companyId },
       select: { id: true, nama: true },
       orderBy: { nama: "asc" },
     }),
     prisma.kelompok.findMany({
-      where: { wilayah: { not: null } },
+      where: { companyId, wilayah: { not: null } },
       select: { wilayah: true },
       distinct: ["wilayah"],
       orderBy: { wilayah: "asc" },
@@ -150,6 +158,9 @@ export async function getTunggakanFilterOptions() {
 export async function getTunggakanList(params?: TunggakanFilter) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const today = new Date()
   const tanggalDari = params?.tanggalDari ? startOfDay(new Date(params.tanggalDari)) : undefined
@@ -165,6 +176,7 @@ export async function getTunggakanList(params?: TunggakanFilter) {
 
   const jadwals = await prisma.jadwalAngsuran.findMany({
     where: {
+      companyId,
       sudahDibayar: false,
       tanggalJatuhTempo: tanggalFilter,
       pinjaman: {
@@ -232,7 +244,7 @@ export async function getTunggakanList(params?: TunggakanFilter) {
   }
 
   const outstandingTotal = await prisma.pinjaman.aggregate({
-    where: { status: { in: ["AKTIF", "MENUNGGAK", "MACET"] } },
+    where: { companyId, status: { in: ["AKTIF", "MENUNGGAK", "MACET"] } },
     _sum: { sisaPinjaman: true },
   })
 
@@ -278,19 +290,25 @@ export async function getKelompokOverview(search?: string): Promise<{
 }> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
 
   const today = new Date()
 
   const kelompok = await prisma.kelompok.findMany({
-    where: search
-      ? {
-          OR: [
-            { nama: { contains: search, mode: "insensitive" } },
-            { kode: { contains: search, mode: "insensitive" } },
-            { wilayah: { contains: search, mode: "insensitive" } },
-          ],
-        }
-      : undefined,
+    where: {
+      companyId,
+      ...(search
+        ? {
+            OR: [
+              { nama: { contains: search, mode: "insensitive" } },
+              { kode: { contains: search, mode: "insensitive" } },
+              { wilayah: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
     include: {
       nasabah: {
         select: {

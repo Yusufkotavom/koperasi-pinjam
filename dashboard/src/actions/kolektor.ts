@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { RoleType } from "@prisma/client"
 import { requireRoles } from "@/lib/roles"
+import { requireCompanyId } from "@/lib/tenant"
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
@@ -20,9 +21,11 @@ function defaultPasswordFromPhone(noHp?: string | null) {
 export async function getDaftarKolektor() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const users = await prisma.user.findMany({
     where: {
+      companyId,
       isActive: true,
       roles: { some: { role: "KOLEKTOR" } },
     },
@@ -49,14 +52,16 @@ export async function getDaftarKolektor() {
 export async function getSumberKolektorOptions() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const [nasabah, kelompok] = await Promise.all([
     prisma.nasabah.findMany({
-      where: { status: "AKTIF" },
+      where: { companyId, status: "AKTIF" },
       select: { id: true, namaLengkap: true, noHp: true },
       orderBy: { namaLengkap: "asc" },
     }),
     prisma.kelompok.findMany({
+      where: { companyId },
       select: { id: true, kode: true, nama: true, ketua: true },
       orderBy: { nama: "asc" },
     }),
@@ -66,6 +71,7 @@ export async function getSumberKolektorOptions() {
 }
 
 async function createOrUpdateKolektorUser(params: {
+  companyId: string
   name: string
   email: string
   password: string
@@ -85,6 +91,7 @@ async function createOrUpdateKolektorUser(params: {
         email,
         password: hash,
         isActive: true,
+        companyId: params.companyId,
         roles: {
           create: [
             { role: RoleType.KOLEKTOR },
@@ -93,6 +100,10 @@ async function createOrUpdateKolektorUser(params: {
         },
       },
     })
+  }
+
+  if (existing.companyId !== params.companyId) {
+    throw new Error("Email sudah digunakan di company lain.")
   }
 
   const existingRoles = new Set(existing.roles.map((r) => r.role))
@@ -121,6 +132,7 @@ export async function createKolektorManual(input: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
 
   if (!input.name?.trim() || !input.email?.trim() || !input.password?.trim()) {
@@ -128,6 +140,7 @@ export async function createKolektorManual(input: {
   }
 
   await createOrUpdateKolektorUser({
+    companyId,
     name: input.name.trim(),
     email: input.email,
     password: input.password,
@@ -146,10 +159,11 @@ export async function createKolektorFromNasabah(input: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
 
-  const nasabah = await prisma.nasabah.findUnique({
-    where: { id: input.nasabahId },
+  const nasabah = await prisma.nasabah.findFirst({
+    where: { id: input.nasabahId, companyId },
     select: { id: true, namaLengkap: true, noHp: true },
   })
 
@@ -159,6 +173,7 @@ export async function createKolektorFromNasabah(input: {
   const generatedEmail = input.email?.trim() || `${safeName || "kolektor"}.${nasabah.id.slice(-4)}@koperasi.local`
 
   const user = await createOrUpdateKolektorUser({
+    companyId,
     name: nasabah.namaLengkap,
     email: generatedEmail,
     password: input.password?.trim() || defaultPasswordFromPhone(nasabah.noHp),
@@ -183,10 +198,11 @@ export async function createKolektorFromKetuaKelompok(input: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
 
-  const kelompok = await prisma.kelompok.findUnique({
-    where: { id: input.kelompokId },
+  const kelompok = await prisma.kelompok.findFirst({
+    where: { id: input.kelompokId, companyId },
     include: {
       nasabah: {
         select: { id: true, namaLengkap: true, noHp: true },
@@ -203,6 +219,7 @@ export async function createKolektorFromKetuaKelompok(input: {
   const generatedEmail = input.email?.trim() || `${safeName || "ketua"}.${kelompok.kode.toLowerCase()}@koperasi.local`
 
   const user = await createOrUpdateKolektorUser({
+    companyId,
     name: ketuaNasabah.namaLengkap,
     email: generatedEmail,
     password: input.password?.trim() || defaultPasswordFromPhone(ketuaNasabah.noHp),
@@ -210,7 +227,7 @@ export async function createKolektorFromKetuaKelompok(input: {
   })
 
   await prisma.nasabah.updateMany({
-    where: { kelompokId: kelompok.id },
+    where: { companyId, kelompokId: kelompok.id },
     data: { kolektorId: user.id },
   })
 
@@ -222,9 +239,11 @@ export async function createKolektorFromKetuaKelompok(input: {
 export async function getUserRoleTable() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
 
   const users = await prisma.user.findMany({
+    where: { companyId },
     select: {
       id: true,
       name: true,
