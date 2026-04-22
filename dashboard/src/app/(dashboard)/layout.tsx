@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { TopBar } from "./_components/top-bar"
 import { getCompanyInfo, getAccountingMode } from "@/actions/settings"
+import { DEFAULT_ACCOUNTING_MODE } from "@/lib/accounting-mode"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -28,18 +29,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/login")
   }
 
-  const [company, accountingMode] = await Promise.all([
-    getCompanyInfo(),
-    getAccountingMode(),
-  ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sessionCompanyId = (session.user as any)?.companyId as string | null | undefined
+  const [company, accountingMode] = sessionCompanyId
+    ? await Promise.all([getCompanyInfo(), getAccountingMode()])
+    : [undefined, DEFAULT_ACCOUNTING_MODE]
   const user = {
     name: session.user?.name ?? "User",
     email: session.user?.email ?? "-",
     avatar: undefined as string | undefined,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     roles: ((session.user as any)?.roles ?? []) as string[],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    companyId: (session.user as any)?.companyId as string | null | undefined,
+    companyId: sessionCompanyId,
   }
 
   return (
