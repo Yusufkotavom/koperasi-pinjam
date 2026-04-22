@@ -11,7 +11,7 @@ import { requireRoles } from "@/lib/roles"
 import { writeAuditLog } from "@/lib/audit"
 
 type SessionLike = {
-  user?: { id?: string; roles?: string[] }
+  user?: { id?: string; roles?: string[]; companyId?: string | null }
 } | null
 
 export type PlatformCompanyRow = {
@@ -69,6 +69,10 @@ function requireSuperAdmin(session: SessionLike) {
   return requireRoles(session, [RoleType.SUPER_ADMIN]).userId
 }
 
+function getActingCompanyId(session: SessionLike) {
+  return session?.user?.companyId ?? null
+}
+
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message
   return "Terjadi kesalahan server."
@@ -89,8 +93,8 @@ export async function prepareEnterCompanyContext(companyId: string) {
     select: { id: true, name: true, slug: true, status: true },
   })
   if (!company) return { error: "Company tidak ditemukan." as const }
-  if (company.status === "DELETED") {
-    return { error: "Company berstatus DELETED. Tidak dapat membuka context operasional." as const }
+  if (company.status !== "ACTIVE") {
+    return { error: `Company berstatus ${company.status}. Context operasional hanya untuk company ACTIVE.` as const }
   }
 
   await writeAuditLog({
@@ -327,6 +331,10 @@ export async function setCompanyStatusAction(_state: SetCompanyStatusState, form
   try {
     const session = await auth()
     const actorId = requireSuperAdmin(session as unknown as SessionLike)
+    const actingCompanyId = getActingCompanyId(session as unknown as SessionLike)
+    if (actingCompanyId) {
+      return { success: false, error: "Keluar dulu dari mode company context sebelum ubah status company." }
+    }
 
     const parsed = setCompanyStatusSchema.safeParse({
       companyId: formData.get("companyId"),
@@ -399,6 +407,10 @@ export async function softDeleteCompanyAction(_state: SetCompanyStatusState, for
   try {
     const session = await auth()
     const actorId = requireSuperAdmin(session as unknown as SessionLike)
+    const actingCompanyId = getActingCompanyId(session as unknown as SessionLike)
+    if (actingCompanyId) {
+      return { success: false, error: "Keluar dulu dari mode company context sebelum soft delete company." }
+    }
 
     const parsed = deleteCompanySchema.safeParse({
       companyId: formData.get("companyId"),
@@ -513,6 +525,10 @@ export async function setUserActiveAction(_state: PlatformUserActionState, formD
   try {
     const session = await auth()
     const actorId = requireSuperAdmin(session as unknown as SessionLike)
+    const actingCompanyId = getActingCompanyId(session as unknown as SessionLike)
+    if (actingCompanyId) {
+      return { success: false, error: "Keluar dulu dari mode company context sebelum ubah status user." }
+    }
 
     const parsed = setUserActiveSchema.safeParse({
       userId: formData.get("userId"),
@@ -563,6 +579,10 @@ export async function resetUserPasswordAction(_state: PlatformUserActionState, f
   try {
     const session = await auth()
     const actorId = requireSuperAdmin(session as unknown as SessionLike)
+    const actingCompanyId = getActingCompanyId(session as unknown as SessionLike)
+    if (actingCompanyId) {
+      return { success: false, error: "Keluar dulu dari mode company context sebelum reset password user." }
+    }
 
     const parsed = resetPasswordSchema.safeParse({
       userId: formData.get("userId"),
