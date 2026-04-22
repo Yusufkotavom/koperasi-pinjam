@@ -3,13 +3,16 @@ import { Building2, Shield, Users } from "lucide-react"
 import { RoleType } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { requireRoles } from "@/lib/roles"
+import { getPlatformContextHistory } from "@/actions/platform-admin"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type SessionLike = { user?: { id?: string; roles?: string[] } } | null
 
 export default async function PlatformPage() {
   const session = await auth()
   requireRoles(session as unknown as SessionLike, [RoleType.SUPER_ADMIN])
+  const contextLogs = await getPlatformContextHistory(10)
 
   return (
     <div className="p-6 space-y-6">
@@ -58,7 +61,44 @@ export default async function PlatformPage() {
           Selalu isi reason, gunakan suspend sebelum delete, dan verifikasi target sebelum eksekusi.
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Riwayat Context Access</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Waktu</TableHead>
+                <TableHead>Aktor</TableHead>
+                <TableHead>Event</TableHead>
+                <TableHead>Company</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {contextLogs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                    Belum ada data.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                contextLogs.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(row.createdAt).toLocaleString("id-ID")}
+                    </TableCell>
+                    <TableCell>{row.actorEmail ?? row.actorName ?? "-"}</TableCell>
+                    <TableCell>{row.event}</TableCell>
+                    <TableCell>{row.companyName ?? row.companySlug ?? "-"}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 }
-

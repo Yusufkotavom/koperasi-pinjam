@@ -54,6 +54,17 @@ export type PlatformCompanyWorkspace = {
   recentPengajuan: Array<{ id: string; nomorPengajuan: string; status: string; createdAt: string; nasabahName: string | null }>
 }
 
+export type PlatformContextLogRow = {
+  id: string
+  actorName: string | null
+  actorEmail: string | null
+  companyId: string | null
+  companyName: string | null
+  companySlug: string | null
+  event: "ENTER_COMPANY_CONTEXT" | "EXIT_COMPANY_CONTEXT"
+  createdAt: string
+}
+
 function requireSuperAdmin(session: SessionLike) {
   return requireRoles(session, [RoleType.SUPER_ADMIN]).userId
 }
@@ -65,6 +76,88 @@ function errorMessage(error: unknown) {
 
 function generateTempPassword() {
   return crypto.randomBytes(9).toString("base64url")
+}
+
+export async function prepareEnterCompanyContext(companyId: string) {
+  const session = await auth()
+  const actorId = requireSuperAdmin(session as unknown as SessionLike)
+
+  if (!companyId) return { error: "Company tidak valid." as const }
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { id: true, name: true, slug: true, status: true },
+  })
+  if (!company) return { error: "Company tidak ditemukan." as const }
+  if (company.status === "DELETED") {
+    return { error: "Company berstatus DELETED. Tidak dapat membuka context operasional." as const }
+  }
+
+  await writeAuditLog({
+    actorId,
+    entityType: "PLATFORM_CONTEXT",
+    entityId: company.id,
+    action: AuditAction.UPDATE,
+    metadata: {
+      event: "ENTER_COMPANY_CONTEXT",
+      companyId: company.id,
+      companyName: company.name,
+      companySlug: company.slug,
+    },
+  })
+
+  return {
+    success: true as const,
+    data: { companyId: company.id, companyName: company.name, companySlug: company.slug },
+  }
+}
+
+export async function logExitCompanyContext() {
+  const session = await auth()
+  const actorId = requireSuperAdmin(session as unknown as SessionLike)
+
+  await writeAuditLog({
+    actorId,
+    entityType: "PLATFORM_CONTEXT",
+    action: AuditAction.UPDATE,
+    metadata: { event: "EXIT_COMPANY_CONTEXT" },
+  })
+
+  return { success: true as const }
+}
+
+export async function getPlatformContextHistory(limit = 12): Promise<PlatformContextLogRow[]> {
+  const session = await auth()
+  requireSuperAdmin(session as unknown as SessionLike)
+
+  const rows = await prisma.auditLog.findMany({
+    where: { entityType: "PLATFORM_CONTEXT" },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(Math.max(limit, 1), 50),
+    include: { actor: { select: { name: true, email: true } } },
+  })
+
+  return rows
+    .map((row) => {
+      const meta = (row.metadata ?? {}) as {
+        event?: string
+        companyId?: string
+        companyName?: string
+        companySlug?: string
+      }
+      if (meta.event !== "ENTER_COMPANY_CONTEXT" && meta.event !== "EXIT_COMPANY_CONTEXT") return null
+      return {
+        id: row.id,
+        actorName: row.actor?.name ?? null,
+        actorEmail: row.actor?.email ?? null,
+        companyId: meta.companyId ?? null,
+        companyName: meta.companyName ?? null,
+        companySlug: meta.companySlug ?? null,
+        event: meta.event,
+        createdAt: row.createdAt.toISOString(),
+      }
+    })
+    .filter((row): row is PlatformContextLogRow => row !== null)
 }
 
 const listCompaniesSchema = z.object({

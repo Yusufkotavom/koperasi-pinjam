@@ -24,6 +24,7 @@ import { ChevronsUpDownIcon, BadgeCheckIcon, BellIcon, Building2, LogOutIcon, Se
 import { signOut, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { logExitCompanyContext } from "@/actions/platform-admin"
 
 export function NavUser({
   user,
@@ -89,6 +90,7 @@ export function NavUser({
                 <DropdownMenuItem
                   onSelect={async (e) => {
                     e.preventDefault()
+                    await logExitCompanyContext()
                     await update({ clearActingCompany: true })
                     router.push("/platform")
                     router.refresh()

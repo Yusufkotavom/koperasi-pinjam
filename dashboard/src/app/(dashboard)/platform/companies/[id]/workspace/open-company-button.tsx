@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Building2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { prepareEnterCompanyContext } from "@/actions/platform-admin"
 import { Button } from "@/components/ui/button"
 
 export function OpenCompanyButton(props: { companyId: string; companyName: string }) {
@@ -16,7 +17,12 @@ export function OpenCompanyButton(props: { companyId: string; companyName: strin
     <Button
       onClick={() => {
         startTransition(async () => {
-          await update({ actingCompanyId: props.companyId })
+          const prep = await prepareEnterCompanyContext(props.companyId)
+          if ("error" in prep) {
+            toast.error(prep.error)
+            return
+          }
+          await update({ actingCompanyId: prep.data.companyId })
           toast.success(`Masuk ke konteks ${props.companyName}`)
           router.push("/dashboard")
           router.refresh()
