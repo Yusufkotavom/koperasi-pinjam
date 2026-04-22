@@ -3,10 +3,10 @@ import { getToken } from "next-auth/jwt"
 
 // Route protection map: path prefix → allowed roles
 const routePermissions: Record<string, string[]> = {
-  "/laporan": ["MANAGER", "PIMPINAN", "AKUNTANSI"],
-  "/settings": ["ADMIN", "PIMPINAN"],
-  "/kas": ["TELLER", "ADMIN", "MANAGER", "PIMPINAN"],
-  "/pencairan": ["ADMIN", "MANAGER", "PIMPINAN", "TELLER"],
+  "/laporan": ["SUPER_ADMIN", "OWNER", "MANAGER", "PIMPINAN", "AKUNTANSI", "ADMIN"],
+  "/settings": ["SUPER_ADMIN", "OWNER", "ADMIN", "PIMPINAN"],
+  "/kas": ["SUPER_ADMIN", "OWNER", "TELLER", "ADMIN", "MANAGER", "PIMPINAN"],
+  "/pencairan": ["SUPER_ADMIN", "OWNER", "ADMIN", "MANAGER", "PIMPINAN", "TELLER"],
 }
 
 // Helper: cek apakah user minimal punya 1 role yang diizinkan

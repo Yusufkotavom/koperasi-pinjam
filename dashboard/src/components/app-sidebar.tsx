@@ -4,7 +4,7 @@ import * as React from "react"
 import {
   LayoutDashboard, Users, FileText,
   FileBarChart, AlertTriangle, Building2, Landmark,
-  LifeBuoy, Send
+  BookOpen, LifeBuoy, Settings
 } from "lucide-react"
 import type { AccountingMode } from "@/lib/accounting-mode"
 
@@ -25,13 +25,14 @@ import {
 const baseNavMain = [
   {
     title: "Overview",
-    url: "/",
+    url: "/dashboard",
     icon: <LayoutDashboard />,
     isActive: true,
     items: [
-      { title: "Dashboard", url: "/" },
+      { title: "Dashboard", url: "/dashboard" },
       { title: "Roadmap Fitur", url: "/roadmap" },
       { title: "Panduan Pengguna", url: "/docs/panduan-pengguna" },
+      { title: "Panduan Agent", url: "/docs/using-superpowers" },
     ],
   },
   {
@@ -87,18 +88,32 @@ const baseNavMain = [
       { title: "Laba Rugi", url: "/laporan/laba-rugi" },
     ],
   },
+  {
+    title: "Settings",
+    url: "/settings",
+    icon: <Settings />,
+    items: [
+      { title: "Ringkasan", url: "/settings" },
+      { title: "Profil", url: "/settings/profile" },
+      { title: "Company", url: "/settings/company" },
+      { title: "User Company", url: "/settings/users" },
+      { title: "Akuntansi", url: "/settings/accounting" },
+      { title: "Ranking Risiko", url: "/settings/ranking" },
+      { title: "Database", url: "/settings/maintenance" },
+    ],
+  },
 ]
 
 const navSecondary = [
   {
-    title: "Support",
-    url: "#",
-    icon: <LifeBuoy />,
+    title: "Panduan",
+    url: "/docs/panduan-pengguna",
+    icon: <BookOpen />,
   },
   {
-    title: "Feedback",
-    url: "#",
-    icon: <Send />,
+    title: "Support",
+    url: "/docs/using-superpowers",
+    icon: <LifeBuoy />,
   },
 ]
 
@@ -107,6 +122,8 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
     name: string
     email: string
     avatar?: string
+    roles?: string[]
+    companyId?: string | null
   }
   company?: {
     name: string
@@ -117,6 +134,9 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 export function AppSidebar({ user, company, accountingMode, ...props }: AppSidebarProps) {
+  const isCompanyUser = Boolean(user.companyId)
+  const canManageSettings = user.roles?.some((role) => ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) ?? false
+
   return (
     <Sidebar {...props} variant="inset">
       <SidebarHeader>
@@ -148,6 +168,17 @@ export function AppSidebar({ user, company, accountingMode, ...props }: AppSideb
       <SidebarContent>
         <NavMain
           items={baseNavMain.map((item) => {
+            if (item.title === "Settings") {
+              return {
+                ...item,
+                items: item.items.filter((navItem) => {
+                  if (navItem.title === "User Company") return isCompanyUser
+                  if (["Akuntansi", "Database"].includes(navItem.title)) return canManageSettings
+                  return true
+                }),
+              }
+            }
+
             if (item.title !== "Akuntansi") return item
 
             return {

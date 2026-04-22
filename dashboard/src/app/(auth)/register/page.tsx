@@ -94,7 +94,7 @@ export default function RegisterPage() {
 
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Daftar Akun</h2>
-            <p className="text-muted-foreground mt-2">Buat akun admin untuk mulai setup aplikasi</p>
+            <p className="text-muted-foreground mt-2">Buat company dan akun owner untuk mulai setup aplikasi</p>
           </div>
 
           <Card>
@@ -121,6 +121,18 @@ export default function RegisterPage() {
                       disabled={isSubmitting}
                     />
                     <FieldError>{state.errors?.name?.[0]}</FieldError>
+                  </Field>
+                  <Field data-invalid={!!state.errors?.companyName}>
+                    <FieldLabel htmlFor="companyName">Nama Koperasi</FieldLabel>
+                    <Input
+                      id="companyName"
+                      name="companyName"
+                      placeholder="Koperasi Demo Sejahtera"
+                      autoComplete="organization"
+                      aria-invalid={!!state.errors?.companyName}
+                      disabled={isSubmitting}
+                    />
+                    <FieldError>{state.errors?.companyName?.[0]}</FieldError>
                   </Field>
                   <Field data-invalid={!!state.errors?.email}>
                     <FieldLabel htmlFor="email">Email</FieldLabel>

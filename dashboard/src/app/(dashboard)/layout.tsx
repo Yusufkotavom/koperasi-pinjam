@@ -17,6 +17,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     name: session.user?.name ?? "User",
     email: session.user?.email ?? "-",
     avatar: undefined as string | undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    roles: ((session.user as any)?.roles ?? []) as string[],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    companyId: (session.user as any)?.companyId as string | null | undefined,
   }
 
   return (

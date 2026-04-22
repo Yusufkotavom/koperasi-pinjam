@@ -30,7 +30,7 @@ export default function PanduanPenggunaPage() {
           <TabsTrigger value="pembayaran" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border">Pembayaran</TabsTrigger>
           <TabsTrigger value="kas" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border">Arus Kas</TabsTrigger>
           <TabsTrigger value="laporan" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border">Laporan</TabsTrigger>
-          <TabsTrigger value="settings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border">Settings</TabsTrigger>
+          <TabsTrigger value="settings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border">Settings & User</TabsTrigger>
         </TabsList>
 
         {/* --- OVERVIEW --- */}
@@ -296,15 +296,23 @@ export default function PanduanPenggunaPage() {
                 />
               </div>
               <div className="space-y-4">
-                <h4 className="font-semibold underline underline-offset-4">Konfigurasi Penting</h4>
+                <h4 className="font-semibold underline underline-offset-4">Struktur Settings Baru</h4>
                 <div className="grid md:grid-cols-2 gap-6 text-sm">
                   <div className="space-y-2">
-                    <p className="font-bold">Mode Akuntansi</p>
-                    <p className="text-muted-foreground">Pilih &quot;Simple&quot; untuk pencatatan dasar atau &quot;Proper&quot; untuk fitur akuntansi lengkap (Double Entry).</p>
+                    <p className="font-bold">Company</p>
+                    <p className="text-muted-foreground">Kelola nama koperasi, logo, alamat, kontak, dan zona waktu untuk dokumen operasional.</p>
                   </div>
                   <div className="space-y-2">
-                    <p className="font-bold">Ranking Risiko</p>
-                    <p className="text-muted-foreground">Atur ambang batas keterlambatan hari untuk menentukan kategori lancar hingga macet.</p>
+                    <p className="font-bold">User Company</p>
+                    <p className="text-muted-foreground">Owner/Admin dapat membuat user baru sebagai Admin, Teller, Kolektor, Surveyor, Manager, Pimpinan, atau Akuntansi.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-bold">Akuntansi</p>
+                    <p className="text-muted-foreground">Pilih Simple untuk pencatatan dasar atau Proper untuk double-entry dan COA.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="font-bold">Database</p>
+                    <p className="text-muted-foreground">Cleanup, import demo data, dan backfill jurnal ada di halaman Database dengan akses terbatas.</p>
                   </div>
                 </div>
               </div>

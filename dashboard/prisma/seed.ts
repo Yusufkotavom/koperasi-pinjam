@@ -13,6 +13,7 @@ async function createUser(params: {
   name: string
   password: string
   roles: RoleType[]
+  companyId?: string
 }) {
   const hashedPassword = await bcrypt.hash(params.password, 12)
   return prisma.user.create({
@@ -20,6 +21,7 @@ async function createUser(params: {
       email: params.email,
       name: params.name,
       password: hashedPassword,
+      companyId: params.companyId,
       isActive: true,
       roles: {
         create: params.roles.map((role) => ({ role })),
@@ -49,6 +51,7 @@ async function cleanDatabase() {
   await prisma.account.deleteMany()
   await prisma.appSetting.deleteMany()
   await prisma.userRole.deleteMany()
+  await prisma.company.deleteMany()
   await prisma.user.deleteMany()
 }
 
@@ -57,10 +60,31 @@ async function main() {
   await cleanDatabase()
 
   await createUser({
+    email: "super@koperasi.id",
+    name: "Super Admin",
+    password: "super123",
+    roles: ["SUPER_ADMIN"],
+  })
+
+  const admin = await createUser({
     email: "admin@koperasi.id",
     name: "Administrator",
     password: "admin123",
-    roles: ["ADMIN", "PIMPINAN"],
+    roles: ["OWNER", "ADMIN"],
+  })
+
+  const company = await prisma.company.create({
+    data: {
+      name: "Koperasi Demo Sejahtera",
+      slug: "koperasi-demo-sejahtera",
+      email: "admin@koperasi.id",
+      ownerId: admin.id,
+    },
+  })
+
+  await prisma.user.update({
+    where: { id: admin.id },
+    data: { companyId: company.id },
   })
 
   await createUser({
@@ -68,6 +92,7 @@ async function main() {
     name: "Teller",
     password: "teller123",
     roles: ["TELLER"],
+    companyId: company.id,
   })
 
   await createUser({
@@ -75,6 +100,7 @@ async function main() {
     name: "Manager",
     password: "manager123",
     roles: ["MANAGER"],
+    companyId: company.id,
   })
 
   await prisma.kelompok.createMany({
@@ -105,6 +131,7 @@ async function main() {
 
   console.log("✅ Basic seed done.")
   console.log("Demo login:")
+  console.log("  - super@koperasi.id / super123")
   console.log("  - admin@koperasi.id / admin123")
   console.log("  - teller@koperasi.id / teller123")
   console.log("  - manager@koperasi.id / manager123")
@@ -121,4 +148,3 @@ main()
     await pool.end()
     process.exit(1)
   })
-

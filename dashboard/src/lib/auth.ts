@@ -36,7 +36,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email },
-          include: { roles: true },
+          include: {
+            roles: true,
+            company: { select: { id: true, name: true, slug: true } },
+          },
         })
 
         if (!user || !user.isActive) return null
@@ -49,6 +52,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name,
           email: user.email,
           roles: user.roles.map((r: { role: string }) => r.role),
+          companyId: user.companyId,
+          companyName: user.company?.name ?? null,
+          companySlug: user.company?.slug ?? null,
         }
       },
     }),
@@ -59,6 +65,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // @ts-expect-error custom field
         token.roles = user.roles
         token.id = user.id
+        // @ts-expect-error custom field
+        token.companyId = user.companyId
+        // @ts-expect-error custom field
+        token.companyName = user.companyName
+        // @ts-expect-error custom field
+        token.companySlug = user.companySlug
       }
       return token
     },
@@ -67,6 +79,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // @ts-expect-error custom field
         session.user.roles = token.roles
         session.user.id = token.id as string
+        // @ts-expect-error custom field
+        session.user.companyId = token.companyId as string | null
+        // @ts-expect-error custom field
+        session.user.companyName = token.companyName as string | null
+        // @ts-expect-error custom field
+        session.user.companySlug = token.companySlug as string | null
       }
       return session
     },

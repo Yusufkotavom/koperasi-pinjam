@@ -104,7 +104,7 @@ function checkedScopes(formData: FormData) {
 
 async function requireAdmin() {
   const session = await auth()
-  const { userId } = requireRoles(session as unknown as SessionLike, [RoleType.ADMIN])
+  const { userId } = requireRoles(session as unknown as SessionLike, [RoleType.SUPER_ADMIN, RoleType.OWNER, RoleType.ADMIN])
   return userId
 }
 
@@ -147,6 +147,7 @@ async function cleanupScopes(scopes: CleanupScope[]) {
   }
   if (selected.has("USERS")) {
     await prisma.userRole.deleteMany()
+    await prisma.company.deleteMany()
     await prisma.user.deleteMany()
   }
 }
@@ -183,6 +184,7 @@ async function upsertDemoUser(params: {
   name: string
   password: string
   roles: RoleType[]
+  companyId?: string
 }) {
   const hashedPassword = await bcrypt.hash(params.password, 12)
   const user = await prisma.user.upsert({
@@ -190,12 +192,14 @@ async function upsertDemoUser(params: {
     update: {
       name: params.name,
       password: hashedPassword,
+      companyId: params.companyId,
       isActive: true,
     },
     create: {
       email: params.email,
       name: params.name,
       password: hashedPassword,
+      companyId: params.companyId,
       isActive: true,
     },
   })
@@ -207,6 +211,32 @@ async function upsertDemoUser(params: {
   })
 
   return user
+}
+
+async function ensureDemoCompany(ownerId: string) {
+  const company = await prisma.company.upsert({
+    where: { slug: "koperasi-demo-sejahtera" },
+    update: {
+      name: "Koperasi Demo Sejahtera",
+      email: "admin@koperasi.id",
+      ownerId,
+      isActive: true,
+    },
+    create: {
+      name: "Koperasi Demo Sejahtera",
+      slug: "koperasi-demo-sejahtera",
+      email: "admin@koperasi.id",
+      ownerId,
+      isActive: true,
+    },
+  })
+
+  await prisma.user.update({
+    where: { id: ownerId },
+    data: { companyId: company.id },
+  })
+
+  return company
 }
 
 async function ensureDemoFoundation() {
@@ -560,25 +590,29 @@ async function importDemoData() {
     email: "admin@koperasi.id",
     name: "Administrator",
     password: "admin123",
-    roles: [RoleType.ADMIN, RoleType.PIMPINAN],
+    roles: [RoleType.OWNER, RoleType.ADMIN],
   })
+  const company = await ensureDemoCompany(admin.id)
   await upsertDemoUser({
     email: "manager@koperasi.id",
     name: "Manager Demo",
     password: "manager123",
     roles: [RoleType.MANAGER],
+    companyId: company.id,
   })
   await upsertDemoUser({
     email: "teller@koperasi.id",
     name: "Teller Demo",
     password: "teller123",
     roles: [RoleType.TELLER],
+    companyId: company.id,
   })
   await upsertDemoUser({
     email: "akuntansi@koperasi.id",
     name: "Akuntansi Demo",
     password: "akuntansi123",
     roles: [RoleType.AKUNTANSI],
+    companyId: company.id,
   })
   await ensureDemoOpeningCapital(admin.id)
 

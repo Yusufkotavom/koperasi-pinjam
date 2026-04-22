@@ -14,6 +14,8 @@ datasource db {
 // ========================
 
 enum RoleType {
+  SUPER_ADMIN
+  OWNER
   ADMIN
   TELLER
   KOLEKTOR
@@ -33,11 +35,32 @@ model UserRole {
   @@map("user_roles")
 }
 
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  address   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  ownerId   String
+  owner     User     @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  users     User[]   @relation("UserCompany")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@map("companies")
+}
+
 model User {
   id        String     @id @default(cuid())
   name      String
   email     String     @unique
   password  String
+  companyId String?
+  company   Company?   @relation("UserCompany", fields: [companyId], references: [id], onDelete: SetNull)
+  ownedCompanies Company[] @relation("CompanyOwner")
   roles     UserRole[]
   isActive  Boolean    @default(true)
   createdAt DateTime   @default(now())
@@ -57,6 +80,7 @@ model User {
   kolektorTargets        KolektorTarget[]  @relation("KolektorTargetUser")
   notifikasi             Notifikasi[]      @relation("UserNotifikasi")
 
+  @@index([companyId])
   @@map("users")
 }
 
