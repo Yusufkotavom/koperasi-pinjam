@@ -196,7 +196,7 @@ Field wajib:
 - `Tenor Type`: `BULANAN` atau `MINGGUAN` (satuan periode angsuran).
 - `Plafon Diajukan (Rp)`: nominal pinjaman yang diminta (min 1, max 100 juta).
 - `Tenor`: jumlah periode (min 1, max 36).
-- `Bunga Flat/per periode (%)`: bunga flat per bulan atau per minggu (min 0.1, max 5).
+- `Bunga Flat/per periode (%)`: bunga flat per bulan atau per minggu (min 0).
 - `Tujuan Pinjaman`: wajib, min 5 karakter.
 
 Field opsional:
@@ -217,6 +217,8 @@ Di halaman pengajuan ada kartu “Simulasi Angsuran” yang menghitung:
 
 Catatan:
 
+- Ketiga nilai simulasi (`Angsuran Pokok`, `Bunga Flat`, `Total Angsuran`) dapat diedit langsung.
+- Presisi input simulasi dibatasi maksimal 2 angka desimal.
 - Ini simulasi flat sederhana sesuai input, bukan amortisasi menurun.
 
 ## 7) Transaksi: Approval Pengajuan
@@ -242,6 +244,7 @@ Field pencairan:
 - `Potongan Admin (Rp)`: biaya administrasi (boleh 0).
 - `Potongan Provisi (Rp)`: biaya provisi (boleh 0).
 - `Tanggal Pencairan`: tanggal real pencairan.
+- `Sumber Dana`: `Kas Tunai` atau `Kas Bank` (wajib cukup saldo).
 
 Cara baca “Nilai Bersih Diterima”:
 
@@ -251,6 +254,22 @@ Setelah pencairan sukses:
 
 - Sistem membuat `No. Kontrak`.
 - Anda akan diarahkan ke dokumen pencairan.
+
+### 8.1 Pembatalan Pencairan (Reversal, Bukan Hapus)
+
+Menu: `Pengajuan Pinjaman` → buka detail pengajuan status `DICAIRKAN`.
+
+Aturan:
+
+- Hanya role `ADMIN`, `MANAGER`, `PIMPINAN` yang bisa membatalkan.
+- Wajib isi alasan minimal 10 karakter.
+- Tidak bisa dibatalkan jika sudah ada pembayaran angsuran.
+
+Efek saat pembatalan:
+
+- Sistem membuat transaksi kas masuk kategori `PEMBATALAN_PENCAIRAN`.
+- Sistem membuat jurnal `REVERSAL` (double-entry), bukan menghapus jurnal lama.
+- Pinjaman ditutup (`LUNAS`, sisa pinjaman 0) dan pengajuan ditandai selesai.
 
 ## 9) Transaksi: Pembayaran Angsuran
 

@@ -139,8 +139,8 @@ export default function PanduanPenggunaPage() {
                 </div>
                 <div className="grid md:grid-cols-2 gap-4 text-sm">
                   <div className="border p-3 rounded-lg">
-                    <span className="font-bold block mb-1">Simulasi Otomatis</span>
-                    Sistem akan menghitung angsuran pokok dan bunga secara real-time saat Anda mengisi plafon dan tenor.
+                    <span className="font-bold block mb-1">Simulasi Fleksibel</span>
+                    Angsuran Pokok, Bunga Flat, dan Total Angsuran dapat disesuaikan langsung pada kartu simulasi (maksimal 2 angka desimal).
                   </div>
                   <div className="border p-3 rounded-lg">
                     <span className="font-bold block mb-1">Dokumen Jaminan</span>
@@ -163,6 +163,27 @@ export default function PanduanPenggunaPage() {
                   <li className="flex gap-2">
                     <span className="bg-orange-100 text-orange-700 size-5 flex items-center justify-center rounded-full font-bold shrink-0">3</span>
                     <span>Jika disetujui, dana dapat dicairkan melalui modul Pencairan.</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-4 border-t pt-8">
+                <h3 className="text-lg font-semibold">3. Pembatalan Pencairan (Jika Terjadi Kesalahan)</h3>
+                <p className="text-sm text-muted-foreground">
+                  Pembatalan pencairan dilakukan dari halaman detail pengajuan berstatus Dicairkan. Sistem tidak menghapus data, tetapi membuat reversal agar jejak audit tetap aman.
+                </p>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex gap-2">
+                    <span className="bg-amber-100 text-amber-700 size-5 flex items-center justify-center rounded-full font-bold shrink-0">1</span>
+                    <span>Isi alasan pembatalan minimal 10 karakter.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="bg-amber-100 text-amber-700 size-5 flex items-center justify-center rounded-full font-bold shrink-0">2</span>
+                    <span>Hanya role Admin/Manager/Pimpinan yang bisa mengeksekusi.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="bg-amber-100 text-amber-700 size-5 flex items-center justify-center rounded-full font-bold shrink-0">3</span>
+                    <span>Pembatalan otomatis ditolak bila sudah ada pembayaran angsuran pada pinjaman tersebut.</span>
                   </li>
                 </ul>
               </div>
