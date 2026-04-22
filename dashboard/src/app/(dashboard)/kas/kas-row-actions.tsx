@@ -30,14 +30,19 @@ type KasKategori = {
   jenis: "MASUK" | "KELUAR"
 }
 
+function getLocalDateInputValue(date: Date) {
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, "0")
+  const dd = String(date.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export function KasRowActions({ data, kategoriList }: { data: KasData; kategoriList: KasKategori[] }) {
   const router = useRouter()
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  const defaultDateStr = data.tanggal instanceof Date 
-        ? data.tanggal.toISOString().split("T")[0] 
-        : new Date(data.tanggal).toISOString().split("T")[0]
+  const defaultDateStr = getLocalDateInputValue(data.tanggal instanceof Date ? data.tanggal : new Date(data.tanggal))
 
   const [tanggal, setTanggal] = useState(defaultDateStr)
   const [jenis, setJenis] = useState(data.jenis)

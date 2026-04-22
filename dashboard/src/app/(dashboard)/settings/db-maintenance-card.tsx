@@ -43,7 +43,7 @@ export function DbMaintenanceCard({ canEdit }: { canEdit: boolean }) {
       <CardHeader>
         <CardTitle>Maintenance Database</CardTitle>
         <CardDescription>
-          Cleanup data operasional atau import data demo lengkap. Fitur ini hanya untuk Admin.
+          Cleanup/reset hanya berlaku untuk data company yang sedang aktif (tenant saat ini). Fitur ini hanya untuk Admin.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6 xl:grid-cols-3">
@@ -53,7 +53,7 @@ export function DbMaintenanceCard({ canEdit }: { canEdit: boolean }) {
         >
           <div>
             <p className="font-semibold text-destructive">Cleanup DB</p>
-            <p className="text-sm text-muted-foreground">Pilih scope yang akan dibersihkan, atau gunakan Clean All.</p>
+            <p className="text-sm text-muted-foreground">Pilih scope yang akan dibersihkan untuk company aktif, atau gunakan Clean All.</p>
           </div>
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             {[
@@ -71,7 +71,7 @@ export function DbMaintenanceCard({ canEdit }: { canEdit: boolean }) {
           <Separator />
           <label className="flex items-center gap-2 text-sm font-medium">
             <input type="checkbox" name="cleanAll" className="size-4" />
-            Clean all data
+            Clean all data (company aktif)
           </label>
           <Input name="confirmation" placeholder="Ketik BERSIHKAN" />
           <Button type="submit" variant="destructive" disabled={isPending}>Jalankan Cleanup</Button>

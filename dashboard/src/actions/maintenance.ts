@@ -17,15 +17,13 @@ import { prisma } from "@/lib/prisma"
 import { requireRoles } from "@/lib/roles"
 import { requireCompanyRoles } from "@/lib/tenant"
 
-type CleanupScope = "APPROVAL_AUDIT" | "NOTIFIKASI" | "TRANSAKSI" | "MASTER" | "AKUNTANSI" | "USERS"
+type CleanupScope = "NOTIFIKASI" | "TRANSAKSI" | "MASTER" | "AKUNTANSI"
 
 const ALL_SCOPES: CleanupScope[] = [
-  "APPROVAL_AUDIT",
   "NOTIFIKASI",
   "TRANSAKSI",
   "MASTER",
   "AKUNTANSI",
-  "USERS",
 ]
 
 const DEFAULT_ACCOUNTS = DEFAULT_ACCOUNTING_ACCOUNTS
@@ -98,7 +96,6 @@ function checkedScopes(formData: FormData) {
     .getAll("scope")
     .filter((value): value is CleanupScope => ALL_SCOPES.includes(value as CleanupScope))
 
-  if (scopes.includes("USERS")) return ALL_SCOPES
   if (scopes.includes("MASTER") && !scopes.includes("TRANSAKSI")) scopes.push("TRANSAKSI")
   return scopes
 }
@@ -116,10 +113,6 @@ async function requireAdmin() {
 async function cleanupScopes(companyId: string, scopes: CleanupScope[]) {
   const selected = new Set(scopes)
 
-  if (selected.has("APPROVAL_AUDIT")) {
-    // NOTE: AuditLog & ApprovalLog are currently global (no companyId). For SaaS safety
-    // we don't allow tenant admins to purge global logs from this screen.
-  }
   if (selected.has("NOTIFIKASI")) {
     await prisma.notifikasi.deleteMany({ where: { companyId } })
   }
@@ -149,11 +142,6 @@ async function cleanupScopes(companyId: string, scopes: CleanupScope[]) {
     }
     await prisma.account.deleteMany({ where: { companyId } })
     await prisma.companySetting.deleteMany({ where: { companyId } })
-  }
-  if (selected.has("USERS")) {
-    // For SaaS: do not allow tenant-level maintenance to delete users/companies.
-    // Platform-level actions live under /platform (SUPER_ADMIN).
-    throw new Error("Scope USERS hanya tersedia untuk Super Admin di menu Platform.")
   }
 }
 
@@ -707,7 +695,7 @@ export async function cleanupDatabaseAction(formData: FormData): Promise<Mainten
     })
     await cleanupScopes(companyId, scopes)
     revalidateOperationalPaths()
-    return { success: true, message: "Cleanup database selesai." }
+    return { success: true, message: "Cleanup database company aktif selesai." }
   } catch (error) {
     console.error("[maintenance] cleanup failed", error)
     return { success: false, error: errorMessage(error) }
