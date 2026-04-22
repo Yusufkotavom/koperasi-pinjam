@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { ArrowLeft } from "lucide-react"
 import { ApprovalForm } from "./approval-form"
+import { BatalkanPencairanCard } from "./batalkan-pencairan-card"
 import { getCompanyInfo } from "@/actions/settings"
 import { formatDateId, normalizeTimeZone } from "@/lib/datetime"
 
@@ -205,6 +206,12 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
                 </div>
               </CardContent>
             </Card>
+          )}
+          {pengajuan.status === "DICAIRKAN" && pengajuan.pinjaman && (
+            <BatalkanPencairanCard
+              pengajuanId={pengajuan.id}
+              hasPembayaran={pengajuan.pinjaman._count.pembayaran > 0}
+            />
           )}
         </div>
       </div>

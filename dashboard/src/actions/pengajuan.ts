@@ -10,8 +10,9 @@ import { requireRoles } from "@/lib/roles"
 import { writeApprovalLog, writeAuditLog } from "@/lib/audit"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
-import { ensureAccountingAccounts, getCashBalanceByJenis, postPencairanJournal } from "@/lib/accounting"
+import { ensureAccountingAccounts, getCashBalanceByJenis, postJournalEntry, postPencairanJournal } from "@/lib/accounting"
 import { requireCompanyId } from "@/lib/tenant"
+import { z } from "zod"
 
 // ========================
 // PENGAJUAN
@@ -67,7 +68,12 @@ export async function getPengajuanById(id: string) {
       kelompok: true,
       surveyor: { select: { name: true } },
       approver: { select: { name: true } },
-      pinjaman: { include: { jadwalAngsuran: { take: 5, orderBy: { angsuranKe: "asc" } } } },
+      pinjaman: {
+        include: {
+          jadwalAngsuran: { take: 5, orderBy: { angsuranKe: "asc" } },
+          _count: { select: { pembayaran: { where: { isBatalkan: false } } } },
+        },
+      },
     },
   })
 
@@ -365,4 +371,176 @@ export async function getPengajuanSiapCair() {
   })
 
   return serializeData(result)
+}
+
+const batalkanPencairanSchema = z.object({
+  pengajuanId: z.string().min(1),
+  alasan: z.string().trim().min(10, "Alasan minimal 10 karakter"),
+})
+
+export async function batalkanPencairanPinjaman(input: unknown) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
+
+  let userId: string
+  try {
+    const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+    userId = required.userId
+  } catch {
+    return { error: "Hanya admin/manager/pimpinan yang dapat membatalkan pencairan." }
+  }
+
+  const parsed = batalkanPencairanSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+
+  const { pengajuanId, alasan } = parsed.data
+
+  const pengajuan = await prisma.pengajuan.findFirst({
+    where: { id: pengajuanId, companyId },
+    include: {
+      pinjaman: {
+        include: {
+          _count: { select: { pembayaran: { where: { isBatalkan: false } } } },
+        },
+      },
+    },
+  })
+
+  if (!pengajuan || !pengajuan.pinjaman) return { error: "Data pencairan pinjaman tidak ditemukan." }
+  if (pengajuan.status !== "DICAIRKAN") {
+    return { error: "Hanya pengajuan berstatus DICAIRKAN yang bisa dibatalkan." }
+  }
+  if (pengajuan.pinjaman._count.pembayaran > 0) {
+    return { error: "Pencairan tidak dapat dibatalkan karena sudah ada pembayaran angsuran." }
+  }
+
+  const pinjaman = pengajuan.pinjaman
+  const nilaiCair = Number(pinjaman.nilaiCair)
+  const potonganAdmin = Number(pinjaman.potonganAdmin) + Number(pinjaman.potonganProvisi)
+
+  const ensured = await ensureKasKategori({ jenis: "MASUK", kategori: "PEMBATALAN_PENCAIRAN" })
+  if ("error" in ensured) return { error: ensured.error }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const existingReversal = await tx.journalEntry.findUnique({
+        where: {
+          sourceType_sourceId: {
+            sourceType: "REVERSAL",
+            sourceId: pinjaman.id,
+          },
+        },
+        select: { id: true },
+      })
+      if (existingReversal) throw new Error("Pencairan sudah dibatalkan sebelumnya.")
+
+      const kasPencairan = await tx.kasTransaksi.findFirst({
+        where: {
+          companyId,
+          referensiId: pinjaman.id,
+          jenis: "KELUAR",
+          kategoriKey: "PENCAIRAN",
+        },
+        orderBy: { createdAt: "desc" },
+      })
+      if (!kasPencairan) throw new Error("Transaksi kas pencairan tidak ditemukan.")
+
+      await tx.kasTransaksi.create({
+        data: {
+          companyId,
+          jenis: "MASUK",
+          kategoriId: ensured.kategoriId,
+          kategoriKey: ensured.key,
+          deskripsi: `Pembatalan pencairan ${pinjaman.nomorKontrak}`,
+          jumlah: new Prisma.Decimal(nilaiCair),
+          kasJenis: kasPencairan.kasJenis,
+          inputOlehId: userId,
+          tanggal: new Date(),
+          referensiId: pinjaman.id,
+        },
+      })
+
+      await postJournalEntry(
+        tx,
+        {
+          companyId,
+          sourceType: "REVERSAL",
+          sourceId: pinjaman.id,
+          entryDate: new Date(),
+          description: `Pembatalan pencairan ${pinjaman.nomorKontrak}`,
+          postedById: userId,
+          lines: [
+            {
+              accountCode: kasPencairan.kasJenis === "BANK" ? "CASH_BANK" : "CASH_TUNAI",
+              debit: nilaiCair,
+              memo: "Kas masuk pembatalan pencairan",
+            },
+            { accountCode: "PENDAPATAN_ADMIN", debit: potonganAdmin, memo: "Reversal admin/provisi" },
+            { accountCode: "PIUTANG_PINJAMAN", credit: Number(pinjaman.pokokPinjaman), memo: "Reversal piutang pinjaman" },
+          ],
+        },
+        { ensureAccounts: false },
+      )
+
+      await tx.jadwalAngsuran.updateMany({
+        where: { companyId, pinjamanId: pinjaman.id },
+        data: {
+          sudahDibayar: true,
+          tanggalBayar: new Date(),
+        },
+      })
+
+      await tx.pinjaman.update({
+        where: { id: pinjaman.id },
+        data: {
+          status: "LUNAS",
+          sisaPinjaman: new Prisma.Decimal(0),
+        },
+      })
+
+      const note = `[PEMBATALAN PENCAIRAN] ${alasan}`
+      const previous = pengajuan.catatanApproval?.trim()
+      const nextNote = previous ? `${previous}\n${note}` : note
+
+      await tx.pengajuan.update({
+        where: { id: pengajuanId },
+        data: {
+          status: "SELESAI",
+          catatanApproval: nextNote,
+        },
+      })
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Gagal membatalkan pencairan."
+    return { error: message }
+  }
+
+  revalidatePath("/pengajuan")
+  revalidatePath(`/pengajuan/${pengajuanId}`)
+  revalidatePath("/pencairan")
+  revalidatePath("/pembayaran")
+  revalidatePath("/monitoring/tunggakan")
+  revalidatePath("/kas")
+  revalidatePath("/laporan/buku-besar")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/laba-rugi")
+
+  await writeAuditLog({
+    actorId: userId,
+    entityType: "PINJAMAN",
+    entityId: pinjaman.id,
+    action: "UPDATE",
+    metadata: {
+      event: "CANCEL_DISBURSEMENT",
+      pengajuanId,
+      nomorKontrak: pinjaman.nomorKontrak,
+      nilaiCair,
+      alasan,
+    },
+  })
+
+  return { success: true }
 }
