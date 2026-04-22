@@ -24,7 +24,11 @@ export default async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET
+  const token =
+    (await getToken({ req, secret })) ??
+    (await getToken({ req, secret, cookieName: "__Secure-authjs.session-token" })) ??
+    (await getToken({ req, secret, cookieName: "authjs.session-token" }))
   if (!token) {
     return NextResponse.redirect(new URL("/login", req.url))
   }
