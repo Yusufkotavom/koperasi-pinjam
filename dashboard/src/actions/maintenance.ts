@@ -15,6 +15,7 @@ import {
 } from "@/lib/accounting"
 import { prisma } from "@/lib/prisma"
 import { requireRoles } from "@/lib/roles"
+import { requireCompanyRoles } from "@/lib/tenant"
 
 type CleanupScope = "APPROVAL_AUDIT" | "NOTIFIKASI" | "TRANSAKSI" | "MASTER" | "AKUNTANSI" | "USERS"
 
@@ -83,7 +84,7 @@ const DEMO_NAMES = [
   "Farhan Akbar",
 ]
 
-type SessionLike = { user?: { id?: string; roles?: string[] } } | null
+type SessionLike = { user?: { id?: string; roles?: string[]; companyId?: string | null } } | null
 type MaintenanceActionResult = { success: true; message: string } | { success: false; error: string }
 
 function errorMessage(error: unknown) {
@@ -104,51 +105,55 @@ function checkedScopes(formData: FormData) {
 
 async function requireAdmin() {
   const session = await auth()
-  const { userId } = requireRoles(session as unknown as SessionLike, [RoleType.SUPER_ADMIN, RoleType.OWNER, RoleType.ADMIN])
-  return userId
+  const { userId, companyId } = requireCompanyRoles(session as unknown as SessionLike, [
+    RoleType.SUPER_ADMIN,
+    RoleType.OWNER,
+    RoleType.ADMIN,
+  ])
+  return { userId, companyId }
 }
 
-async function cleanupScopes(scopes: CleanupScope[]) {
+async function cleanupScopes(companyId: string, scopes: CleanupScope[]) {
   const selected = new Set(scopes)
 
   if (selected.has("APPROVAL_AUDIT")) {
-    await prisma.auditLog.deleteMany()
-    await prisma.approvalLog.deleteMany()
+    // NOTE: AuditLog & ApprovalLog are currently global (no companyId). For SaaS safety
+    // we don't allow tenant admins to purge global logs from this screen.
   }
   if (selected.has("NOTIFIKASI")) {
-    await prisma.notifikasi.deleteMany()
+    await prisma.notifikasi.deleteMany({ where: { companyId } })
   }
   if (selected.has("TRANSAKSI")) {
-    await prisma.journalEntry.deleteMany()
-    await prisma.rekonsiliasiKas.deleteMany()
-    await prisma.kolektorTarget.deleteMany()
-    await prisma.kasTransaksi.deleteMany()
-    await prisma.pembayaran.deleteMany()
-    await prisma.jadwalAngsuran.deleteMany()
-    await prisma.pinjaman.deleteMany()
-    await prisma.pengajuan.deleteMany()
-    await prisma.simpanan.deleteMany()
+    await prisma.journalEntry.deleteMany({ where: { companyId } })
+    await prisma.rekonsiliasiKas.deleteMany({ where: { companyId } })
+    await prisma.kolektorTarget.deleteMany({ where: { companyId } })
+    await prisma.kasTransaksi.deleteMany({ where: { companyId } })
+    await prisma.pembayaran.deleteMany({ where: { companyId } })
+    await prisma.jadwalAngsuran.deleteMany({ where: { companyId } })
+    await prisma.pinjaman.deleteMany({ where: { companyId } })
+    await prisma.pengajuan.deleteMany({ where: { companyId } })
+    await prisma.simpanan.deleteMany({ where: { companyId } })
   }
   if (selected.has("MASTER")) {
-    await prisma.penjamin.deleteMany()
-    await prisma.nasabah.deleteMany()
-    await prisma.kelompok.deleteMany()
+    await prisma.penjamin.deleteMany({ where: { companyId } })
+    await prisma.nasabah.deleteMany({ where: { companyId } })
+    await prisma.kelompok.deleteMany({ where: { companyId } })
   }
   if (selected.has("AKUNTANSI")) {
-    await prisma.journalEntry.deleteMany()
-    await prisma.rekonsiliasiKas.deleteMany()
+    await prisma.journalEntry.deleteMany({ where: { companyId } })
+    await prisma.rekonsiliasiKas.deleteMany({ where: { companyId } })
     if (selected.has("TRANSAKSI")) {
-      await prisma.kasKategori.deleteMany()
+      await prisma.kasKategori.deleteMany({ where: { companyId } })
     } else {
-      await prisma.kasKategori.updateMany({ data: { accountId: null } })
+      await prisma.kasKategori.updateMany({ where: { companyId }, data: { accountId: null } })
     }
-    await prisma.account.deleteMany()
-    await prisma.appSetting.deleteMany()
+    await prisma.account.deleteMany({ where: { companyId } })
+    await prisma.companySetting.deleteMany({ where: { companyId } })
   }
   if (selected.has("USERS")) {
-    await prisma.userRole.deleteMany()
-    await prisma.company.deleteMany()
-    await prisma.user.deleteMany()
+    // For SaaS: do not allow tenant-level maintenance to delete users/companies.
+    // Platform-level actions live under /platform (SUPER_ADMIN).
+    throw new Error("Scope USERS hanya tersedia untuk Super Admin di menu Platform.")
   }
 }
 
@@ -213,86 +218,68 @@ async function upsertDemoUser(params: {
   return user
 }
 
-async function ensureDemoCompany(ownerId: string) {
-  const company = await prisma.company.upsert({
-    where: { slug: "koperasi-demo-sejahtera" },
-    update: {
-      name: "Koperasi Demo Sejahtera",
-      email: "admin@koperasi.id",
-      ownerId,
-      isActive: true,
-    },
-    create: {
-      name: "Koperasi Demo Sejahtera",
-      slug: "koperasi-demo-sejahtera",
-      email: "admin@koperasi.id",
-      ownerId,
-      isActive: true,
-    },
-  })
-
-  await prisma.user.update({
-    where: { id: ownerId },
-    data: { companyId: company.id },
-  })
-
-  return company
+function normalizeKey(raw: string) {
+  return raw.trim().toUpperCase().replace(/\s+/g, "_")
 }
 
-async function ensureDemoFoundation() {
-  await ensureAccountingAccounts()
-  const accounts = new Map<string, string>()
+async function ensureDemoFoundation(companyId: string) {
+  await ensureAccountingAccounts(companyId)
 
-  for (const account of DEFAULT_ACCOUNTS) {
-    const row = await prisma.account.upsert({
-      where: { code: account.code },
-      update: { name: account.name, type: account.type, isActive: true },
-      create: account,
-    })
-    accounts.set(row.code, row.id)
-  }
+  const accounts = await prisma.account.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, code: true },
+  })
+  const accountIdByCode = new Map(accounts.map((row) => [row.code, row.id]))
 
+  const kategoriIdByKey = new Map<string, string>()
   for (const category of DEFAULT_CATEGORIES) {
-    await prisma.kasKategori.upsert({
-      where: { key: category.key },
+    const key = normalizeKey(category.key)
+    const row = await prisma.kasKategori.upsert({
+      where: { companyId_key: { companyId, key } },
       update: {
         nama: category.nama,
         jenis: category.jenis,
-        accountId: accounts.get(category.accountCode) ?? null,
+        accountId: accountIdByCode.get(category.accountCode) ?? null,
         isActive: true,
       },
       create: {
+        companyId,
         nama: category.nama,
-        key: category.key,
+        key,
         jenis: category.jenis,
-        accountId: accounts.get(category.accountCode) ?? null,
+        accountId: accountIdByCode.get(category.accountCode) ?? null,
         isActive: true,
       },
+      select: { id: true, key: true },
     })
+    kategoriIdByKey.set(row.key, row.id)
   }
 
-  await prisma.appSetting.upsert({
-    where: { key: "company_info" },
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId, key: "company_info" } },
     update: {
       value: {
-        name: "Koperasi Demo Sejahtera",
-        tagline: "Data demo lengkap untuk pelatihan",
-        address: "Jl. Merdeka No. 10, Wonosobo",
-        phone: "0812-0000-2026",
+        name: "Koperasi",
+        tagline: "Sistem koperasi simpan pinjam",
+        address: "",
+        phone: "",
         timeZone: "Asia/Jakarta",
       },
     },
     create: {
+      companyId,
       key: "company_info",
       value: {
-        name: "Koperasi Demo Sejahtera",
-        tagline: "Data demo lengkap untuk pelatihan",
-        address: "Jl. Merdeka No. 10, Wonosobo",
-        phone: "0812-0000-2026",
+        name: "Koperasi",
+        tagline: "Sistem koperasi simpan pinjam",
+        address: "",
+        phone: "",
         timeZone: "Asia/Jakarta",
       },
     },
   })
+
+  return { kategoriIdByKey }
 }
 
 function addMonths(date: Date, amount: number) {
@@ -302,6 +289,7 @@ function addMonths(date: Date, amount: number) {
 }
 
 async function createDemoLoan(params: {
+  companyId: string
   nasabahId: string
   kelompokId?: string
   inputOlehId: string
@@ -310,6 +298,7 @@ async function createDemoLoan(params: {
   tenor: number
   paidInstallments: number
   tenorType: "MINGGUAN" | "BULANAN"
+  kategoriIdByKey: Map<string, string>
 }) {
   const nomorPengajuan = `DEMO-PG-${String(params.index).padStart(3, "0")}`
   const nomorKontrak = `DEMO-KONTRAK-${String(params.index).padStart(3, "0")}`
@@ -325,6 +314,7 @@ async function createDemoLoan(params: {
   await prisma.$transaction(async (tx) => {
     const pengajuan = await tx.pengajuan.create({
       data: {
+        companyId: params.companyId,
         nomorPengajuan,
         nasabahId: params.nasabahId,
         kelompokId: params.kelompokId,
@@ -346,6 +336,7 @@ async function createDemoLoan(params: {
 
     const pinjaman = await tx.pinjaman.create({
       data: {
+        companyId: params.companyId,
         nomorKontrak,
         pengajuanId: pengajuan.id,
         pokokPinjaman: new Prisma.Decimal(params.pokok),
@@ -373,6 +364,7 @@ async function createDemoLoan(params: {
       const isPaid = installment <= params.paidInstallments
       const jadwal = await tx.jadwalAngsuran.create({
         data: {
+          companyId: params.companyId,
           pinjamanId: pinjaman.id,
           angsuranKe: installment,
           tanggalJatuhTempo: dueDate,
@@ -388,6 +380,7 @@ async function createDemoLoan(params: {
         const metode = installment % 2 === 0 ? "TRANSFER" : "TUNAI"
         const pembayaran = await tx.pembayaran.create({
           data: {
+            companyId: params.companyId,
             pinjamanId: pinjaman.id,
             tanggalBayar: jadwal.tanggalBayar ?? dueDate,
             pokok: new Prisma.Decimal(angsuranPokok),
@@ -399,11 +392,18 @@ async function createDemoLoan(params: {
             inputOlehId: params.inputOlehId,
           },
         })
+
+        const angsuranKey = "ANGSURAN"
+        const angsuranKategoriId = params.kategoriIdByKey.get(angsuranKey)
+        if (!angsuranKategoriId) throw new Error(`Kategori kas "${angsuranKey}" belum tersedia.`)
+
         await tx.kasTransaksi.create({
           data: {
+            companyId: params.companyId,
             tanggal: jadwal.tanggalBayar ?? dueDate,
             jenis: "MASUK",
-            kategori: "ANGSURAN",
+            kategoriId: angsuranKategoriId,
+            kategoriKey: angsuranKey,
             deskripsi: `Demo pembayaran ${pembayaran.nomorTransaksi}`,
             jumlah: pembayaran.totalBayar,
             kasJenis: metode === "TRANSFER" ? "BANK" : "TUNAI",
@@ -412,6 +412,7 @@ async function createDemoLoan(params: {
           },
         })
         await postPembayaranJournal(tx, {
+          companyId: params.companyId,
           pembayaranId: pembayaran.id,
           tanggalBayar: jadwal.tanggalBayar ?? dueDate,
           kasJenis: metode === "TRANSFER" ? "BANK" : "TUNAI",
@@ -425,11 +426,17 @@ async function createDemoLoan(params: {
       }
     }
 
+    const pencairanKey = "PENCAIRAN"
+    const pencairanKategoriId = params.kategoriIdByKey.get(pencairanKey)
+    if (!pencairanKategoriId) throw new Error(`Kategori kas "${pencairanKey}" belum tersedia.`)
+
     await tx.kasTransaksi.create({
       data: {
+        companyId: params.companyId,
         tanggal: tanggalCair,
         jenis: "KELUAR",
-        kategori: "PENCAIRAN",
+        kategoriId: pencairanKategoriId,
+        kategoriKey: pencairanKey,
         deskripsi: `Demo pencairan ${nomorKontrak}`,
         jumlah: new Prisma.Decimal(params.pokok - 75_000),
         kasJenis: params.index % 2 === 0 ? "BANK" : "TUNAI",
@@ -438,6 +445,7 @@ async function createDemoLoan(params: {
       },
     })
     await postPencairanJournal(tx, {
+      companyId: params.companyId,
       pinjamanId: pinjaman.id,
       tanggalCair,
       kasJenis: params.index % 2 === 0 ? "BANK" : "TUNAI",
@@ -451,7 +459,7 @@ async function createDemoLoan(params: {
   }, { timeout: 30_000 })
 }
 
-async function createDemoKasTransactions(inputOlehId: string) {
+async function createDemoKasTransactions(companyId: string, inputOlehId: string, kategoriIdByKey: Map<string, string>) {
   const baseDate = new Date()
   const rows = [
     ["MASUK", "ADMIN", "Demo pendapatan administrasi formulir", 325_000, "TUNAI", 26],
@@ -475,38 +483,50 @@ async function createDemoKasTransactions(inputOlehId: string) {
   ] as const
 
   for (const [jenis, kategori, deskripsi, jumlah, kasJenis, daysAgo] of rows) {
-    const existing = await prisma.kasTransaksi.findFirst({ where: { deskripsi } })
+    const key = normalizeKey(kategori)
+    const kategoriId = kategoriIdByKey.get(key)
+    if (!kategoriId) continue
+
+    const existing = await prisma.kasTransaksi.findFirst({ where: { companyId, deskripsi } })
     if (existing) continue
 
     const tanggal = new Date(baseDate)
     tanggal.setDate(tanggal.getDate() - daysAgo)
     const kas = await prisma.kasTransaksi.create({
       data: {
+        companyId,
         tanggal,
         jenis,
-        kategori,
+        kategoriId,
+        kategoriKey: key,
         deskripsi,
         jumlah: new Prisma.Decimal(jumlah),
         kasJenis,
         inputOlehId,
       },
     })
-    await postKasTransactionJournal(prisma, kas.id, inputOlehId)
+    await postKasTransactionJournal(prisma, kas.id, inputOlehId, { ensureAccounts: false })
   }
 }
 
-async function ensureDemoOpeningCapital(inputOlehId: string) {
+async function ensureDemoOpeningCapital(companyId: string, inputOlehId: string, kategoriIdByKey: Map<string, string>) {
+  const key = "MODAL"
+  const kategoriId = kategoriIdByKey.get(key)
+  if (!kategoriId) return
+
   const existing = await prisma.kasTransaksi.findFirst({
-    where: { deskripsi: "Demo setoran modal awal koperasi" },
+    where: { companyId, deskripsi: "Demo setoran modal awal koperasi" },
     select: { id: true },
   })
   if (existing) return
 
   const kas = await prisma.kasTransaksi.create({
     data: {
+      companyId,
       tanggal: addMonths(new Date(), -2),
       jenis: "MASUK",
-      kategori: "MODAL",
+      kategoriId,
+      kategoriKey: key,
       deskripsi: "Demo setoran modal awal koperasi",
       jumlah: new Prisma.Decimal(250_000_000),
       kasJenis: "BANK",
@@ -515,17 +535,18 @@ async function ensureDemoOpeningCapital(inputOlehId: string) {
     },
   })
 
-  await postKasTransactionJournal(prisma, kas.id, inputOlehId)
+  await postKasTransactionJournal(prisma, kas.id, inputOlehId, { ensureAccounts: false })
 }
 
-async function backfillAccountingJournals(postedById: string) {
-  await ensureAccountingAccounts()
+async function backfillAccountingJournals(companyId: string, postedById: string) {
+  await ensureAccountingAccounts(companyId)
 
-  const before = await prisma.journalEntry.count()
+  const before = await prisma.journalEntry.count({ where: { companyId } })
 
-  const pinjamanRows = await prisma.pinjaman.findMany()
+  const pinjamanRows = await prisma.pinjaman.findMany({ where: { companyId } })
   for (const pinjaman of pinjamanRows) {
     await postPencairanJournal(prisma, {
+      companyId,
       pinjamanId: pinjaman.id,
       tanggalCair: pinjaman.tanggalCair,
       kasJenis: "TUNAI",
@@ -539,11 +560,12 @@ async function backfillAccountingJournals(postedById: string) {
   }
 
   const pembayaranRows = await prisma.pembayaran.findMany({
-    where: { isBatalkan: false },
+    where: { companyId, isBatalkan: false },
     include: { pinjaman: { select: { nomorKontrak: true } } },
   })
   for (const pembayaran of pembayaranRows) {
     await postPembayaranJournal(prisma, {
+      companyId,
       pembayaranId: pembayaran.id,
       tanggalBayar: pembayaran.tanggalBayar,
       kasJenis: pembayaran.metode === "TRANSFER" ? "BANK" : "TUNAI",
@@ -557,16 +579,20 @@ async function backfillAccountingJournals(postedById: string) {
   }
 
   const kasRows = await prisma.kasTransaksi.findMany({
-    where: { isApproved: true, referensiId: null },
+    where: { companyId, isApproved: true, referensiId: null },
     select: { id: true },
   })
   for (const kas of kasRows) {
-    await postKasTransactionJournal(prisma, kas.id, postedById)
+    await postKasTransactionJournal(prisma, kas.id, postedById, { ensureAccounts: false })
   }
 
-  const simpananRows = await prisma.simpanan.findMany({ include: { nasabah: { select: { namaLengkap: true } } } })
+  const simpananRows = await prisma.simpanan.findMany({
+    where: { companyId },
+    include: { nasabah: { select: { namaLengkap: true } } },
+  })
   for (const simpanan of simpananRows) {
     await postJournalEntry(prisma, {
+      companyId,
       sourceType: "SIMPANAN",
       sourceId: simpanan.id,
       entryDate: simpanan.tanggal,
@@ -579,42 +605,13 @@ async function backfillAccountingJournals(postedById: string) {
     })
   }
 
-  const after = await prisma.journalEntry.count()
+  const after = await prisma.journalEntry.count({ where: { companyId } })
   return { before, after, created: after - before }
 }
 
-async function importDemoData() {
-  await ensureDemoFoundation()
-
-  const admin = await upsertDemoUser({
-    email: "admin@koperasi.id",
-    name: "Administrator",
-    password: "admin123",
-    roles: [RoleType.OWNER, RoleType.ADMIN],
-  })
-  const company = await ensureDemoCompany(admin.id)
-  await upsertDemoUser({
-    email: "manager@koperasi.id",
-    name: "Manager Demo",
-    password: "manager123",
-    roles: [RoleType.MANAGER],
-    companyId: company.id,
-  })
-  await upsertDemoUser({
-    email: "teller@koperasi.id",
-    name: "Teller Demo",
-    password: "teller123",
-    roles: [RoleType.TELLER],
-    companyId: company.id,
-  })
-  await upsertDemoUser({
-    email: "akuntansi@koperasi.id",
-    name: "Akuntansi Demo",
-    password: "akuntansi123",
-    roles: [RoleType.AKUNTANSI],
-    companyId: company.id,
-  })
-  await ensureDemoOpeningCapital(admin.id)
+async function importDemoData(companyId: string, inputOlehId: string) {
+  const { kategoriIdByKey } = await ensureDemoFoundation(companyId)
+  await ensureDemoOpeningCapital(companyId, inputOlehId, kategoriIdByKey)
 
   const kelompokRows = await Promise.all(
     [
@@ -623,9 +620,9 @@ async function importDemoData() {
       ["KL-DEMO-03", "Guyub Rukun", "Pak Slamet", "Garung", "Rabu"],
     ].map(([kode, nama, ketua, wilayah, jadwalPertemuan]) =>
       prisma.kelompok.upsert({
-        where: { kode },
+        where: { companyId_kode: { companyId, kode } },
         update: { nama, ketua, wilayah, jadwalPertemuan },
-        create: { kode, nama, ketua, wilayah, jadwalPertemuan },
+        create: { companyId, kode, nama, ketua, wilayah, jadwalPertemuan },
       }),
     ),
   )
@@ -636,13 +633,14 @@ async function importDemoData() {
     const nomorAnggota = `DM-${String(index).padStart(4, "0")}`
     const namaLengkap = DEMO_NAMES[index - 1] ?? `Nasabah Demo ${index}`
     const nasabah = await prisma.nasabah.upsert({
-      where: { nomorAnggota },
+      where: { companyId_nomorAnggota: { companyId, nomorAnggota } },
       update: {
         namaLengkap,
         kelompokId: kelompok.id,
         status: "AKTIF",
       },
       create: {
+        companyId,
         nomorAnggota,
         namaLengkap,
         nik: `330700000000${String(index).padStart(4, "0")}`,
@@ -656,13 +654,13 @@ async function importDemoData() {
     })
     nasabahRows.push(nasabah)
 
-    const simpananCount = await prisma.simpanan.count({ where: { nasabahId: nasabah.id } })
+    const simpananCount = await prisma.simpanan.count({ where: { companyId, nasabahId: nasabah.id } })
     if (simpananCount === 0) {
       await prisma.simpanan.createMany({
         data: [
-          { nasabahId: nasabah.id, jenis: "POKOK", jumlah: new Prisma.Decimal(100_000) },
-          { nasabahId: nasabah.id, jenis: "WAJIB", jumlah: new Prisma.Decimal(50_000 + index * 5_000) },
-          { nasabahId: nasabah.id, jenis: "SUKARELA", jumlah: new Prisma.Decimal(index * 25_000) },
+          { companyId, nasabahId: nasabah.id, jenis: "POKOK", jumlah: new Prisma.Decimal(100_000) },
+          { companyId, nasabahId: nasabah.id, jenis: "WAJIB", jumlah: new Prisma.Decimal(50_000 + index * 5_000) },
+          { companyId, nasabahId: nasabah.id, jenis: "SUKARELA", jumlah: new Prisma.Decimal(index * 25_000) },
         ],
       })
     }
@@ -672,23 +670,25 @@ async function importDemoData() {
     const tenor = index % 2 === 0 ? 10 : 12
     const paidInstallments = Math.min(tenor, index % 6 === 0 ? 8 : index % 5 === 0 ? 7 : index % 4 === 0 ? 2 : 5)
     await createDemoLoan({
+      companyId,
       nasabahId: nasabah.id,
       kelompokId: nasabah.kelompokId ?? undefined,
-      inputOlehId: admin.id,
+      inputOlehId,
       index: index + 1,
       pokok: 2_000_000 + index * 350_000,
       tenor,
       paidInstallments,
       tenorType: index % 3 === 0 ? "MINGGUAN" : "BULANAN",
+      kategoriIdByKey,
     })
   }
 
-  await createDemoKasTransactions(admin.id)
+  await createDemoKasTransactions(companyId, inputOlehId, kategoriIdByKey)
 }
 
 export async function cleanupDatabaseAction(formData: FormData): Promise<MaintenanceActionResult> {
   try {
-    const userId = await requireAdmin()
+    const { userId, companyId } = await requireAdmin()
     const confirmation = String(formData.get("confirmation") ?? "").trim().toUpperCase()
     const scopes = checkedScopes(formData)
 
@@ -703,9 +703,9 @@ export async function cleanupDatabaseAction(formData: FormData): Promise<Mainten
       actorId: userId,
       entityType: "MAINTENANCE",
       action: "DELETE",
-      metadata: { scopes },
+      metadata: { scopes, companyId },
     })
-    await cleanupScopes(scopes)
+    await cleanupScopes(companyId, scopes)
     revalidateOperationalPaths()
     return { success: true, message: "Cleanup database selesai." }
   } catch (error) {
@@ -716,19 +716,19 @@ export async function cleanupDatabaseAction(formData: FormData): Promise<Mainten
 
 export async function importDemoDataAction(formData: FormData): Promise<MaintenanceActionResult> {
   try {
-    const userId = await requireAdmin()
+    const { userId, companyId } = await requireAdmin()
     const confirmation = String(formData.get("confirmation") ?? "").trim().toUpperCase()
 
     if (confirmation !== "DEMO") {
       return { success: false, error: "Ketik DEMO untuk import data demo." }
     }
 
-    await importDemoData()
+    await importDemoData(companyId, userId)
     await writeAuditLog({
       actorId: userId,
       entityType: "MAINTENANCE",
       action: "CREATE",
-      metadata: { import: "demo-data" },
+      metadata: { import: "demo-data", companyId },
     })
     revalidateOperationalPaths()
     return { success: true, message: "Import demo data selesai." }
@@ -740,19 +740,19 @@ export async function importDemoDataAction(formData: FormData): Promise<Maintena
 
 export async function backfillAccountingJournalsAction(formData: FormData): Promise<MaintenanceActionResult> {
   try {
-    const userId = await requireAdmin()
+    const { userId, companyId } = await requireAdmin()
     const confirmation = String(formData.get("confirmation") ?? "").trim().toUpperCase()
 
     if (confirmation !== "JURNAL") {
       return { success: false, error: "Ketik JURNAL untuk backfill jurnal akuntansi." }
     }
 
-    const result = await backfillAccountingJournals(userId)
+    const result = await backfillAccountingJournals(companyId, userId)
     await writeAuditLog({
       actorId: userId,
       entityType: "MAINTENANCE",
       action: "CREATE",
-      metadata: { backfill: "accounting-journals", ...result },
+      metadata: { backfill: "accounting-journals", companyId, ...result },
     })
     revalidateOperationalPaths()
     return { success: true, message: `Backfill jurnal selesai. ${result.created} jurnal dibuat.` }

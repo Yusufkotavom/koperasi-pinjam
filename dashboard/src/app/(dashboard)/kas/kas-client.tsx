@@ -88,7 +88,7 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
           id: t.id,
           tanggal: t.tanggal,
           jenis: t.jenis,
-          kategori: t.kategori,
+          kategori: t.kategoriKey,
           deskripsi: t.deskripsi,
           jumlah: Number(t.jumlah),
           kasJenis: t.kasJenis,

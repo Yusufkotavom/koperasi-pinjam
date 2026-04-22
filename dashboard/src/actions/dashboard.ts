@@ -6,6 +6,7 @@ import { differenceInDays } from "date-fns"
 import { getCompanyInfo } from "@/actions/settings"
 import { normalizeTimeZone } from "@/lib/datetime"
 import { serializeData } from "@/lib/utils"
+import { requireCompanyId } from "@/lib/tenant"
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -384,10 +385,12 @@ type KolektorFilter = {
 export async function getKolektorFilterOptions() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const [kolektor, wilayahRows] = await Promise.all([
     prisma.user.findMany({
       where: {
+        companyId,
         isActive: true,
         roles: { some: { role: "KOLEKTOR" } },
       },
@@ -395,7 +398,7 @@ export async function getKolektorFilterOptions() {
       orderBy: { name: "asc" },
     }),
     prisma.kelompok.findMany({
-      where: { wilayah: { not: null } },
+      where: { companyId, wilayah: { not: null } },
       select: { wilayah: true },
       distinct: ["wilayah"],
       orderBy: { wilayah: "asc" },
@@ -411,6 +414,7 @@ export async function getKolektorFilterOptions() {
 export async function getKolektorOverview(params?: KolektorFilter): Promise<KolektorOverview[]> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const now = new Date()
   const year = Number(params?.year ?? now.getFullYear())
@@ -420,6 +424,7 @@ export async function getKolektorOverview(params?: KolektorFilter): Promise<Kole
 
   const kolektorList = await prisma.user.findMany({
     where: {
+      companyId,
       isActive: true,
       roles: { some: { role: "KOLEKTOR" } },
       ...(params?.kolektorId ? { id: params.kolektorId } : {}),
@@ -448,8 +453,9 @@ export async function getKolektorOverview(params?: KolektorFilter): Promise<Kole
       },
       kasDiinput: {
         where: {
+          companyId,
           jenis: "MASUK",
-          kategori: { in: ["ANGSURAN", "PELUNASAN"] },
+          kategoriKey: { in: ["ANGSURAN", "PELUNASAN"] },
           tanggal: { gte: startMonth, lt: endMonth },
         },
         select: { jumlah: true },

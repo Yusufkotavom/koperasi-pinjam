@@ -27,7 +27,8 @@ type LoginForm = z.infer<typeof loginSchema>
 
 const subscribeNoop = () => () => {}
 const getDemoTextSnapshot = () => "admin@koperasi.id / admin123"
-const getEmptySnapshot = () => ""
+// Keep server + client snapshot identical to avoid hydration mismatch.
+const getEmptySnapshot = getDemoTextSnapshot
 
 export default function LoginPage() {
   const router = useRouter()

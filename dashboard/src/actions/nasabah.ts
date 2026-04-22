@@ -9,6 +9,7 @@ import { getRankingConfig } from "@/actions/settings"
 import { serializeData } from "@/lib/utils"
 import { Prisma, RoleType } from "@prisma/client"
 import { requireRoles } from "@/lib/roles"
+import { requireCompanyId } from "@/lib/tenant"
 
 type NasabahActionError = Partial<Record<keyof NasabahInput | "nomorAnggota", string[]>>
 type CreateNasabahResult =
@@ -21,8 +22,8 @@ function parseJadwalTags(catatan?: string | null) {
 }
 
 // Helper: generate nomor anggota otomatis
-async function generateNomorAnggota(): Promise<string> {
-  const count = await prisma.nasabah.count()
+async function generateNomorAnggota(companyId: string): Promise<string> {
+  const count = await prisma.nasabah.count({ where: { companyId } })
   const seq = String(count + 1).padStart(4, "0")
   const year = new Date().getFullYear().toString().slice(2)
   return `N-${year}-${seq}`
@@ -46,6 +47,7 @@ export async function getNasabahList(params: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const now = new Date()
   const rankingConfig = await getRankingConfig()
@@ -56,6 +58,7 @@ export async function getNasabahList(params: {
 
   const where = {
     AND: [
+      { companyId },
       params.search
         ? {
             OR: [
@@ -223,8 +226,9 @@ export async function getNasabahList(params: {
 export async function getNasabahById(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const result = await prisma.nasabah.findUnique({
-    where: { id },
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+  const result = await prisma.nasabah.findFirst({
+    where: { id, companyId },
     include: {
       kelompok: true,
       kolektor: { select: { id: true, name: true, email: true } },
@@ -255,6 +259,7 @@ export async function getNasabahById(id: string) {
 export async function createNasabah(input: NasabahInput): Promise<CreateNasabahResult> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const parsed = nasabahSchema.safeParse(input)
   if (!parsed.success) {
@@ -262,8 +267,8 @@ export async function createNasabah(input: NasabahInput): Promise<CreateNasabahR
   }
 
   const { tanggalLahir, kelompokId, kolektorId, dokumenUrls, ...rest } = parsed.data
-  const existingNik = await prisma.nasabah.findUnique({
-    where: { nik: parsed.data.nik },
+  const existingNik = await prisma.nasabah.findFirst({
+    where: { companyId, nik: parsed.data.nik },
     select: { namaLengkap: true },
   })
 
@@ -275,11 +280,19 @@ export async function createNasabah(input: NasabahInput): Promise<CreateNasabahR
     }
   }
 
-  const nomorAnggota = await generateNomorAnggota()
+  const nomorAnggota = await generateNomorAnggota(companyId)
+
+  if (kelompokId) {
+    const kelompok = await prisma.kelompok.findFirst({ where: { id: kelompokId, companyId }, select: { id: true } })
+    if (!kelompok) {
+      return { error: { kelompokId: ["Kelompok tidak valid untuk company ini."] } }
+    }
+  }
 
   try {
     const nasabah = await prisma.nasabah.create({
       data: {
+        companyId,
         ...rest,
         nomorAnggota,
         tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
@@ -308,6 +321,10 @@ export async function createNasabah(input: NasabahInput): Promise<CreateNasabahR
 export async function updateNasabah(id: string, input: Partial<NasabahInput>): Promise<UpdateNasabahResult> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+
+  const current = await prisma.nasabah.findFirst({ where: { id, companyId }, select: { id: true } })
+  if (!current) return { error: { nik: ["Nasabah tidak ditemukan."] } }
 
   const { tanggalLahir, dokumenUrls, ...rest } = input
   const normalized = { ...rest } as Record<string, unknown>
@@ -317,6 +334,7 @@ export async function updateNasabah(id: string, input: Partial<NasabahInput>): P
   if (typeof normalized.nik === "string") {
     const existingNik = await prisma.nasabah.findFirst({
       where: {
+        companyId,
         nik: normalized.nik,
         NOT: { id },
       },
@@ -330,6 +348,11 @@ export async function updateNasabah(id: string, input: Partial<NasabahInput>): P
         },
       }
     }
+  }
+
+  if (typeof normalized.kelompokId === "string" && normalized.kelompokId) {
+    const kelompok = await prisma.kelompok.findFirst({ where: { id: normalized.kelompokId, companyId }, select: { id: true } })
+    if (!kelompok) return { error: { kelompokId: ["Kelompok tidak valid untuk company ini."] } }
   }
 
   try {
@@ -358,7 +381,10 @@ export async function updateNasabah(id: string, input: Partial<NasabahInput>): P
 export async function ubahStatusNasabah(id: string, status: "AKTIF" | "NON_AKTIF" | "KELUAR") {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
+  const existing = await prisma.nasabah.findFirst({ where: { id, companyId }, select: { id: true } })
+  if (!existing) return { success: false, error: "Nasabah tidak ditemukan." }
   await prisma.nasabah.update({ where: { id }, data: { status } })
   revalidatePath("/nasabah")
   return { success: true }
@@ -367,6 +393,7 @@ export async function ubahStatusNasabah(id: string, status: "AKTIF" | "NON_AKTIF
 export async function deleteNasabah(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   try {
     requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -391,6 +418,9 @@ export async function deleteNasabah(id: string) {
   if (!nasabah) {
     return { success: false, error: "Nasabah tidak ditemukan." }
   }
+  // Guard: prevent cross-company delete even if id leaks
+  const nasabahCompany = await prisma.nasabah.findFirst({ where: { id, companyId }, select: { id: true } })
+  if (!nasabahCompany) return { success: false, error: "Forbidden" }
 
   if (nasabah._count.pengajuan > 0 || nasabah._count.simpanan > 0) {
     return {
@@ -410,14 +440,16 @@ export async function deleteNasabah(id: string) {
 export async function getKelompokList() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  return prisma.kelompok.findMany({ orderBy: { nama: "asc" } })
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+  return prisma.kelompok.findMany({ where: { companyId }, orderBy: { nama: "asc" } })
 }
 
 export async function getKolektorList() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   return prisma.user.findMany({
-    where: { roles: { some: { role: "KOLEKTOR" } }, isActive: true },
+    where: { companyId, roles: { some: { role: "KOLEKTOR" } }, isActive: true },
     select: { id: true, name: true },
   })
 }

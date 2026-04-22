@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import { prisma } from "@/lib/prisma"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -9,6 +10,24 @@ import { getCompanyInfo, getAccountingMode } from "@/actions/settings"
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
   if (!session) redirect("/login")
+  const userId = session.user?.id
+  if (!userId) redirect("/login")
+
+  // Company enforcement: block access for suspended/deleted companies.
+  // SUPER_ADMIN may not have a companyId and should still be able to access platform pages.
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      isActive: true,
+      company: { select: { id: true, isActive: true, status: true } },
+    },
+  })
+  if (!dbUser || !dbUser.isActive) redirect("/login")
+  if (dbUser.company && (!dbUser.company.isActive || dbUser.company.status !== "ACTIVE")) {
+    redirect("/login")
+  }
+
   const [company, accountingMode] = await Promise.all([
     getCompanyInfo(),
     getAccountingMode(),

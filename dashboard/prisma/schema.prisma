@@ -25,6 +25,12 @@ enum RoleType {
   AKUNTANSI
 }
 
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
 model UserRole {
   id     String   @id @default(cuid())
   userId String
@@ -42,10 +48,32 @@ model Company {
   address   String?
   phone     String?
   email     String?
+  status    CompanyStatus @default(ACTIVE)
+  suspendedAt DateTime?
+  suspendedReason String?
+  suspendedUntil DateTime?
+  deletedAt DateTime?
+  deletedReason String?
   isActive  Boolean  @default(true)
   ownerId   String
   owner     User     @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   users     User[]   @relation("UserCompany")
+  nasabah   Nasabah[]
+  penjamin  Penjamin[]
+  kelompok  Kelompok[]
+  pengajuan Pengajuan[]
+  pinjaman  Pinjaman[]
+  jadwalAngsuran JadwalAngsuran[]
+  pembayaran Pembayaran[]
+  simpanan  Simpanan[]
+  accounts  Account[]
+  journalEntries JournalEntry[]
+  rekonsiliasi RekonsiliasiKas[]
+  kasKategori KasKategori[]
+  kasTransaksi KasTransaksi[]
+  kolektorTargets KolektorTarget[]
+  notifikasi Notifikasi[]
+  settings CompanySetting[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -96,9 +124,11 @@ enum StatusNasabah {
 
 model Nasabah {
   id            String        @id @default(cuid())
-  nomorAnggota  String        @unique
+  companyId     String
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nomorAnggota  String
   namaLengkap   String
-  nik           String        @unique
+  nik           String
   tempatLahir   String?
   tanggalLahir  DateTime?
   alamat        String
@@ -125,11 +155,15 @@ model Nasabah {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, nomorAnggota])
+  @@unique([companyId, nik])
   @@map("nasabah")
 }
 
 model Penjamin {
   id          String  @id @default(cuid())
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   namaLengkap String
   nik         String
   hubungan    String
@@ -143,7 +177,9 @@ model Penjamin {
 
 model Kelompok {
   id              String  @id @default(cuid())
-  kode            String  @unique
+  companyId       String
+  company         Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  kode            String
   nama            String
   ketua           String?
   wilayah         String?
@@ -155,6 +191,7 @@ model Kelompok {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, kode])
   @@map("kelompok")
 }
 
@@ -185,6 +222,8 @@ enum StatusPengajuan {
 
 model Pengajuan {
   id                   String          @id @default(cuid())
+  companyId             String
+  company               Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nomorPengajuan       String          @unique @default(cuid())
   nasabahId            String
   nasabah              Nasabah         @relation(fields: [nasabahId], references: [id])
@@ -230,6 +269,8 @@ enum StatusPinjaman {
 
 model Pinjaman {
   id                String         @id @default(cuid())
+  companyId          String
+  company            Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nomorKontrak      String         @unique
   pengajuanId       String         @unique
   pengajuan         Pengajuan      @relation(fields: [pengajuanId], references: [id])
@@ -259,6 +300,8 @@ model Pinjaman {
 
 model JadwalAngsuran {
   id                String    @id @default(cuid())
+  companyId          String
+  company            Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   pinjamanId        String
   pinjaman          Pinjaman  @relation(fields: [pinjamanId], references: [id], onDelete: Cascade)
   angsuranKe        Int
@@ -284,6 +327,8 @@ enum MetodeBayar {
 
 model Pembayaran {
   id             String      @id @default(cuid())
+  companyId       String
+  company         Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nomorTransaksi String      @unique @default(cuid())
   pinjamanId     String
   pinjaman       Pinjaman    @relation(fields: [pinjamanId], references: [id])
@@ -311,6 +356,8 @@ model Pembayaran {
 
 model Simpanan {
   id        String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nasabahId String
   nasabah   Nasabah  @relation(fields: [nasabahId], references: [id])
   jenis     String // "WAJIB" | "SUKARELA" | "POKOK"
@@ -359,7 +406,9 @@ enum JournalStatus {
 
 model Account {
   id       String      @id @default(cuid())
-  code     String      @unique
+  companyId String
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code     String
   name     String
   type     AccountType
   isActive Boolean     @default(true)
@@ -371,12 +420,15 @@ model Account {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, code])
   @@index([type, isActive])
   @@map("accounts")
 }
 
 model JournalEntry {
   id          String            @id @default(cuid())
+  companyId    String
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   entryNo     String            @unique @default(cuid())
   entryDate   DateTime
   description String
@@ -420,6 +472,8 @@ enum RekonsiliasiStatus {
 
 model RekonsiliasiKas {
   id          String  @id @default(cuid())
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   accountId   String
   account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   periodMonth Int
@@ -446,8 +500,10 @@ model RekonsiliasiKas {
 
 model KasKategori {
   id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nama      String
-  key       String   @unique
+  key       String
   jenis     JenisKas
   accountId String?
   account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
@@ -457,15 +513,19 @@ model KasKategori {
 
   kasTransaksi KasTransaksi[]
 
+  @@unique([companyId, key])
   @@map("kas_kategori")
 }
 
 model KasTransaksi {
   id          String      @id @default(cuid())
+  companyId    String
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   tanggal     DateTime    @default(now())
   jenis       JenisKas
-  kategori    String // FK to KasKategori.key
-  kat         KasKategori @relation(fields: [kategori], references: [key])
+  kategoriId  String
+  kat         KasKategori @relation(fields: [kategoriId], references: [id])
+  kategoriKey String // denormalized display key (per company)
   deskripsi   String
   jumlah      Decimal     @db.Decimal(15, 2)
   kasJenis    String      @default("TUNAI") // "TUNAI" | "BANK"
@@ -543,6 +603,8 @@ model ApprovalLog {
 
 model KolektorTarget {
   id                 String   @id @default(cuid())
+  companyId           String
+  company             Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   kolektorId         String
   kolektor           User     @relation("KolektorTargetUser", fields: [kolektorId], references: [id], onDelete: Cascade)
   periodMonth        Int
@@ -570,6 +632,8 @@ enum NotifikasiJenis {
 
 model Notifikasi {
   id        String          @id @default(cuid())
+  companyId  String
+  company    Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId    String?
   user      User?           @relation("UserNotifikasi", fields: [userId], references: [id], onDelete: SetNull)
   jenis     NotifikasiJenis
@@ -594,4 +658,17 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")
+}
+
+model CompanySetting {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, key])
+  @@index([key])
+  @@map("company_settings")
 }

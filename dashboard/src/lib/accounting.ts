@@ -30,6 +30,7 @@ type JournalLineInput = {
 }
 
 type JournalInput = {
+  companyId: string
   sourceType: JournalSourceType
   sourceId: string
   entryDate: Date
@@ -65,23 +66,24 @@ function fallbackAccountForKas(jenis: "MASUK" | "KELUAR", kategori: string) {
   return "BEBAN_LAINNYA"
 }
 
-export async function ensureAccountingAccounts(db: DbClient = prisma) {
+export async function ensureAccountingAccounts(companyId: string, db: DbClient = prisma) {
   for (const account of DEFAULT_ACCOUNTING_ACCOUNTS) {
     await db.account.upsert({
-      where: { code: account.code },
+      where: { companyId_code: { companyId, code: account.code } },
       update: { name: account.name, type: account.type, isActive: true },
       create: {
         ...account,
+        companyId,
         isActive: true,
       },
     })
   }
 }
 
-export async function getCashBalanceByJenis(kasJenis: "TUNAI" | "BANK", asOf?: Date, db: DbClient = prisma) {
+export async function getCashBalanceByJenis(companyId: string, kasJenis: "TUNAI" | "BANK", asOf?: Date, db: DbClient = prisma) {
   const accountCode = cashAccountCode(kasJenis)
   const account = await db.account.findUnique({
-    where: { code: accountCode },
+    where: { companyId_code: { companyId, code: accountCode } },
     select: { id: true, type: true },
   })
 
@@ -103,7 +105,7 @@ export async function getCashBalanceByJenis(kasJenis: "TUNAI" | "BANK", asOf?: D
 
 export async function postJournalEntry(db: DbClient, input: JournalInput, options: JournalOptions = {}) {
   if (options.ensureAccounts !== false) {
-    await ensureAccountingAccounts(db)
+    await ensureAccountingAccounts(input.companyId, db)
   }
 
   const existing = await db.journalEntry.findUnique({
@@ -132,7 +134,7 @@ export async function postJournalEntry(db: DbClient, input: JournalInput, option
   }
 
   const accounts = await db.account.findMany({
-    where: { code: { in: normalized.map((line) => line.accountCode) } },
+    where: { companyId: input.companyId, code: { in: normalized.map((line) => line.accountCode) } },
     select: { id: true, code: true },
   })
   const accountMap = new Map(accounts.map((account) => [account.code, account.id]))
@@ -141,6 +143,7 @@ export async function postJournalEntry(db: DbClient, input: JournalInput, option
 
   return db.journalEntry.create({
     data: {
+      companyId: input.companyId,
       entryDate: input.entryDate,
       description: input.description,
       sourceType: input.sourceType,
@@ -163,6 +166,7 @@ export async function postJournalEntry(db: DbClient, input: JournalInput, option
 export async function postPembayaranJournal(
   db: DbClient,
   input: {
+    companyId: string
     pembayaranId: string
     tanggalBayar: Date
     kasJenis: "TUNAI" | "BANK"
@@ -176,6 +180,7 @@ export async function postPembayaranJournal(
   options?: JournalOptions,
 ) {
   return postJournalEntry(db, {
+    companyId: input.companyId,
     sourceType: "PEMBAYARAN",
     sourceId: input.pembayaranId,
     entryDate: input.tanggalBayar,
@@ -193,6 +198,7 @@ export async function postPembayaranJournal(
 export async function postPencairanJournal(
   db: DbClient,
   input: {
+    companyId: string
     pinjamanId: string
     tanggalCair: Date
     kasJenis?: "TUNAI" | "BANK"
@@ -206,6 +212,7 @@ export async function postPencairanJournal(
   options?: JournalOptions,
 ) {
   return postJournalEntry(db, {
+    companyId: input.companyId,
     sourceType: "PENCAIRAN",
     sourceId: input.pinjamanId,
     entryDate: input.tanggalCair,
@@ -230,13 +237,14 @@ export async function postKasTransactionJournal(
     include: { kat: { include: { account: true } } },
   })
   if (!kas || !kas.isApproved) return null
-  if (kas.referensiId || ["ANGSURAN", "PELUNASAN", "PENCAIRAN", "PEMBATALAN_ANGSURAN"].includes(kas.kategori)) return null
+  if (kas.referensiId || ["ANGSURAN", "PELUNASAN", "PENCAIRAN", "PEMBATALAN_ANGSURAN"].includes(kas.kategoriKey)) return null
 
-  const mappedAccount = kas.kat.account?.code ?? fallbackAccountForKas(kas.jenis, kas.kategori)
+  const mappedAccount = kas.kat.account?.code ?? fallbackAccountForKas(kas.jenis, kas.kategoriKey)
   const jumlah = amount(kas.jumlah)
   const kasAccount = cashAccountCode(kas.kasJenis)
 
   return postJournalEntry(db, {
+    companyId: kas.companyId,
     sourceType: "KAS",
     sourceId: kas.id,
     entryDate: kas.tanggal,

@@ -111,8 +111,8 @@ const navSecondary = [
     icon: <BookOpen />,
   },
   {
-    title: "Support",
-    url: "/docs/using-superpowers",
+    title: "Bantuan",
+    url: "/contact",
     icon: <LifeBuoy />,
   },
 ]
@@ -136,6 +136,23 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 export function AppSidebar({ user, company, accountingMode, ...props }: AppSidebarProps) {
   const isCompanyUser = Boolean(user.companyId)
   const canManageSettings = user.roles?.some((role) => ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) ?? false
+  const isSuperAdmin = user.roles?.includes("SUPER_ADMIN") ?? false
+
+  const navMainItems = isSuperAdmin
+    ? [
+        {
+          title: "Platform Admin",
+          url: "/platform",
+          icon: <Settings />,
+          items: [
+            { title: "Overview", url: "/platform" },
+            { title: "Companies", url: "/platform/companies" },
+            { title: "Users", url: "/platform/users" },
+          ],
+        },
+        ...baseNavMain,
+      ]
+    : baseNavMain
 
   return (
     <Sidebar {...props} variant="inset">
@@ -167,7 +184,7 @@ export function AppSidebar({ user, company, accountingMode, ...props }: AppSideb
       </SidebarHeader>
       <SidebarContent>
         <NavMain
-          items={baseNavMain.map((item) => {
+          items={navMainItems.map((item) => {
             if (item.title === "Settings") {
               return {
                 ...item,

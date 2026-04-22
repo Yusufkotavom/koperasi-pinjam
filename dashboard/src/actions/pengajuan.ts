@@ -11,6 +11,7 @@ import { writeApprovalLog, writeAuditLog } from "@/lib/audit"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
 import { ensureAccountingAccounts, getCashBalanceByJenis, postPencairanJournal } from "@/lib/accounting"
+import { requireCompanyId } from "@/lib/tenant"
 
 // ========================
 // PENGAJUAN
@@ -92,6 +93,7 @@ export async function createPengajuan(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const userId = session.user?.id
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const parsed = pengajuanSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
@@ -108,6 +110,7 @@ export async function createPengajuan(input: unknown) {
 
   const pengajuan = await prisma.pengajuan.create({
     data: {
+      companyId,
       ...rest,
       kelompokId: rest.kelompokId || nasabah.kelompokId || null,
       plafonDiajukan: new Prisma.Decimal(plafonDiajukan),
@@ -188,6 +191,9 @@ export async function approvePengajuan(input: unknown) {
 export async function cairkanPinjaman(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
   let userId: string
   try {
     const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -201,8 +207,8 @@ export async function cairkanPinjaman(input: unknown) {
 
   const { pengajuanId, potonganAdmin, potonganProvisi, tanggalCair, kasJenis } = parsed.data
 
-  const pengajuan = await prisma.pengajuan.findUnique({
-    where: { id: pengajuanId, status: "DISETUJUI" },
+  const pengajuan = await prisma.pengajuan.findFirst({
+    where: { id: pengajuanId, companyId, status: "DISETUJUI" },
   })
   if (!pengajuan) return { error: "Pengajuan tidak ditemukan atau belum disetujui." }
 
@@ -220,8 +226,8 @@ export async function cairkanPinjaman(input: unknown) {
   const tglJatuhTempo = tenorType === "MINGGUAN" ? addWeeks(tglCair, tenor) : addMonths(tglCair, tenor)
   const nomorKontrak = `KNT-${Date.now().toString(36).toUpperCase()}`
 
-  await ensureAccountingAccounts()
-  const saldoKas = await getCashBalanceByJenis(kasJenis, tglCair)
+  await ensureAccountingAccounts(companyId)
+  const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCair)
   if (saldoKas < nilaiCair) {
     return {
       error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}. Setor modal/simpanan dulu sebelum pencairan.`,
@@ -236,6 +242,7 @@ export async function cairkanPinjaman(input: unknown) {
   const pinjaman = await prisma.$transaction(async (tx) => {
     const pin = await tx.pinjaman.create({
       data: {
+        companyId,
         nomorKontrak,
         pengajuanId,
         pokokPinjaman: new Prisma.Decimal(plafon),
@@ -259,6 +266,7 @@ export async function cairkanPinjaman(input: unknown) {
     const jadwals = Array.from({ length: tenor }, (_, i) => {
       const tanggalJatuhTempo = tenorType === "MINGGUAN" ? addWeeks(tglCair, i + 1) : addMonths(tglCair, i + 1)
       return {
+        companyId,
         pinjamanId: pin.id,
         angsuranKe: i + 1,
         tanggalJatuhTempo,
@@ -279,8 +287,10 @@ export async function cairkanPinjaman(input: unknown) {
     // Catat di kas keluar
     await tx.kasTransaksi.create({
       data: {
+        companyId,
         jenis: "KELUAR",
-        kategori: ensured.key,
+        kategoriId: ensured.kategoriId,
+        kategoriKey: ensured.key,
         deskripsi: `Pencairan pinjaman ${nomorKontrak}`,
         jumlah: new Prisma.Decimal(nilaiCair),
         kasJenis,
@@ -291,6 +301,7 @@ export async function cairkanPinjaman(input: unknown) {
     })
 
     await postPencairanJournal(tx, {
+      companyId,
       pinjamanId: pin.id,
       tanggalCair: tglCair,
       kasJenis,
@@ -300,7 +311,7 @@ export async function cairkanPinjaman(input: unknown) {
       potonganProvisi,
       description: `Pencairan pinjaman ${nomorKontrak}`,
       postedById: userId,
-    })
+    }, { ensureAccounts: false })
 
     return pin
   })

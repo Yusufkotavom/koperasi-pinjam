@@ -10,6 +10,7 @@ import { writeAuditLog } from "@/lib/audit"
 import { ensureAccountingAccounts, getCashBalanceByJenis, postKasTransactionJournal } from "@/lib/accounting"
 import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { serializeData } from "@/lib/utils"
+import { requireCompanyId } from "@/lib/tenant"
 
 function normalizeKasCategoryKey(raw: string) {
   return raw.trim().toUpperCase().replace(/\s+/g, "_")
@@ -31,31 +32,38 @@ const kasSchema = z.object({
 })
 
 export async function ensureKasKategori(params: { jenis: "MASUK" | "KELUAR"; kategori: string }) {
+  const session = await auth()
+  if (!session) return { error: "Unauthorized" as const }
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+
   const key = normalizeKasCategoryKey(params.kategori)
   if (!key) return { error: "Kategori tidak boleh kosong." as const }
 
-  const existing = await prisma.kasKategori.findUnique({ where: { key } })
+  const existing = await prisma.kasKategori.findUnique({ where: { companyId_key: { companyId, key } } })
   if (existing && existing.jenis !== params.jenis) {
     return { error: `Kategori "${existing.nama}" sudah terpakai untuk jenis ${existing.jenis}. Kategori masuk dan keluar tidak boleh sama.` as const }
   }
 
   if (!existing) {
-    await prisma.kasKategori.create({
+    const created = await prisma.kasKategori.create({
       data: {
+        companyId,
         nama: params.kategori.trim(),
         key,
         jenis: params.jenis,
         isActive: true,
       },
     })
+    return { key, kategoriId: created.id }
   }
 
-  return { key }
+  return { key, kategoriId: existing.id }
 }
 
 export async function getKasKategoriList() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const defaults: Array<{ jenis: "MASUK" | "KELUAR"; nama: string }> = [
     { jenis: "MASUK", nama: "ANGSURAN" },
@@ -78,9 +86,10 @@ export async function getKasKategoriList() {
     const key = normalizeKasCategoryKey(d.nama)
     try {
       await prisma.kasKategori.upsert({
-        where: { key },
+        where: { companyId_key: { companyId, key } },
         update: {},
         create: {
+          companyId,
           nama: d.nama,
           key,
           jenis: d.jenis,
@@ -93,7 +102,7 @@ export async function getKasKategoriList() {
   }
 
   const rows = await prisma.kasKategori.findMany({
-    where: { isActive: true },
+    where: { companyId, isActive: true },
     select: { id: true, nama: true, key: true, jenis: true },
     orderBy: [{ jenis: "asc" }, { nama: "asc" }],
   })
@@ -104,6 +113,7 @@ export async function getKasKategoriList() {
 export async function createKasKategori(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   let userId: string
   try {
     const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -116,13 +126,14 @@ export async function createKasKategori(input: unknown) {
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
   const key = normalizeKasCategoryKey(parsed.data.nama)
-  const existing = await prisma.kasKategori.findUnique({ where: { key } })
+  const existing = await prisma.kasKategori.findUnique({ where: { companyId_key: { companyId, key } } })
   if (existing) {
     return { error: `Kategori "${existing.nama}" sudah ada (jenis ${existing.jenis}). Kategori masuk dan keluar tidak boleh sama.` }
   }
 
   const row = await prisma.kasKategori.create({
     data: {
+      companyId,
       nama: parsed.data.nama.trim(),
       key,
       jenis: parsed.data.jenis,
@@ -145,6 +156,7 @@ export async function createKasKategori(input: unknown) {
 export async function updateKasKategori(id: string, input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   let userId: string
   try {
     const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -158,12 +170,13 @@ export async function updateKasKategori(id: string, input: unknown) {
 
   const existing = await prisma.kasKategori.findUnique({ where: { id } })
   if (!existing) return { error: "Kategori tidak ditemukan." }
+  if (existing.companyId !== companyId) return { error: "Forbidden" }
 
   const newKey = normalizeKasCategoryKey(parsed.data.nama)
   
   if (newKey !== existing.key) {
     const collision = await prisma.kasKategori.findFirst({
-      where: { key: newKey, id: { not: id } }
+      where: { companyId, key: newKey, id: { not: id } }
     })
     if (collision) {
       return { error: `Kategori dengan nama "${parsed.data.nama}" sudah ada.` }
@@ -171,11 +184,11 @@ export async function updateKasKategori(id: string, input: unknown) {
   }
 
   const row = await prisma.$transaction(async (tx) => {
-    // If key changes, we need to update all transactions that use the old key
+    // Keep denormalized display key in sync for existing transactions.
     if (newKey !== existing.key) {
       await tx.kasTransaksi.updateMany({
-        where: { kategori: existing.key },
-        data: { kategori: newKey }
+        where: { companyId, kategoriId: existing.id },
+        data: { kategoriKey: newKey },
       })
     }
 
@@ -204,6 +217,7 @@ export async function updateKasKategori(id: string, input: unknown) {
 export async function deleteKasKategori(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   let userId: string
   try {
     const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -216,9 +230,10 @@ export async function deleteKasKategori(id: string) {
     where: { id },
   })
   if (!existing) return { error: "Kategori tidak ditemukan." }
+  if (existing.companyId !== companyId) return { error: "Forbidden" }
 
   const transaksiCount = await prisma.kasTransaksi.count({
-    where: { kategori: existing.key },
+    where: { companyId, kategoriId: existing.id },
   })
 
   if (transaksiCount > 0) {
@@ -246,6 +261,7 @@ export async function deleteKasKategori(id: string) {
 export async function getKasHarian(tanggal?: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const tgl = tanggal ? new Date(tanggal) : new Date()
   const startOfDay = new Date(tgl.getFullYear(), tgl.getMonth(), tgl.getDate())
@@ -253,13 +269,13 @@ export async function getKasHarian(tanggal?: string) {
 
   const [transaksi, saldoAwal] = await Promise.all([
     prisma.kasTransaksi.findMany({
-      where: { tanggal: { gte: startOfDay, lt: endOfDay } },
+      where: { companyId, tanggal: { gte: startOfDay, lt: endOfDay } },
       orderBy: { tanggal: "desc" },
       include: { inputOleh: { select: { name: true } } },
       take: 500,
     }),
     prisma.kasTransaksi.aggregate({
-      where: { tanggal: { lt: startOfDay } },
+      where: { companyId, tanggal: { lt: startOfDay } },
       _sum: {
         jumlah: true,
       },
@@ -310,6 +326,7 @@ export async function getArusKasReport(params?: {
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const groupBy: ArusKasGroupBy = params?.groupBy ?? "MONTH"
 
@@ -327,6 +344,7 @@ export async function getArusKasReport(params?: {
 
   const rows = await prisma.kasTransaksi.findMany({
     where: {
+      companyId,
       isApproved: true,
       tanggal: { gte: fromDate, lte: toDate },
     },
@@ -371,6 +389,7 @@ export async function getArusKasReport(params?: {
 export async function inputKas(input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   let userId: string
   let isPrivileged = false
   try {
@@ -384,28 +403,30 @@ export async function inputKas(input: unknown) {
   const parsed = kasSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { tanggal, jumlah, buktiUrl, ...rest } = parsed.data
+  const { tanggal, jumlah, buktiUrl, kategori, ...rest } = parsed.data
 
-  const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori: rest.kategori })
+  const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori })
   if ("error" in ensured) return { error: ensured.error }
 
   const tanggalTransaksi = tanggal ? new Date(tanggal) : new Date()
   if (rest.jenis === "KELUAR") {
-    await ensureAccountingAccounts()
-    const saldoKas = await getCashBalanceByJenis(rest.kasJenis, tanggalTransaksi)
+    await ensureAccountingAccounts(companyId)
+    const saldoKas = await getCashBalanceByJenis(companyId, rest.kasJenis, tanggalTransaksi)
     if (saldoKas < jumlah) {
       return {
         error: `Saldo ${rest.kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${jumlah.toLocaleString("id-ID")}.`,
       }
     }
   }
-  await ensureAccountingAccounts()
+  await ensureAccountingAccounts(companyId)
 
   const kas = await prisma.$transaction(async (tx) => {
     const row = await tx.kasTransaksi.create({
       data: {
         ...rest,
-        kategori: ensured.key,
+        companyId,
+        kategoriId: ensured.kategoriId,
+        kategoriKey: ensured.key,
         jumlah: new Prisma.Decimal(jumlah),
         tanggal: tanggalTransaksi,
         inputOlehId: userId,
@@ -440,7 +461,7 @@ export async function inputKas(input: unknown) {
     entityType: "KAS_TRANSAKSI",
     entityId: kas.id,
     action: "CASH",
-    afterData: { jenis: kas.jenis, kategori: kas.kategori, jumlah: kas.jumlah.toString() },
+    afterData: { jenis: kas.jenis, kategoriKey: kas.kategoriKey, jumlah: kas.jumlah.toString() },
   })
   return { success: true, data: { id: kas.id, isApproved: kas.isApproved } }
 }
@@ -448,6 +469,7 @@ export async function inputKas(input: unknown) {
 export async function updateKas(id: string, input: unknown) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   let userId: string
   try {
     const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -459,13 +481,14 @@ export async function updateKas(id: string, input: unknown) {
   const parsed = kasSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { tanggal, jumlah, buktiUrl, ...rest } = parsed.data
+  const { tanggal, jumlah, buktiUrl, kategori, ...rest } = parsed.data
 
-  const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori: rest.kategori })
+  const ensured = await ensureKasKategori({ jenis: rest.jenis, kategori })
   if ("error" in ensured) return { error: ensured.error }
 
   const existing = await prisma.kasTransaksi.findUnique({ where: { id } })
   if (!existing) return { error: "Data tidak ditemukan." }
+  if (existing.companyId !== companyId) return { error: "Forbidden" }
 
   if (existing.isApproved === false) {
     return { error: "Transaksi kas ini masih menunggu persetujuan. Selesaikan approval sebelum edit." }
@@ -473,8 +496,8 @@ export async function updateKas(id: string, input: unknown) {
 
   const tanggalTransaksi = tanggal ? new Date(tanggal) : new Date()
   if (rest.jenis === "KELUAR") {
-    await ensureAccountingAccounts()
-    const saldoKas = await getCashBalanceByJenis(rest.kasJenis, tanggalTransaksi)
+    await ensureAccountingAccounts(companyId)
+    const saldoKas = await getCashBalanceByJenis(companyId, rest.kasJenis, tanggalTransaksi)
     const existingEffect =
       existing.isApproved && existing.jenis === "KELUAR" && existing.kasJenis === rest.kasJenis
         ? Number(existing.jumlah)
@@ -491,7 +514,8 @@ export async function updateKas(id: string, input: unknown) {
       where: { id },
       data: {
         ...rest,
-        kategori: ensured.key,
+        kategoriId: ensured.kategoriId,
+        kategoriKey: ensured.key,
         jumlah: new Prisma.Decimal(jumlah),
         tanggal: tanggalTransaksi,
         ...(buktiUrl !== undefined ? { buktiUrl: buktiUrl?.trim() || null } : {}),
@@ -518,7 +542,7 @@ export async function updateKas(id: string, input: unknown) {
     entityType: "KAS_TRANSAKSI",
     entityId: kas.id,
     action: "UPDATE",
-    afterData: { jenis: kas.jenis, kategori: kas.kategori, jumlah: kas.jumlah.toString() },
+    afterData: { jenis: kas.jenis, kategoriKey: kas.kategoriKey, jumlah: kas.jumlah.toString() },
   })
   return { success: true }
 }
@@ -526,6 +550,7 @@ export async function updateKas(id: string, input: unknown) {
 export async function deleteKas(id: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
   let userId: string
   try {
     const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -536,6 +561,7 @@ export async function deleteKas(id: string) {
 
   const existing = await prisma.kasTransaksi.findUnique({ where: { id } })
   if (!existing) return { error: "Data tidak ditemukan." }
+  if (existing.companyId !== companyId) return { error: "Forbidden" }
 
   if (existing.isApproved === false) {
     return { error: "Transaksi kas ini masih menunggu persetujuan. Selesaikan approval sebelum hapus." }
@@ -568,6 +594,7 @@ export async function deleteKas(id: string) {
 export async function getKasPendingApprovals(params?: { limit?: number }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   try {
     requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
@@ -578,7 +605,7 @@ export async function getKasPendingApprovals(params?: { limit?: number }) {
   const limit = Math.min(Math.max(params?.limit ?? 50, 1), 200)
 
   const rows = await prisma.kasTransaksi.findMany({
-    where: { isApproved: false },
+    where: { companyId, isApproved: false },
     orderBy: { createdAt: "desc" },
     take: limit,
     include: { inputOleh: { select: { id: true, name: true } } },
@@ -590,6 +617,7 @@ export async function getKasPendingApprovals(params?: { limit?: number }) {
 export async function approveKasTransaksi(input: { id: string; action: "APPROVE" | "REJECT"; catatan?: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   let userId: string
   try {
@@ -601,6 +629,7 @@ export async function approveKasTransaksi(input: { id: string; action: "APPROVE"
 
   const row = await prisma.kasTransaksi.findUnique({ where: { id: input.id } })
   if (!row) return { error: "Transaksi kas tidak ditemukan." }
+  if (row.companyId !== companyId) return { error: "Forbidden" }
   if (row.isApproved && input.action === "APPROVE") return { error: "Transaksi kas sudah disetujui." }
 
   const pending = await prisma.approvalLog.findFirst({
@@ -617,8 +646,8 @@ export async function approveKasTransaksi(input: { id: string; action: "APPROVE"
   const catatan = input.catatan?.trim()
 
   if (input.action === "APPROVE" && row.jenis === "KELUAR") {
-    await ensureAccountingAccounts()
-    const saldoKas = await getCashBalanceByJenis(row.kasJenis === "BANK" ? "BANK" : "TUNAI", row.tanggal)
+    await ensureAccountingAccounts(companyId)
+    const saldoKas = await getCashBalanceByJenis(companyId, row.kasJenis === "BANK" ? "BANK" : "TUNAI", row.tanggal)
     const jumlah = Number(row.jumlah)
     if (saldoKas < jumlah) {
       return {
