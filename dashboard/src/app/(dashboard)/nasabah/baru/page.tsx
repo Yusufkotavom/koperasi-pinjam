@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
-import type { FormEvent } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -42,6 +42,7 @@ export default function NasabahBaruPage() {
   const [uploadedDokumen, setUploadedDokumen] = useState<string[]>([])
   const [kelompokList, setKelompokList] = useState<Option[]>([])
   const [kolektorList, setKolektorList] = useState<KolektorOption[]>([])
+  const submitIntentRef = useRef(false)
   const router = useRouter()
 
   const {
@@ -106,6 +107,7 @@ export default function NasabahBaruPage() {
   }
 
   const handleNext = async () => {
+    submitIntentRef.current = false
     const fields: (keyof NasabahInput)[] =
       step === 0
         ? ["namaLengkap", "nik", "alamat"]
@@ -124,7 +126,20 @@ export default function NasabahBaruPage() {
       return
     }
 
+    if (!submitIntentRef.current) {
+      event.preventDefault()
+      return
+    }
+
+    submitIntentRef.current = false
     void handleSubmit(onSubmit)(event)
+  }
+
+  const handleFormKeyDown = (event: ReactKeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter") return
+    const target = event.target as HTMLElement | null
+    if (target instanceof HTMLTextAreaElement) return
+    event.preventDefault()
   }
 
   const onSubmit = (data: NasabahInput) => {
@@ -162,7 +177,7 @@ export default function NasabahBaruPage() {
         ))}
       </div>
 
-      <form onSubmit={handleFormSubmit}>
+      <form onSubmit={handleFormSubmit} onKeyDown={handleFormKeyDown}>
         {step === 0 && (
           <Card>
             <CardHeader>
@@ -359,6 +374,9 @@ export default function NasabahBaruPage() {
               type="submit"
               className="bg-emerald-600 hover:bg-emerald-700"
               disabled={isPending}
+              onClick={() => {
+                submitIntentRef.current = true
+              }}
             >
               <Save className="size-4" /> {isPending ? "Menyimpan..." : "Simpan Nasabah"}
             </Button>

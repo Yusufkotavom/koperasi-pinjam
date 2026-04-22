@@ -11,22 +11,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TIME_ZONE_OPTIONS, DEFAULT_TIME_ZONE } from "@/lib/datetime"
 
-async function fileToDataUrl(file: File): Promise<string> {
-  const maxBytes = 600 * 1024 // ~600KB
-  if (file.size > maxBytes) {
-    throw new Error("Ukuran logo terlalu besar. Maksimal 600KB.")
+async function uploadLogo(file: File): Promise<string> {
+  const formData = new FormData()
+  formData.append("files", file)
+
+  const res = await fetch("/api/upload/logo", { method: "POST", body: formData })
+  const json = (await res.json()) as { urls?: string[]; error?: string }
+  if (!res.ok || !json.urls?.[0]) {
+    throw new Error(json.error ?? "Gagal upload logo.")
   }
 
-  if (!file.type.startsWith("image/")) {
-    throw new Error("File logo harus berupa gambar (PNG/JPG/SVG).")
-  }
-
-  return await new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(new Error("Gagal membaca file logo."))
-    reader.readAsDataURL(file)
-  })
+  return json.urls[0]
 }
 
 export function CompanySettingsForm({ initial }: { initial: CompanyInfo }) {
@@ -164,15 +159,16 @@ export function CompanySettingsForm({ initial }: { initial: CompanyInfo }) {
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (!file) return
+                  const input = e.currentTarget
                   startTransition(async () => {
                     try {
-                      const dataUrl = await fileToDataUrl(file)
-                      setForm((s) => ({ ...s, logoDataUrl: dataUrl }))
+                      const logoUrl = await uploadLogo(file)
+                      setForm((s) => ({ ...s, logoDataUrl: logoUrl }))
                       toast.success("Logo siap disimpan.")
                     } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "Gagal memproses logo.")
+                      toast.error(err instanceof Error ? err.message : "Gagal upload logo.")
                     } finally {
-                      e.target.value = ""
+                      input.value = ""
                     }
                   })
                 }}
