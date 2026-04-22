@@ -49,20 +49,16 @@ function KalkulatorAngsuran({
   tenorType: "BULANAN" | "MINGGUAN"
   onBungaPersenChange: (next: number) => void
 }) {
-  if (!plafon || !tenor) return null
   const bungaDesimal = (bunga || 0) / 100
   const pokok = plafon / tenor
   const bungaPerPeriode = plafon * bungaDesimal
   const total = pokok + bungaPerPeriode
-  const totalKeseluruhan = total * tenor
   const unit = tenorType === "MINGGUAN" ? "minggu" : "bulan"
+  const [draftPokokPerPeriode, setDraftPokokPerPeriode] = useState(pokok)
   const [draftBungaPerPeriode, setDraftBungaPerPeriode] = useState(bungaPerPeriode)
   const [draftTotalPerPeriode, setDraftTotalPerPeriode] = useState(total)
 
-  useEffect(() => {
-    setDraftBungaPerPeriode(bungaPerPeriode)
-    setDraftTotalPerPeriode(total)
-  }, [bungaPerPeriode, total])
+  if (!plafon || !tenor) return null
 
   return (
     <Card className="bg-emerald-50 border-emerald-200">
@@ -72,9 +68,21 @@ function KalkulatorAngsuran({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <div className="flex justify-between">
-          <span className="text-emerald-700">{`Angsuran Pokok/${unit}`}</span>
-          <span className="text-emerald-800">{formatRupiah(pokok)}</span>
+        <div className="space-y-1">
+          <span className="text-emerald-700 text-xs">{`Angsuran Pokok/${unit} (bisa disesuaikan)`}</span>
+          <NumericFormat
+            customInput={Input}
+            thousandSeparator="."
+            decimalSeparator=","
+            decimalScale={2}
+            value={draftPokokPerPeriode}
+            onValueChange={(values) => {
+              const nextPokok = Math.max(0, values.floatValue || 0)
+              setDraftPokokPerPeriode(nextPokok)
+              setDraftTotalPerPeriode(nextPokok + draftBungaPerPeriode)
+            }}
+            className="h-8 bg-white"
+          />
         </div>
 
         <div className="space-y-1">
@@ -83,11 +91,12 @@ function KalkulatorAngsuran({
             customInput={Input}
             thousandSeparator="."
             decimalSeparator=","
+            decimalScale={2}
             value={draftBungaPerPeriode}
             onValueChange={(values) => {
               const nextBungaPerPeriode = Math.max(0, values.floatValue || 0)
               setDraftBungaPerPeriode(nextBungaPerPeriode)
-              setDraftTotalPerPeriode(pokok + nextBungaPerPeriode)
+              setDraftTotalPerPeriode(draftPokokPerPeriode + nextBungaPerPeriode)
             }}
             onBlur={() => {
               const nextPersen = plafon > 0 ? (draftBungaPerPeriode / plafon) * 100 : 0
@@ -103,14 +112,15 @@ function KalkulatorAngsuran({
             customInput={Input}
             thousandSeparator="."
             decimalSeparator=","
+            decimalScale={2}
             value={draftTotalPerPeriode}
             onValueChange={(values) => {
               const nextTotal = Math.max(0, values.floatValue || 0)
               setDraftTotalPerPeriode(nextTotal)
-              setDraftBungaPerPeriode(Math.max(0, nextTotal - pokok))
+              setDraftBungaPerPeriode(Math.max(0, nextTotal - draftPokokPerPeriode))
             }}
             onBlur={() => {
-              const nextBungaPerPeriode = Math.max(0, draftTotalPerPeriode - pokok)
+              const nextBungaPerPeriode = Math.max(0, draftTotalPerPeriode - draftPokokPerPeriode)
               const nextPersen = plafon > 0 ? (nextBungaPerPeriode / plafon) * 100 : 0
               onBungaPersenChange(nextPersen)
             }}
@@ -120,7 +130,7 @@ function KalkulatorAngsuran({
 
         <div className="flex justify-between pt-1">
           <span className="text-emerald-700">Total Keseluruhan</span>
-          <span className="font-bold text-emerald-900">{formatRupiah(totalKeseluruhan)}</span>
+          <span className="font-bold text-emerald-900">{formatRupiah(draftTotalPerPeriode * tenor)}</span>
         </div>
       </CardContent>
     </Card>
@@ -371,6 +381,7 @@ export default function PengajuanBaruPage() {
                         customInput={Input}
                         thousandSeparator="."
                         decimalSeparator=","
+                        decimalScale={2}
                         value={value ?? ""}
                         onValueChange={(values) => {
                           onChange(values.floatValue || 0)
@@ -453,12 +464,13 @@ export default function PengajuanBaruPage() {
 
         <div className="lg:col-span-2 space-y-4">
           <KalkulatorAngsuran
+            key={`${Number(plafon)}-${Number(tenor)}-${Number(bunga)}-${tipeTenor}`}
             plafon={Number(plafon)}
             tenor={Number(tenor)}
             bunga={Number(bunga)}
             tenorType={tipeTenor}
             onBungaPersenChange={(next) => {
-              setValue("bungaPerBulan", Number(next.toFixed(6)), { shouldDirty: true, shouldValidate: true })
+              setValue("bungaPerBulan", Number(next.toFixed(2)), { shouldDirty: true, shouldValidate: true })
             }}
           />
 
