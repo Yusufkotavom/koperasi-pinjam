@@ -42,14 +42,16 @@ function KalkulatorAngsuran({
   tenor,
   bunga,
   tenorType,
+  onBungaPersenChange,
 }: {
   plafon: number
   tenor: number
   bunga: number
   tenorType: "BULANAN" | "MINGGUAN"
+  onBungaPersenChange: (next: number) => void
 }) {
-  if (!plafon || !tenor || !bunga) return null
-  const bungaDesimal = bunga / 100
+  if (!plafon || !tenor) return null
+  const bungaDesimal = (bunga || 0) / 100
   const pokok = plafon / tenor
   const bungaPerPeriode = plafon * bungaDesimal
   const total = pokok + bungaPerPeriode
@@ -64,17 +66,48 @@ function KalkulatorAngsuran({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        {[
-          { label: `Angsuran Pokok/${unit}`, value: formatRupiah(pokok) },
-          { label: `Bunga Flat/${unit}`, value: formatRupiah(bungaPerPeriode) },
-          { label: `Total Angsuran/${unit}`, value: formatRupiah(total), bold: true },
-          { label: "Total Keseluruhan", value: formatRupiah(totalKeseluruhan) },
-        ].map((r) => (
-          <div key={r.label} className="flex justify-between">
-            <span className="text-emerald-700">{r.label}</span>
-            <span className={r.bold ? "font-bold text-emerald-900" : "text-emerald-800"}>{r.value}</span>
-          </div>
-        ))}
+        <div className="flex justify-between">
+          <span className="text-emerald-700">{`Angsuran Pokok/${unit}`}</span>
+          <span className="text-emerald-800">{formatRupiah(pokok)}</span>
+        </div>
+
+        <div className="space-y-1">
+          <span className="text-emerald-700 text-xs">{`Bunga Flat/${unit} (bisa disesuaikan)`}</span>
+          <NumericFormat
+            customInput={Input}
+            thousandSeparator="."
+            decimalSeparator=","
+            value={bungaPerPeriode}
+            onValueChange={(values) => {
+              const nextBungaPerPeriode = Math.max(0, values.floatValue || 0)
+              const nextPersen = plafon > 0 ? (nextBungaPerPeriode / plafon) * 100 : 0
+              onBungaPersenChange(nextPersen)
+            }}
+            className="h-8 bg-white"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <span className="text-emerald-700 text-xs">{`Total Angsuran/${unit} (bisa disesuaikan)`}</span>
+          <NumericFormat
+            customInput={Input}
+            thousandSeparator="."
+            decimalSeparator=","
+            value={total}
+            onValueChange={(values) => {
+              const nextTotal = Math.max(0, values.floatValue || 0)
+              const nextBungaPerPeriode = Math.max(0, nextTotal - pokok)
+              const nextPersen = plafon > 0 ? (nextBungaPerPeriode / plafon) * 100 : 0
+              onBungaPersenChange(nextPersen)
+            }}
+            className="h-8 bg-white font-semibold"
+          />
+        </div>
+
+        <div className="flex justify-between pt-1">
+          <span className="text-emerald-700">Total Keseluruhan</span>
+          <span className="font-bold text-emerald-900">{formatRupiah(totalKeseluruhan)}</span>
+        </div>
       </CardContent>
     </Card>
   )
@@ -410,6 +443,9 @@ export default function PengajuanBaruPage() {
             tenor={Number(tenor)}
             bunga={Number(bunga)}
             tenorType={tipeTenor}
+            onBungaPersenChange={(next) => {
+              setValue("bungaPerBulan", Number(next.toFixed(6)), { shouldDirty: true, shouldValidate: true })
+            }}
           />
 
           <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={isPending}>
