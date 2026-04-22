@@ -155,7 +155,23 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
 
       if (!result.success) {
         const err = "error" in result ? result.error : null
-        toast.error(typeof err === "string" ? err : "Gagal menyimpan transaksi kas.")
+        if (typeof err === "string") {
+          toast.error(err)
+          return
+        }
+
+        if (err && typeof err === "object") {
+          const fields = err as Record<string, string[] | undefined>
+          const message =
+            fields.deskripsi?.[0] ??
+            fields.jumlah?.[0] ??
+            fields.kategori?.[0] ??
+            Object.values(fields).find((value) => Array.isArray(value) && value.length > 0)?.[0]
+          toast.error(message ?? "Gagal menyimpan transaksi kas.")
+          return
+        }
+
+        toast.error("Gagal menyimpan transaksi kas.")
         return
       }
 
