@@ -420,37 +420,46 @@ export async function inputKas(input: unknown) {
   }
   await ensureAccountingAccounts(companyId)
 
-  const kas = await prisma.$transaction(async (tx) => {
-    const row = await tx.kasTransaksi.create({
-      data: {
-        ...rest,
-        companyId,
-        kategoriId: ensured.kategoriId,
-        kategoriKey: ensured.key,
-        jumlah: new Prisma.Decimal(jumlah),
-        tanggal: tanggalTransaksi,
-        inputOlehId: userId,
-        buktiUrl: buktiUrl?.trim() || null,
-        isApproved: isPrivileged ? true : false,
-      },
-    })
-
-    if (!isPrivileged) {
-      await tx.approvalLog.create({
+  let kas: { id: string; isApproved: boolean; jenis: "MASUK" | "KELUAR"; kategoriKey: string; jumlah: Prisma.Decimal }
+  try {
+    kas = await prisma.$transaction(async (tx) => {
+      const row = await tx.kasTransaksi.create({
         data: {
-          entityType: ApprovalEntityType.KAS,
-          entityId: row.id,
-          status: ApprovalStatus.PENDING,
-          requestedById: userId,
-          catatan: "Menunggu persetujuan transaksi kas.",
+          ...rest,
+          companyId,
+          kategoriId: ensured.kategoriId,
+          kategoriKey: ensured.key,
+          jumlah: new Prisma.Decimal(jumlah),
+          tanggal: tanggalTransaksi,
+          inputOlehId: userId,
+          buktiUrl: buktiUrl?.trim() || null,
+          isApproved: isPrivileged ? true : false,
         },
       })
-    } else {
-      await postKasTransactionJournal(tx, row.id, userId)
-    }
 
-    return row
-  })
+      if (!isPrivileged) {
+        await tx.approvalLog.create({
+          data: {
+            entityType: ApprovalEntityType.KAS,
+            entityId: row.id,
+            status: ApprovalStatus.PENDING,
+            requestedById: userId,
+            catatan: "Menunggu persetujuan transaksi kas.",
+          },
+        })
+      } else {
+        // Accounts are already ensured before entering transaction.
+        await postKasTransactionJournal(tx, row.id, userId, { ensureAccounts: false })
+      }
+
+      return row
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return { error: "Gagal menyimpan kas. Silakan ulangi beberapa saat lagi." }
+    }
+    throw error
+  }
 
   revalidatePath("/kas")
   revalidatePath("/laporan/laba-rugi")
@@ -656,13 +665,14 @@ export async function approveKasTransaksi(input: { id: string; action: "APPROVE"
     }
   }
 
+  await ensureAccountingAccounts(companyId)
   await prisma.$transaction(async (tx) => {
     if (input.action === "APPROVE") {
       await tx.kasTransaksi.update({
         where: { id: input.id },
         data: { isApproved: true },
       })
-      await postKasTransactionJournal(tx, input.id, userId)
+      await postKasTransactionJournal(tx, input.id, userId, { ensureAccounts: false })
     }
 
     if (pending) {
