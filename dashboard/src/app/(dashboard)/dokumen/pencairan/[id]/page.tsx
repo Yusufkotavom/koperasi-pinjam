@@ -7,6 +7,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { PrintButton } from "@/components/print-button"
 import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { getCompanyInfo } from "@/actions/settings"
 
 export const metadata = {
   title: "Bukti Pencairan Pinjaman",
@@ -25,6 +26,8 @@ export default async function PencairanPage({ params }: { params: Promise<{ id: 
   }
 
   const { pinjaman, nasabah, kelompok, approver } = pengajuan
+  const companyInfo = await getCompanyInfo()
+  const receiptSignerName = companyInfo.receiptSignerName?.trim() || approver?.name || "Petugas Koperasi"
 
   return (
     <div className="p-6 md:p-12 space-y-6 max-w-4xl mx-auto bg-white min-h-screen text-slate-900">
@@ -127,7 +130,7 @@ export default async function PencairanPage({ params }: { params: Promise<{ id: 
           </div>
           <div className="text-center">
             <p className="text-slate-500 mb-16">Pihak Koperasi (Approver)</p>
-            <p className="font-semibold underline decoration-slate-300 underline-offset-4">{approver?.name || "Petugas Koperasi"}</p>
+            <p className="font-semibold underline decoration-slate-300 underline-offset-4">{receiptSignerName}</p>
           </div>
         </div>
       </div>
