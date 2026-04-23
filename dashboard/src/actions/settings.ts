@@ -38,6 +38,7 @@ export type CompanyInfo = {
   website?: string
   logoDataUrl?: string
   timeZone?: string
+  receiptSignerName?: string
 }
 
 const DEFAULT_COMPANY_INFO: CompanyInfo = {
@@ -49,6 +50,7 @@ const DEFAULT_COMPANY_INFO: CompanyInfo = {
   website: "",
   logoDataUrl: "",
   timeZone: DEFAULT_TIME_ZONE,
+  receiptSignerName: "",
 }
 
 const companyInfoSchema = z.object({
@@ -64,6 +66,7 @@ const companyInfoSchema = z.object({
     .max(3_000_000)
     .optional(),
   timeZone: z.string().trim().max(64).optional(),
+  receiptSignerName: z.string().trim().max(120).optional(),
 })
 
 export async function getRankingConfig(): Promise<RankingConfig> {

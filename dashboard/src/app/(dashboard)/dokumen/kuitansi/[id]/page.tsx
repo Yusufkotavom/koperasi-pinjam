@@ -8,6 +8,7 @@ import { PrintButton } from "@/components/print-button"
 import { ArrowLeft } from "lucide-react"
 import { CompanyDocumentHeader } from "@/components/print/company-document-header"
 import { formatPembayaranModeLabel, parsePembayaranCatatan } from "@/lib/pembayaran-notes"
+import { getCompanyInfo } from "@/actions/settings"
 
 export const metadata = {
   title: "Kuitansi Pembayaran",
@@ -30,6 +31,8 @@ export default async function KuitansiPage({ params }: { params: Promise<{ id: s
   const { nasabah, kelompok } = pengajuan
   const parsedCatatan = parsePembayaranCatatan(pembayaran.catatan)
   const modeLabel = formatPembayaranModeLabel(parsedCatatan.mode)
+  const companyInfo = await getCompanyInfo()
+  const receiptSignerName = companyInfo.receiptSignerName?.trim() || pembayaran.inputOleh.name
 
   return (
     <div className="p-6 md:p-12 space-y-6 max-w-4xl mx-auto bg-white min-h-screen text-slate-900">
@@ -131,7 +134,7 @@ export default async function KuitansiPage({ params }: { params: Promise<{ id: s
           </div>
           <div className="text-center">
             <p className="text-slate-500 mb-16">Diterima & Diinput Oleh</p>
-            <p className="font-semibold underline decoration-slate-300 underline-offset-4">{pembayaran.inputOleh.name}</p>
+            <p className="font-semibold underline decoration-slate-300 underline-offset-4">{receiptSignerName}</p>
           </div>
         </div>
 
