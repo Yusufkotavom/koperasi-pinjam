@@ -10,7 +10,7 @@ import { writeAuditLog } from "@/lib/audit"
 import { postJournalEntry, postPembayaranJournal } from "@/lib/accounting"
 import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { computeRanking } from "@/lib/ranking"
-import { getRankingConfig } from "@/actions/settings"
+import { getRankingConfig, getDendaConfig } from "@/actions/settings"
 import { requireCompanyId } from "@/lib/tenant"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
@@ -416,8 +416,9 @@ export async function inputPembayaran(input: {
   const sisaPinjaman = Number(jadwal.pinjaman.sisaPinjaman)
 
   const paid = await getPaidForJadwal(jadwal.pinjamanId, jadwal.id)
+  const dendaConfig = await getDendaConfig()
 
-  const dendaHariIni = hitungDenda(sisaPinjaman, jadwal.tanggalJatuhTempo, tanggalBayar)
+  const dendaHariIni = hitungDenda(sisaPinjaman, jadwal.tanggalJatuhTempo, tanggalBayar, dendaConfig)
   const dendaSisa = Math.max(0, dendaHariIni - paid.denda)
   const pokokSisa = Math.max(0, Number(jadwal.pokok) - paid.pokok)
   const bungaSisa = Math.max(0, Number(jadwal.bunga) - paid.bunga)
@@ -556,8 +557,9 @@ export async function inputPembayaran(input: {
     }
   })
 
-  revalidatePath("/pembayaran")
-  revalidatePath("/monitoring/tunggakan")
+  // We do not call revalidatePath here because it will unmount the client component (BayarButton)
+  // before the user can see and interact with the success dialog.
+  // The client will manually call router.refresh() when the success dialog is closed.
 
   await writeAuditLog({
     actorId: userId,

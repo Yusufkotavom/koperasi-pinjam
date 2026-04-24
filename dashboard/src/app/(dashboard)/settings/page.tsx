@@ -8,6 +8,7 @@ import {
   Settings,
   SlidersHorizontal,
   Users,
+  Coins,
 } from "lucide-react"
 import { auth } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +26,12 @@ const settingSections = [
     description: "Nama koperasi, logo, alamat, kontak, dan zona waktu.",
     href: "/settings/company",
     icon: Building2,
+  },
+  {
+    title: "Pengaturan Denda",
+    description: "Konfigurasi persentase atau nominal denda keterlambatan per hari.",
+    href: "/settings/denda",
+    icon: Coins,
   },
   {
     title: "User Company",
