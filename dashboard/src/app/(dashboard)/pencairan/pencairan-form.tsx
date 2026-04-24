@@ -39,6 +39,7 @@ export function PencairanForm({ pengajuan }: Props) {
   const submitLockRef = useRef(false)
   const [potonganAdmin, setPotonganAdmin] = useState(0)
   const [potonganProvisi, setPotonganProvisi] = useState(0)
+  const [bonusKolektorNominal, setBonusKolektorNominal] = useState(0)
   const [tanggalCair, setTanggalCair] = useState(() =>
     getLocalDateInputValue(new Date()),
   )
@@ -65,6 +66,7 @@ export function PencairanForm({ pengajuan }: Props) {
           pengajuanId: pengajuan.id,
           potonganAdmin,
           potonganProvisi,
+          bonusKolektorNominal,
           tanggalCair,
           kasJenis,
         })
@@ -131,6 +133,19 @@ export function PencairanForm({ pengajuan }: Props) {
                 onChange={(e) => setPotonganProvisi(Number(e.target.value))}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Bonus Kolektor Saat Nasabah Lunas (Rp)</Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={bonusKolektorNominal || ""}
+              onChange={(e) => setBonusKolektorNominal(Number(e.target.value))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Bonus ini dicatat per pinjaman. Menjadi siap dibayar saat pinjaman lunas, lalu dibayarkan dari menu kolektor.
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -18,6 +18,7 @@ export const DEFAULT_ACCOUNTING_ACCOUNTS: Array<{ code: string; name: string; ty
   { code: "PENDAPATAN_LAINNYA", name: "Pendapatan Lainnya", type: "REVENUE" },
   { code: "BEBAN_OPERASIONAL", name: "Beban Operasional", type: "EXPENSE" },
   { code: "BEBAN_GAJI", name: "Beban Gaji", type: "EXPENSE" },
+  { code: "BEBAN_BONUS_KOLEKTOR", name: "Beban Bonus Kolektor", type: "EXPENSE" },
   { code: "BEBAN_LAINNYA", name: "Beban Lainnya", type: "EXPENSE" },
   { code: "PENYESUAIAN", name: "Penyesuaian", type: "EXPENSE" },
 ]
@@ -62,6 +63,7 @@ function fallbackAccountForKas(jenis: "MASUK" | "KELUAR", kategori: string) {
     return "PENDAPATAN_LAINNYA"
   }
   if (key.includes("GAJI")) return "BEBAN_GAJI"
+  if (key.includes("BONUS")) return "BEBAN_BONUS_KOLEKTOR"
   if (key.includes("OPERASIONAL")) return "BEBAN_OPERASIONAL"
   return "BEBAN_LAINNYA"
 }

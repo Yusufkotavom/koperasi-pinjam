@@ -229,10 +229,18 @@ export async function cairkanPinjaman(input: unknown) {
   const parsed = pencairanSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { pengajuanId, potonganAdmin, potonganProvisi, tanggalCair, kasJenis } = parsed.data
+  const { pengajuanId, potonganAdmin, potonganProvisi, bonusKolektorNominal, tanggalCair, kasJenis } = parsed.data
 
   const pengajuan = await prisma.pengajuan.findFirst({
     where: { id: pengajuanId, companyId, status: "DISETUJUI" },
+    include: {
+      nasabah: {
+        select: {
+          kolektorId: true,
+          kolektor: { select: { id: true, name: true } },
+        },
+      },
+    },
   })
   if (!pengajuan) return { error: "Pengajuan tidak ditemukan atau belum disetujui." }
 
@@ -323,6 +331,19 @@ export async function cairkanPinjaman(input: unknown) {
       where: { id: pengajuanId },
       data: { status: "DICAIRKAN" },
     })
+
+    if (pengajuan.nasabah.kolektorId && bonusKolektorNominal > 0) {
+      await tx.kolektorBonus.create({
+        data: {
+          companyId,
+          pinjamanId: pin.id,
+          kolektorId: pengajuan.nasabah.kolektorId,
+          nominal: new Prisma.Decimal(bonusKolektorNominal),
+          status: "PENDING",
+          catatan: `Bonus kolektor untuk pinjaman ${nomorKontrak}`,
+        },
+      })
+    }
 
     // Catat di kas keluar
     await tx.kasTransaksi.create({
@@ -513,6 +534,14 @@ export async function batalkanPencairanPinjaman(input: unknown) {
         data: {
           status: "LUNAS",
           sisaPinjaman: new Prisma.Decimal(0),
+        },
+      })
+
+      await tx.kolektorBonus.updateMany({
+        where: { companyId, pinjamanId: pinjaman.id },
+        data: {
+          status: "CANCELED",
+          catatan: `Bonus dibatalkan karena pencairan pinjaman ${pinjaman.nomorKontrak} dibatalkan.`,
         },
       })
 

@@ -41,6 +41,7 @@ model Company {
   kasKategori     KasKategori[]
   kasTransaksi    KasTransaksi[]
   kelompok        Kelompok[]
+  kolektorBonus   KolektorBonus[]
   kolektorTargets KolektorTarget[]
   nasabah         Nasabah[]
   notifikasi      Notifikasi[]
@@ -71,6 +72,8 @@ model User {
   ownedCompanies         Company[]         @relation("CompanyOwner")
   journalPosted          JournalEntry[]    @relation("JournalPostedBy")
   kasDiinput             KasTransaksi[]
+  kolektorBonusDibayar   KolektorBonus[]   @relation("KolektorBonusPaidBy")
+  kolektorBonusDimiliki  KolektorBonus[]   @relation("KolektorBonusCollector")
   kolektorTargets        KolektorTarget[]  @relation("KolektorTargetUser")
   nasabahSebagaiKolektor Nasabah[]         @relation("KolektorNasabah")
   notifikasi             Notifikasi[]      @relation("UserNotifikasi")
@@ -214,6 +217,7 @@ model Pinjaman {
   updatedAt         DateTime         @updatedAt
   tenorType         TenorType        @default(BULANAN)
   companyId         String
+  bonusKolektor     KolektorBonus?
   jadwalAngsuran    JadwalAngsuran[]
   pembayaran        Pembayaran[]
   company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -465,6 +469,30 @@ model KolektorTarget {
   @@map("kolektor_targets")
 }
 
+model KolektorBonus {
+  id         String              @id @default(cuid())
+  pinjamanId String              @unique
+  kolektorId String
+  nominal    Decimal             @default(0) @db.Decimal(15, 2)
+  status     KolektorBonusStatus @default(PENDING)
+  eligibleAt DateTime?
+  paidAt     DateTime?
+  paidById   String?
+  catatan    String?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  companyId  String
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  kolektor   User                @relation("KolektorBonusCollector", fields: [kolektorId], references: [id])
+  paidBy     User?               @relation("KolektorBonusPaidBy", fields: [paidById], references: [id])
+  pinjaman   Pinjaman            @relation(fields: [pinjamanId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([kolektorId, status])
+  @@index([status, eligibleAt])
+  @@map("kolektor_bonus")
+}
+
 model Notifikasi {
   id        String          @id @default(cuid())
   userId    String?
@@ -594,6 +622,13 @@ enum JournalStatus {
 enum RekonsiliasiStatus {
   DRAFT
   SELESAI
+}
+
+enum KolektorBonusStatus {
+  PENDING
+  READY
+  PAID
+  CANCELED
 }
 
 enum AuditAction {

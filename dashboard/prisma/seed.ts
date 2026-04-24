@@ -35,6 +35,7 @@ async function cleanDatabase() {
   // Delete children first (FK safety)
   await prisma.auditLog.deleteMany()
   await prisma.approvalLog.deleteMany()
+  await prisma.kolektorBonus.deleteMany()
   await prisma.kolektorTarget.deleteMany()
   await prisma.notifikasi.deleteMany()
   await prisma.rekonsiliasiKas.deleteMany()

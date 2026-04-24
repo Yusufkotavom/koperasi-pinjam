@@ -90,6 +90,7 @@ export async function getKasKategoriList() {
     { jenis: "MASUK", nama: "LAINNYA_MASUK" },
     { jenis: "KELUAR", nama: "PENCAIRAN" },
     { jenis: "KELUAR", nama: "PEMBATALAN_ANGSURAN" },
+    { jenis: "KELUAR", nama: "BONUS_KOLEKTOR" },
     { jenis: "KELUAR", nama: "GAJI" },
     { jenis: "KELUAR", nama: "OPERASIONAL" },
     { jenis: "KELUAR", nama: "LAINNYA_KELUAR" },
