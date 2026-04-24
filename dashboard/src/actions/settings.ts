@@ -220,3 +220,67 @@ export async function updateCompanyInfo(input: unknown) {
   revalidatePath("/dokumen")
   return { success: true }
 }
+
+const DENDA_KEY = "DENDA_CONFIG"
+
+export type DendaConfig = {
+  type: "PERCENTAGE" | "NOMINAL"
+  amount: number
+}
+
+const DEFAULT_DENDA_CONFIG: DendaConfig = {
+  type: "PERCENTAGE",
+  amount: 0.1, // 0.1%
+}
+
+const dendaConfigSchema = z.object({
+  type: z.enum(["PERCENTAGE", "NOMINAL"]),
+  amount: z.coerce.number().min(0),
+})
+
+export async function getDendaConfig(): Promise<DendaConfig> {
+  const session = await auth()
+  if (!session) return DEFAULT_DENDA_CONFIG
+  
+  // Need to safely check companyId without throwing if called in public contexts
+  let companyId: string
+  try {
+    const info = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+    companyId = info.companyId
+  } catch {
+    return DEFAULT_DENDA_CONFIG
+  }
+
+  const row = await prisma.companySetting.findUnique({ where: { companyId_key: { companyId, key: DENDA_KEY } } })
+  if (!row) return DEFAULT_DENDA_CONFIG
+
+  const parsed = dendaConfigSchema.safeParse(row.value)
+  if (!parsed.success) return DEFAULT_DENDA_CONFIG
+
+  return parsed.data
+}
+
+export async function updateDendaConfig(input: unknown) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+
+  try {
+    requireRoles(session, [RoleType.ADMIN, RoleType.PIMPINAN])
+  } catch {
+    return { error: "Hanya admin/pimpinan yang dapat mengubah pengaturan denda." }
+  }
+
+  const parsed = dendaConfigSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId, key: DENDA_KEY } },
+    create: { companyId, key: DENDA_KEY, value: parsed.data },
+    update: { value: parsed.data },
+  })
+
+  revalidatePath("/settings")
+  return { success: true }
+}
+
