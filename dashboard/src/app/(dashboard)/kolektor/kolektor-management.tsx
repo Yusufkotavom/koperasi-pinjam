@@ -5,21 +5,33 @@ import {
   createKolektorFromKetuaKelompok,
   createKolektorFromNasabah,
   createKolektorManual,
+  removeKolektor,
+  updateKolektor,
 } from "@/actions/kolektor"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { UserPlus, Users, ShieldCheck } from "lucide-react"
+import { Pencil, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react"
 
 type Props = {
   initialKolektor: {
     id: string
     name: string
     email: string
+    isActive: boolean
     roles: string[]
     totalNasabah: number
   }[]
@@ -49,14 +61,14 @@ export function KolektorManagement({ initialKolektor, sumberOptions, roleTable }
   const [kelompokId, setKelompokId] = useState("")
   const [kelompokAdmin, setKelompokAdmin] = useState(false)
 
-  const run = (fn: () => Promise<{ success?: boolean; error?: string }>) => {
+  const run = (fn: () => Promise<{ success?: boolean; error?: string }>, successMessage = "Data kolektor berhasil diperbarui.") => {
     startTransition(async () => {
       const result = await fn()
       if (!result?.success) {
         toast.error(result?.error ?? "Gagal memproses data kolektor.")
         return
       }
-      toast.success("Data kolektor berhasil diperbarui.")
+      toast.success(successMessage)
       window.location.reload()
     })
   }
@@ -161,7 +173,7 @@ export function KolektorManagement({ initialKolektor, sumberOptions, roleTable }
         <Card className="border-none shadow-sm overflow-hidden">
           <CardHeader className="pb-6 border-b border-slate-50 dark:border-slate-800/50">
             <CardTitle className="text-base font-semibold">Kolektor Lapangan</CardTitle>
-            <CardDescription>Daftar petugas yang aktif melakukan penagihan</CardDescription>
+            <CardDescription>Daftar akun yang memiliki role kolektor, aktif maupun nonaktif</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -182,14 +194,41 @@ export function KolektorManagement({ initialKolektor, sumberOptions, roleTable }
                       </div>
                     </TableCell>
                     <TableCell>
-                       <div className="flex gap-1.5 flex-wrap">
+                      <div className="flex gap-1.5 flex-wrap">
+                        <Badge className={`${k.isActive ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"} border-0 h-5 px-1.5 text-[9px] font-black uppercase tracking-tight rounded-md`}>
+                          {k.isActive ? "AKTIF" : "NONAKTIF"}
+                        </Badge>
                          {k.roles.map((r) => (
                            <Badge key={r} className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-0 h-5 px-1.5 text-[9px] font-black uppercase tracking-tight rounded-md">{r}</Badge>
                          ))}
-                       </div>
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
-                       <span className="text-sm font-bold tracking-tight text-primary">{k.totalNasabah.toLocaleString("id-ID")}</span>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-sm font-bold tracking-tight text-primary">{k.totalNasabah.toLocaleString("id-ID")}</span>
+                        <EditKolektorDialog
+                          kolektor={k}
+                          disabled={isPending}
+                          onSubmit={(payload) => run(() => updateKolektor(payload), "Data kolektor berhasil diubah.")}
+                        />
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="destructive"
+                          disabled={isPending}
+                          onClick={() => {
+                            const confirmed = window.confirm(
+                              k.totalNasabah > 0
+                                ? `${k.name} akan dicabut dari kolektor dan ${k.totalNasabah} nasabah akan dilepas dari kolektor ini. Lanjutkan?`
+                                : `Cabut role kolektor untuk ${k.name}?`
+                            )
+                            if (!confirmed) return
+                            run(() => removeKolektor({ id: k.id }), "Role kolektor berhasil dicabut.")
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -241,5 +280,102 @@ export function KolektorManagement({ initialKolektor, sumberOptions, roleTable }
         </Card>
       </div>
     </div>
+  )
+}
+
+function EditKolektorDialog({
+  kolektor,
+  disabled,
+  onSubmit,
+}: {
+  kolektor: Props["initialKolektor"][number]
+  disabled: boolean
+  onSubmit: (payload: { id: string; name: string; email: string; isActive: boolean; isAdmin: boolean }) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(kolektor.name)
+  const [email, setEmail] = useState(kolektor.email)
+  const [isActive, setIsActive] = useState(kolektor.isActive)
+  const [isAdmin, setIsAdmin] = useState(kolektor.roles.includes("ADMIN"))
+
+  const reset = () => {
+    setName(kolektor.name)
+    setEmail(kolektor.email)
+    setIsActive(kolektor.isActive)
+    setIsAdmin(kolektor.roles.includes("ADMIN"))
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => {
+      setOpen(next)
+      if (!next) reset()
+    }}>
+      <DialogTrigger
+        render={
+          <Button type="button" size="icon-xs" variant="outline" disabled={disabled} />
+        }
+      >
+        <Pencil />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Kolektor</DialogTitle>
+          <DialogDescription>Ubah identitas akun kolektor atau nonaktifkan akses login.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Nama</Label>
+            <Input value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </div>
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/30">
+            <label className="flex items-center gap-3 text-xs font-semibold cursor-pointer">
+              <input
+                type="checkbox"
+                className="size-4 rounded-md border-slate-300 text-primary focus:ring-primary/20"
+                checked={isAdmin}
+                onChange={(event) => setIsAdmin(event.target.checked)}
+              />
+              Tambahkan role ADMIN
+            </label>
+          </div>
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/30">
+            <label className="flex items-center gap-3 text-xs font-semibold cursor-pointer">
+              <input
+                type="checkbox"
+                className="size-4 rounded-md border-slate-300 text-primary focus:ring-primary/20"
+                checked={isActive}
+                onChange={(event) => setIsActive(event.target.checked)}
+              />
+              Akun aktif
+            </label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Batal
+          </Button>
+          <Button
+            type="button"
+            disabled={disabled || !name.trim() || !email.trim()}
+            onClick={() => {
+              onSubmit({
+                id: kolektor.id,
+                name,
+                email,
+                isActive,
+                isAdmin,
+              })
+              setOpen(false)
+            }}
+          >
+            Simpan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
