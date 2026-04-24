@@ -735,13 +735,14 @@ export async function approveKasTransaksi(input: { id: string; action: "APPROVE"
 export async function getKasBulanan(bulan: number, tahun: number) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const startDate = new Date(tahun, bulan - 1, 1)
   const endDate = new Date(tahun, bulan, 0, 23, 59, 59)
 
   const data = await prisma.kasTransaksi.groupBy({
     by: ["jenis"],
-    where: { tanggal: { gte: startDate, lte: endDate } },
+    where: { companyId, tanggal: { gte: startDate, lte: endDate } },
     _sum: { jumlah: true },
     _count: { id: true },
   })

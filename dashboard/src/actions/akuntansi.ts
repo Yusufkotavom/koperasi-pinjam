@@ -309,7 +309,7 @@ export async function getLedgerKasReport(params?: { kasJenis?: string; accountId
   const period = resolveReportPeriod(params)
 
   const accounts = await prisma.account.findMany({
-    where: { isActive: true },
+    where: { companyId, isActive: true },
     orderBy: [{ type: "asc" }, { code: "asc" }],
   })
   const selectedAccount =
@@ -336,14 +336,14 @@ export async function getLedgerKasReport(params?: { kasJenis?: string; accountId
     prisma.journalLine.findMany({
       where: {
         accountId: selectedAccount.id,
-        journalEntry: { status: "POSTED", entryDate: { lt: period.startDate } },
+        journalEntry: { companyId, status: "POSTED", entryDate: { lt: period.startDate } },
       },
       select: { debit: true, credit: true },
     }),
     prisma.journalLine.findMany({
       where: {
         accountId: selectedAccount.id,
-        journalEntry: { status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
+        journalEntry: { companyId, status: "POSTED", entryDate: { gte: period.startDate, lt: period.endDate } },
       },
       orderBy: [{ journalEntry: { entryDate: "asc" } }, { createdAt: "asc" }],
       include: {

@@ -93,6 +93,7 @@ export async function getCashBalanceByJenis(companyId: string, kasJenis: "TUNAI"
     where: {
       accountId: account.id,
       journalEntry: {
+        companyId,
         status: "POSTED",
         ...(asOf ? { entryDate: { lte: asOf } } : {}),
       },

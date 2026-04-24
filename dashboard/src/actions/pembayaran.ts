@@ -839,6 +839,7 @@ type LaporanTransaksiUserFilter = {
 export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUserFilter) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const today = new Date()
   const period = resolveReportPeriod(params)
@@ -846,11 +847,13 @@ export async function getLaporanTransaksiUserReport(params?: LaporanTransaksiUse
 
   const [kelompokOptions, nasabahList] = await Promise.all([
     prisma.kelompok.findMany({
+      where: { companyId },
       select: { id: true, nama: true },
       orderBy: { nama: "asc" },
     }),
     prisma.nasabah.findMany({
       where: {
+        companyId,
         ...(params?.kelompokId ? { kelompokId: params.kelompokId } : {}),
         ...(params?.search
           ? {
