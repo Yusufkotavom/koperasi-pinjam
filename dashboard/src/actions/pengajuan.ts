@@ -13,6 +13,7 @@ import { serializeData } from "@/lib/utils"
 import { ensureAccountingAccounts, getCashBalanceByJenis, postJournalEntry, postPencairanJournal } from "@/lib/accounting"
 import { requireCompanyId } from "@/lib/tenant"
 import { z } from "zod"
+import { getKolektorBonusConfig } from "./settings"
 
 function parseDateOnly(input: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
@@ -230,6 +231,8 @@ export async function cairkanPinjaman(input: unknown) {
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
   const { pengajuanId, potonganAdmin, potonganProvisi, bonusKolektorNominal, tanggalCair, kasJenis } = parsed.data
+  const bonusConfig = await getKolektorBonusConfig()
+  const resolvedBonusKolektorNominal = bonusKolektorNominal ?? bonusConfig.nominal
 
   const pengajuan = await prisma.pengajuan.findFirst({
     where: { id: pengajuanId, companyId, status: "DISETUJUI" },
@@ -332,13 +335,13 @@ export async function cairkanPinjaman(input: unknown) {
       data: { status: "DICAIRKAN" },
     })
 
-    if (pengajuan.nasabah.kolektorId && bonusKolektorNominal > 0) {
+    if (pengajuan.nasabah.kolektorId && resolvedBonusKolektorNominal > 0) {
       await tx.kolektorBonus.create({
         data: {
           companyId,
           pinjamanId: pin.id,
           kolektorId: pengajuan.nasabah.kolektorId,
-          nominal: new Prisma.Decimal(bonusKolektorNominal),
+          nominal: new Prisma.Decimal(resolvedBonusKolektorNominal),
           status: "PENDING",
           catatan: `Bonus kolektor untuk pinjaman ${nomorKontrak}`,
         },

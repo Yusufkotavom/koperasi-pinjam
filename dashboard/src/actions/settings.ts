@@ -222,10 +222,19 @@ export async function updateCompanyInfo(input: unknown) {
 }
 
 const DENDA_KEY = "DENDA_CONFIG"
+const KOLEKTOR_BONUS_KEY = "KOLEKTOR_BONUS_CONFIG"
 
 export type DendaConfig = {
   type: "PERCENTAGE" | "NOMINAL"
   amount: number
+}
+
+export type KolektorBonusConfig = {
+  nominal: number
+}
+
+const DEFAULT_KOLEKTOR_BONUS_CONFIG: KolektorBonusConfig = {
+  nominal: 0,
 }
 
 const DEFAULT_DENDA_CONFIG: DendaConfig = {
@@ -236,6 +245,10 @@ const DEFAULT_DENDA_CONFIG: DendaConfig = {
 const dendaConfigSchema = z.object({
   type: z.enum(["PERCENTAGE", "NOMINAL"]),
   amount: z.coerce.number().min(0),
+})
+
+const kolektorBonusConfigSchema = z.object({
+  nominal: z.coerce.number().min(0).max(1_000_000_000_000),
 })
 
 export async function getDendaConfig(): Promise<DendaConfig> {
@@ -284,3 +297,48 @@ export async function updateDendaConfig(input: unknown) {
   return { success: true }
 }
 
+export async function getKolektorBonusConfig(): Promise<KolektorBonusConfig> {
+  const session = await auth()
+  if (!session) return DEFAULT_KOLEKTOR_BONUS_CONFIG
+
+  let companyId: string
+  try {
+    const info = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+    companyId = info.companyId
+  } catch {
+    return DEFAULT_KOLEKTOR_BONUS_CONFIG
+  }
+
+  const row = await prisma.companySetting.findUnique({ where: { companyId_key: { companyId, key: KOLEKTOR_BONUS_KEY } } })
+  if (!row) return DEFAULT_KOLEKTOR_BONUS_CONFIG
+
+  const parsed = kolektorBonusConfigSchema.safeParse(row.value)
+  if (!parsed.success) return DEFAULT_KOLEKTOR_BONUS_CONFIG
+  return parsed.data
+}
+
+export async function updateKolektorBonusConfig(input: unknown) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+
+  try {
+    requireRoles(session, [RoleType.ADMIN, RoleType.PIMPINAN])
+  } catch {
+    return { error: "Hanya admin/pimpinan yang dapat mengubah bonus default kolektor." }
+  }
+
+  const parsed = kolektorBonusConfigSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId, key: KOLEKTOR_BONUS_KEY } },
+    create: { companyId, key: KOLEKTOR_BONUS_KEY, value: parsed.data },
+    update: { value: parsed.data },
+  })
+
+  revalidatePath("/settings")
+  revalidatePath("/pencairan")
+  revalidatePath("/kolektor")
+  return { success: true }
+}

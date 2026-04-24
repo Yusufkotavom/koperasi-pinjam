@@ -1,15 +1,17 @@
 import {
   getDaftarKolektor,
   getKolektorBonusList,
+  getManualKolektorBonusCandidates,
   getSumberKolektorOptions,
   getUserRoleTable,
 } from "@/actions/kolektor"
 import { KolektorManagement } from "./kolektor-management"
 
 export default async function KolektorPage() {
-  const [kolektorList, bonusList, sumberOptions, roleTable] = await Promise.all([
+  const [kolektorList, bonusList, bonusCandidates, sumberOptions, roleTable] = await Promise.all([
     getDaftarKolektor(),
     getKolektorBonusList(),
+    getManualKolektorBonusCandidates(),
     getSumberKolektorOptions(),
     getUserRoleTable(),
   ])
@@ -18,6 +20,7 @@ export default async function KolektorPage() {
     <KolektorManagement
       initialKolektor={kolektorList}
       bonusList={bonusList}
+      bonusCandidates={bonusCandidates}
       sumberOptions={sumberOptions}
       roleTable={roleTable}
     />
