@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react"
 import {
+  createKolektorBonusManual,
   createKolektorFromKetuaKelompok,
   createKolektorFromNasabah,
   createKolektorManual,
   payKolektorBonus,
   removeKolektor,
+  transferKolektorBonus,
   updateKolektorBonus,
   updateKolektor,
 } from "@/actions/kolektor"
@@ -26,7 +28,7 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { CheckCircle2, Pencil, ShieldCheck, Trash2, UserPlus, Users, Wallet } from "lucide-react"
+import { CheckCircle2, Pencil, PlusCircle, Repeat2, ShieldCheck, Trash2, UserPlus, Users, Wallet } from "lucide-react"
 
 type Props = {
   initialKolektor: {
@@ -56,6 +58,19 @@ type Props = {
       status: string
       tanggalCair: string
       nasabah: { id: string; namaLengkap: string; nomorAnggota: string }
+    }
+  }[]
+  bonusCandidates: {
+    id: string
+    nomorKontrak: string
+    status: string
+    tanggalCair: string
+    nasabah: {
+      id: string
+      namaLengkap: string
+      nomorAnggota: string
+      kolektorId: string | null
+      kolektor: { id: string; name: string } | null
     }
   }[]
   sumberOptions: {
@@ -92,7 +107,7 @@ function todayInputValue() {
   return `${yyyy}-${mm}-${dd}`
 }
 
-export function KolektorManagement({ initialKolektor, bonusList, sumberOptions, roleTable }: Props) {
+export function KolektorManagement({ initialKolektor, bonusList, bonusCandidates, sumberOptions, roleTable }: Props) {
   const [isPending, startTransition] = useTransition()
   const [manualName, setManualName] = useState("")
   const [manualEmail, setManualEmail] = useState("")
@@ -122,6 +137,15 @@ export function KolektorManagement({ initialKolektor, bonusList, sumberOptions, 
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">Manajemen Kolektor & Role</h1>
         <p className="text-muted-foreground text-sm">Kelola hak akses petugas lapangan dan administrator sistem.</p>
+      </div>
+
+      <div className="flex justify-end">
+        <CreateManualBonusDialog
+          candidates={bonusCandidates}
+          kolektorOptions={initialKolektor}
+          disabled={isPending}
+          onSubmit={(payload) => run(() => createKolektorBonusManual(payload), "Bonus manual berhasil dibuat.")}
+        />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -433,6 +457,12 @@ export function KolektorManagement({ initialKolektor, bonusList, sumberOptions, 
                           disabled={isPending || bonus.status !== "READY"}
                           onSubmit={(payload) => run(() => payKolektorBonus(payload), "Bonus kolektor berhasil dibayarkan.")}
                         />
+                        <TransferBonusDialog
+                          bonus={bonus}
+                          kolektorOptions={initialKolektor}
+                          disabled={isPending || bonus.status === "PAID" || bonus.status === "CANCELED"}
+                          onSubmit={(payload) => run(() => transferKolektorBonus(payload), "Bonus berhasil dipindahkan ke kolektor lain.")}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -684,6 +714,196 @@ function PayBonusDialog({
           >
             <CheckCircle2 />
             Bayar Bonus
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CreateManualBonusDialog({
+  candidates,
+  kolektorOptions,
+  disabled,
+  onSubmit,
+}: {
+  candidates: Props["bonusCandidates"]
+  kolektorOptions: Props["initialKolektor"]
+  disabled: boolean
+  onSubmit: (payload: { pinjamanId: string; kolektorId: string; nominal: number; catatan?: string }) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [pinjamanId, setPinjamanId] = useState("")
+  const [kolektorId, setKolektorId] = useState("")
+  const [nominal, setNominal] = useState(0)
+  const [catatan, setCatatan] = useState("")
+
+  const selectedPinjaman = candidates.find((item) => item.id === pinjamanId)
+
+  const reset = () => {
+    setPinjamanId("")
+    setKolektorId("")
+    setNominal(0)
+    setCatatan("")
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) reset()
+      }}
+    >
+      <DialogTrigger render={<Button type="button" disabled={disabled || candidates.length === 0} />}>
+        <PlusCircle />
+        Buat Bonus Manual
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Buat Bonus Manual</DialogTitle>
+          <DialogDescription>Gunakan untuk pinjaman lama yang belum punya bonus kolektor.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Pilih Pinjaman</Label>
+            <select
+              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
+              value={pinjamanId}
+              onChange={(event) => {
+                const nextId = event.target.value
+                setPinjamanId(nextId)
+                const candidate = candidates.find((item) => item.id === nextId)
+                setKolektorId(candidate?.nasabah.kolektorId ?? "")
+              }}
+            >
+              <option value="">Pilih pinjaman...</option>
+              {candidates.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.nomorKontrak} - {candidate.nasabah.namaLengkap}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label>Pilih Kolektor</Label>
+            <select
+              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
+              value={kolektorId}
+              onChange={(event) => setKolektorId(event.target.value)}
+            >
+              <option value="">Pilih kolektor...</option>
+              {kolektorOptions.map((kolektor) => (
+                <option key={kolektor.id} value={kolektor.id}>
+                  {kolektor.name}
+                </option>
+              ))}
+            </select>
+            {selectedPinjaman?.nasabah.kolektor ? (
+              <p className="text-[10px] text-muted-foreground">
+                Kolektor nasabah saat ini: {selectedPinjaman.nasabah.kolektor.name}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label>Nominal Bonus</Label>
+            <Input type="number" value={nominal || ""} onChange={(event) => setNominal(Number(event.target.value))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Catatan</Label>
+            <Input value={catatan} onChange={(event) => setCatatan(event.target.value)} placeholder="Opsional" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Batal
+          </Button>
+          <Button
+            type="button"
+            disabled={disabled || !pinjamanId || !kolektorId || nominal < 0}
+            onClick={() => {
+              onSubmit({ pinjamanId, kolektorId, nominal, catatan })
+              setOpen(false)
+            }}
+          >
+            Buat Bonus
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function TransferBonusDialog({
+  bonus,
+  kolektorOptions,
+  disabled,
+  onSubmit,
+}: {
+  bonus: Props["bonusList"][number]
+  kolektorOptions: Props["initialKolektor"]
+  disabled: boolean
+  onSubmit: (payload: { id: string; kolektorId: string; catatan?: string }) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [kolektorId, setKolektorId] = useState(bonus.kolektor.id)
+  const [catatan, setCatatan] = useState("")
+
+  const reset = () => {
+    setKolektorId(bonus.kolektor.id)
+    setCatatan("")
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) reset()
+      }}
+    >
+      <DialogTrigger render={<Button type="button" size="icon-xs" variant="outline" disabled={disabled} />}>
+        <Repeat2 />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Pindah Kolektor Bonus</DialogTitle>
+          <DialogDescription>Gunakan untuk kasus koreksi manual jika bonus belum dibayar.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Kolektor Tujuan</Label>
+            <select
+              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
+              value={kolektorId}
+              onChange={(event) => setKolektorId(event.target.value)}
+            >
+              {kolektorOptions.map((kolektor) => (
+                <option key={kolektor.id} value={kolektor.id}>
+                  {kolektor.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-muted-foreground">Kolektor saat ini: {bonus.kolektor.name}</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Catatan Transfer</Label>
+            <Input value={catatan} onChange={(event) => setCatatan(event.target.value)} placeholder="Alasan pindah bonus" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Batal
+          </Button>
+          <Button
+            type="button"
+            disabled={disabled || !kolektorId || kolektorId === bonus.kolektor.id}
+            onClick={() => {
+              onSubmit({ id: bonus.id, kolektorId, catatan })
+              setOpen(false)
+            }}
+          >
+            Pindahkan
           </Button>
         </DialogFooter>
       </DialogContent>

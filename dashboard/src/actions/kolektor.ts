@@ -89,6 +89,19 @@ const payKolektorBonusSchema = z.object({
   catatan: z.string().trim().max(300).optional(),
 })
 
+const createKolektorBonusManualSchema = z.object({
+  pinjamanId: z.string().min(1),
+  kolektorId: z.string().min(1),
+  nominal: z.coerce.number().min(0),
+  catatan: z.string().trim().max(300).optional(),
+})
+
+const transferKolektorBonusSchema = z.object({
+  id: z.string().min(1),
+  kolektorId: z.string().min(1),
+  catatan: z.string().trim().max(300).optional(),
+})
+
 export async function getDaftarKolektor() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
@@ -556,6 +569,200 @@ export async function getKolektorBonusList() {
       nasabah: row.pinjaman.pengajuan.nasabah,
     },
   }))
+}
+
+export async function getManualKolektorBonusCandidates() {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as SessionLike)
+  requireRoles(session as unknown as SessionLike, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+
+  const rows = await prisma.pinjaman.findMany({
+    where: {
+      companyId,
+      bonusKolektor: null,
+    },
+    orderBy: [{ tanggalCair: "desc" }, { createdAt: "desc" }],
+    select: {
+      id: true,
+      nomorKontrak: true,
+      status: true,
+      tanggalCair: true,
+      pengajuan: {
+        select: {
+          nasabah: {
+            select: {
+              id: true,
+              namaLengkap: true,
+              nomorAnggota: true,
+              kolektorId: true,
+              kolektor: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+    take: 300,
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    nomorKontrak: row.nomorKontrak,
+    status: row.status,
+    tanggalCair: row.tanggalCair.toISOString(),
+    nasabah: row.pengajuan.nasabah,
+  }))
+}
+
+export async function createKolektorBonusManual(input: {
+  pinjamanId: string
+  kolektorId: string
+  nominal: number
+  catatan?: string
+}) {
+  const parsed = createKolektorBonusManualSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Data bonus manual tidak valid." }
+
+  const { companyId, actorId } = await getAuthorizedKolektorContext()
+
+  const [pinjaman, kolektor, existing] = await Promise.all([
+    prisma.pinjaman.findFirst({
+      where: { id: parsed.data.pinjamanId, companyId },
+      select: {
+        id: true,
+        nomorKontrak: true,
+        status: true,
+        pengajuan: {
+          select: {
+            nasabah: { select: { id: true, namaLengkap: true, nomorAnggota: true } },
+          },
+        },
+      },
+    }),
+    prisma.user.findFirst({
+      where: {
+        id: parsed.data.kolektorId,
+        companyId,
+        roles: { some: { role: RoleType.KOLEKTOR } },
+      },
+      select: { id: true, name: true },
+    }),
+    prisma.kolektorBonus.findFirst({
+      where: { companyId, pinjamanId: parsed.data.pinjamanId },
+      select: { id: true },
+    }),
+  ])
+
+  if (!pinjaman) return { error: "Pinjaman tidak ditemukan." }
+  if (!kolektor) return { error: "Kolektor tidak ditemukan." }
+  if (existing) return { error: "Pinjaman ini sudah memiliki bonus kolektor." }
+
+  const status = pinjaman.status === "LUNAS" ? "READY" : "PENDING"
+  const eligibleAt = pinjaman.status === "LUNAS" ? new Date() : null
+
+  const created = await prisma.kolektorBonus.create({
+    data: {
+      companyId,
+      pinjamanId: pinjaman.id,
+      kolektorId: kolektor.id,
+      nominal: new Prisma.Decimal(parsed.data.nominal),
+      status,
+      eligibleAt,
+      catatan: parsed.data.catatan?.trim() || `Bonus manual untuk pinjaman ${pinjaman.nomorKontrak}`,
+    },
+    select: { id: true, nominal: true, status: true },
+  })
+
+  await writeAuditLog({
+    actorId,
+    entityType: "KOLEKTOR_BONUS",
+    entityId: created.id,
+    action: AuditAction.CREATE,
+    afterData: {
+      pinjamanId: pinjaman.id,
+      nomorKontrak: pinjaman.nomorKontrak,
+      kolektorId: kolektor.id,
+      kolektorName: kolektor.name,
+      nominal: created.nominal.toString(),
+      status: created.status,
+    },
+  })
+
+  revalidateKolektorSurfaces()
+  return { success: true }
+}
+
+export async function transferKolektorBonus(input: {
+  id: string
+  kolektorId: string
+  catatan?: string
+}) {
+  const parsed = transferKolektorBonusSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Data pindah bonus tidak valid." }
+
+  const { companyId, actorId } = await getAuthorizedKolektorContext()
+
+  const [bonus, targetKolektor] = await Promise.all([
+    prisma.kolektorBonus.findFirst({
+      where: { id: parsed.data.id, companyId },
+      include: {
+        kolektor: { select: { id: true, name: true } },
+        pinjaman: { select: { id: true, nomorKontrak: true } },
+      },
+    }),
+    prisma.user.findFirst({
+      where: {
+        id: parsed.data.kolektorId,
+        companyId,
+        roles: { some: { role: RoleType.KOLEKTOR } },
+      },
+      select: { id: true, name: true },
+    }),
+  ])
+
+  if (!bonus) return { error: "Bonus kolektor tidak ditemukan." }
+  if (!targetKolektor) return { error: "Kolektor tujuan tidak ditemukan." }
+  if (bonus.status === "PAID") return { error: "Bonus yang sudah dibayar tidak dapat dipindahkan." }
+  if (bonus.status === "CANCELED") return { error: "Bonus yang sudah dibatalkan tidak dapat dipindahkan." }
+  if (bonus.kolektorId === targetKolektor.id) return { error: "Kolektor tujuan sama dengan kolektor saat ini." }
+
+  const previousCatatan = bonus.catatan?.trim()
+  const transferNote = parsed.data.catatan?.trim()
+  const nextCatatan = transferNote
+    ? [previousCatatan, `Transfer bonus: ${transferNote}`].filter(Boolean).join("\n")
+    : bonus.catatan
+
+  await prisma.kolektorBonus.update({
+    where: { id: bonus.id },
+    data: {
+      kolektorId: targetKolektor.id,
+      ...(nextCatatan !== undefined ? { catatan: nextCatatan || null } : {}),
+    },
+  })
+
+  await writeAuditLog({
+    actorId,
+    entityType: "KOLEKTOR_BONUS",
+    entityId: bonus.id,
+    action: AuditAction.UPDATE,
+    beforeData: {
+      kolektorId: bonus.kolektor.id,
+      kolektorName: bonus.kolektor.name,
+      status: bonus.status,
+    },
+    afterData: {
+      kolektorId: targetKolektor.id,
+      kolektorName: targetKolektor.name,
+      status: bonus.status,
+      nomorKontrak: bonus.pinjaman.nomorKontrak,
+    },
+    metadata: {
+      reason: transferNote ?? null,
+    },
+  })
+
+  revalidateKolektorSurfaces()
+  return { success: true }
 }
 
 export async function updateKolektorBonus(input: { id: string; nominal: number; catatan?: string }) {

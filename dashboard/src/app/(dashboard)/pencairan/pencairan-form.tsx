@@ -21,6 +21,7 @@ interface Props {
     tenor: number
     bungaPerBulan: unknown
   }
+  defaultBonusNominal: number
 }
 
 function fmt(n: number) {
@@ -34,12 +35,12 @@ function getLocalDateInputValue(date: Date) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-export function PencairanForm({ pengajuan }: Props) {
+export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
   const [isPending, startTransition] = useTransition()
   const submitLockRef = useRef(false)
   const [potonganAdmin, setPotonganAdmin] = useState(0)
   const [potonganProvisi, setPotonganProvisi] = useState(0)
-  const [bonusKolektorNominal, setBonusKolektorNominal] = useState(0)
+  const [bonusKolektorNominal, setBonusKolektorNominal] = useState("")
   const [tanggalCair, setTanggalCair] = useState(() =>
     getLocalDateInputValue(new Date()),
   )
@@ -139,12 +140,12 @@ export function PencairanForm({ pengajuan }: Props) {
             <Label>Bonus Kolektor Saat Nasabah Lunas (Rp)</Label>
             <Input
               type="number"
-              placeholder="0"
-              value={bonusKolektorNominal || ""}
-              onChange={(e) => setBonusKolektorNominal(Number(e.target.value))}
+              placeholder={defaultBonusNominal > 0 ? String(defaultBonusNominal) : "Kosong = pakai default settings"}
+              value={bonusKolektorNominal}
+              onChange={(e) => setBonusKolektorNominal(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Bonus ini dicatat per pinjaman. Menjadi siap dibayar saat pinjaman lunas, lalu dibayarkan dari menu kolektor.
+              Jika dikosongkan, sistem memakai default bonus dari settings: {fmt(defaultBonusNominal)}. Jika diisi manual, nilai manual per pinjaman ini yang dipakai lebih dulu.
             </p>
           </div>
 

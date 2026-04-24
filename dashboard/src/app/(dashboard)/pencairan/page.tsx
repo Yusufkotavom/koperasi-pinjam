@@ -1,4 +1,5 @@
 import { getPengajuanSiapCair } from "@/actions/pengajuan"
+import { getKolektorBonusConfig } from "@/actions/settings"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
@@ -16,7 +17,10 @@ export default async function PencairanPage({
 }) {
   const sp = await searchParams
   const selectedId = sp?.id ?? ""
-  const daftarSiapCair = await getPengajuanSiapCair()
+  const [daftarSiapCair, bonusConfig] = await Promise.all([
+    getPengajuanSiapCair(),
+    getKolektorBonusConfig(),
+  ])
   const selected = selectedId ? daftarSiapCair.find((d) => d.id === selectedId) : null
 
   return (
@@ -71,7 +75,7 @@ export default async function PencairanPage({
         {/* Form Pencairan */}
         <div className="lg:col-span-3">
           {selected ? (
-            <PencairanForm pengajuan={selected} />
+            <PencairanForm pengajuan={selected} defaultBonusNominal={bonusConfig.nominal} />
           ) : (
             <Card className="bg-muted/20 h-96 flex items-center justify-center">
               <CardContent className="text-center text-muted-foreground">

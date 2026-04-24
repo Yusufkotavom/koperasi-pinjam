@@ -34,6 +34,12 @@ const settingSections = [
     icon: Coins,
   },
   {
+    title: "Bonus Kolektor",
+    description: "Atur bonus default kolektor saat pinjaman nasabah lunas.",
+    href: "/settings/bonus-kolektor",
+    icon: Coins,
+  },
+  {
     title: "User Company",
     description: "Buat user internal untuk admin, teller, kolektor, manager, dan akuntansi.",
     href: "/settings/users",
