@@ -119,6 +119,7 @@ async function cleanupScopes(companyId: string, scopes: CleanupScope[]) {
   if (selected.has("TRANSAKSI")) {
     await prisma.journalEntry.deleteMany({ where: { companyId } })
     await prisma.rekonsiliasiKas.deleteMany({ where: { companyId } })
+    await prisma.kolektorBonus.deleteMany({ where: { companyId } })
     await prisma.kolektorTarget.deleteMany({ where: { companyId } })
     await prisma.kasTransaksi.deleteMany({ where: { companyId } })
     await prisma.pembayaran.deleteMany({ where: { companyId } })

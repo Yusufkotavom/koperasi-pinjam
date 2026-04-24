@@ -516,6 +516,20 @@ export async function inputPembayaran(input: {
       },
     })
 
+    if (sisaBaru <= 0) {
+      await tx.kolektorBonus.updateMany({
+        where: {
+          companyId,
+          pinjamanId: jadwal.pinjamanId,
+          status: "PENDING",
+        },
+        data: {
+          status: "READY",
+          eligibleAt: tanggalBayar,
+        },
+      })
+    }
+
     const kasJenis = input.metode === "TRANSFER" ? "BANK" : "TUNAI"
 
     await tx.kasTransaksi.create({

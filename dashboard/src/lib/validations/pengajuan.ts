@@ -29,6 +29,7 @@ export const pencairanSchema = z.object({
   pengajuanId: z.string(),
   potonganAdmin: z.coerce.number().min(0).default(0),
   potonganProvisi: z.coerce.number().min(0).default(0),
+  bonusKolektorNominal: z.coerce.number().min(0).default(0),
   tanggalCair: z.string().min(1, "Tanggal cair wajib diisi"),
   kasJenis: z.enum(["TUNAI", "BANK"]).default("TUNAI"),
 })

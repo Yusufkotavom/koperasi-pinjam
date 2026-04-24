@@ -2,13 +2,15 @@
 
 import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
-import { AuditAction, RoleType } from "@prisma/client"
+import { AuditAction, Prisma, RoleType } from "@prisma/client"
 import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { writeAuditLog } from "@/lib/audit"
+import { ensureAccountingAccounts, getCashBalanceByJenis, postKasTransactionJournal } from "@/lib/accounting"
 import { prisma } from "@/lib/prisma"
 import { requireRoles } from "@/lib/roles"
 import { requireCompanyId } from "@/lib/tenant"
+import { ensureKasKategori } from "./kas"
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
@@ -18,6 +20,20 @@ function defaultPasswordFromPhone(noHp?: string | null) {
   const digits = (noHp ?? "").replace(/\D/g, "")
   if (digits.length >= 6) return `Kolektor${digits.slice(-6)}`
   return "Kolektor123"
+}
+
+function parseDateOnly(input: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0))
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+  return date
 }
 
 type SessionLike = {
@@ -60,26 +76,64 @@ const removeKolektorSchema = z.object({
   id: z.string().min(1),
 })
 
+const updateKolektorBonusSchema = z.object({
+  id: z.string().min(1),
+  nominal: z.coerce.number().min(0),
+  catatan: z.string().trim().max(300).optional(),
+})
+
+const payKolektorBonusSchema = z.object({
+  id: z.string().min(1),
+  kasJenis: z.enum(["TUNAI", "BANK"]).default("TUNAI"),
+  tanggalBayar: z.string().min(1),
+  catatan: z.string().trim().max(300).optional(),
+})
+
 export async function getDaftarKolektor() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  const users = await prisma.user.findMany({
-    where: {
-      companyId,
-      roles: { some: { role: "KOLEKTOR" } },
-    },
-    include: {
-      roles: { select: { role: true } },
-      _count: {
-        select: {
-          nasabahSebagaiKolektor: true,
+  const [users, bonusRows] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        companyId,
+        roles: { some: { role: "KOLEKTOR" } },
+      },
+      include: {
+        roles: { select: { role: true } },
+        _count: {
+          select: {
+            nasabahSebagaiKolektor: true,
+          },
         },
       },
-    },
-    orderBy: { name: "asc" },
-  })
+      orderBy: { name: "asc" },
+    }),
+    prisma.kolektorBonus.findMany({
+      where: { companyId },
+      select: {
+        kolektorId: true,
+        nominal: true,
+        status: true,
+      },
+    }),
+  ])
+
+  const bonusMap = new Map<string, { readyCount: number; readyNominal: number; paidCount: number; paidNominal: number }>()
+  for (const row of bonusRows) {
+    const current = bonusMap.get(row.kolektorId) ?? { readyCount: 0, readyNominal: 0, paidCount: 0, paidNominal: 0 }
+    const nominal = Number(row.nominal)
+    if (row.status === "READY") {
+      current.readyCount += 1
+      current.readyNominal += nominal
+    }
+    if (row.status === "PAID") {
+      current.paidCount += 1
+      current.paidNominal += nominal
+    }
+    bonusMap.set(row.kolektorId, current)
+  }
 
   return users.map((u) => ({
     id: u.id,
@@ -88,6 +142,10 @@ export async function getDaftarKolektor() {
     isActive: u.isActive,
     roles: u.roles.map((r) => r.role),
     totalNasabah: u._count.nasabahSebagaiKolektor,
+    bonusReadyCount: bonusMap.get(u.id)?.readyCount ?? 0,
+    bonusReadyNominal: bonusMap.get(u.id)?.readyNominal ?? 0,
+    bonusPaidCount: bonusMap.get(u.id)?.paidCount ?? 0,
+    bonusPaidNominal: bonusMap.get(u.id)?.paidNominal ?? 0,
   }))
 }
 
@@ -444,6 +502,224 @@ export async function removeKolektor(input: { id: string }) {
   })
 
   revalidateKolektorSurfaces()
+  return { success: true }
+}
+
+export async function getKolektorBonusList() {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as SessionLike)
+  requireRoles(session as unknown as SessionLike, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+
+  const rows = await prisma.kolektorBonus.findMany({
+    where: { companyId },
+    orderBy: [{ status: "asc" }, { eligibleAt: "desc" }, { createdAt: "desc" }],
+    include: {
+      kolektor: { select: { id: true, name: true, email: true, isActive: true } },
+      paidBy: { select: { id: true, name: true } },
+      pinjaman: {
+        select: {
+          id: true,
+          nomorKontrak: true,
+          status: true,
+          tanggalCair: true,
+          pengajuan: {
+            select: {
+              nasabah: {
+                select: {
+                  id: true,
+                  namaLengkap: true,
+                  nomorAnggota: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    nominal: Number(row.nominal),
+    status: row.status,
+    eligibleAt: row.eligibleAt?.toISOString() ?? null,
+    paidAt: row.paidAt?.toISOString() ?? null,
+    catatan: row.catatan ?? "",
+    kolektor: row.kolektor,
+    paidBy: row.paidBy,
+    pinjaman: {
+      id: row.pinjaman.id,
+      nomorKontrak: row.pinjaman.nomorKontrak,
+      status: row.pinjaman.status,
+      tanggalCair: row.pinjaman.tanggalCair.toISOString(),
+      nasabah: row.pinjaman.pengajuan.nasabah,
+    },
+  }))
+}
+
+export async function updateKolektorBonus(input: { id: string; nominal: number; catatan?: string }) {
+  const parsed = updateKolektorBonusSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Data bonus tidak valid." }
+
+  const { companyId, actorId } = await getAuthorizedKolektorContext()
+
+  const existing = await prisma.kolektorBonus.findFirst({
+    where: { id: parsed.data.id, companyId },
+    select: {
+      id: true,
+      nominal: true,
+      status: true,
+      catatan: true,
+    },
+  })
+
+  if (!existing) return { error: "Data bonus tidak ditemukan." }
+  if (existing.status === "PAID") {
+    return { error: "Bonus yang sudah dibayar tidak dapat diubah." }
+  }
+  if (existing.status === "CANCELED") {
+    return { error: "Bonus yang sudah dibatalkan tidak dapat diubah." }
+  }
+
+  const updated = await prisma.kolektorBonus.update({
+    where: { id: existing.id },
+    data: {
+      nominal: new Prisma.Decimal(parsed.data.nominal),
+      ...(parsed.data.catatan !== undefined ? { catatan: parsed.data.catatan || null } : {}),
+    },
+    select: {
+      id: true,
+      nominal: true,
+      status: true,
+      catatan: true,
+    },
+  })
+
+  await writeAuditLog({
+    actorId,
+    entityType: "KOLEKTOR_BONUS",
+    entityId: updated.id,
+    action: AuditAction.UPDATE,
+    beforeData: {
+      nominal: existing.nominal.toString(),
+      status: existing.status,
+      catatan: existing.catatan,
+    },
+    afterData: {
+      nominal: updated.nominal.toString(),
+      status: updated.status,
+      catatan: updated.catatan,
+    },
+  })
+
+  revalidateKolektorSurfaces()
+  revalidatePath("/laporan/laba-rugi")
+  return { success: true }
+}
+
+export async function payKolektorBonus(input: {
+  id: string
+  kasJenis: "TUNAI" | "BANK"
+  tanggalBayar: string
+  catatan?: string
+}) {
+  const parsed = payKolektorBonusSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Data pembayaran bonus tidak valid." }
+
+  const { companyId, actorId } = await getAuthorizedKolektorContext()
+  const tanggalBayar = parseDateOnly(parsed.data.tanggalBayar)
+  if (!tanggalBayar) return { error: "Tanggal pembayaran bonus tidak valid." }
+
+  const bonus = await prisma.kolektorBonus.findFirst({
+    where: { id: parsed.data.id, companyId },
+    include: {
+      kolektor: { select: { id: true, name: true } },
+      pinjaman: {
+        select: {
+          nomorKontrak: true,
+          pengajuan: {
+            select: {
+              nasabah: { select: { namaLengkap: true, nomorAnggota: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!bonus) return { error: "Bonus kolektor tidak ditemukan." }
+  if (bonus.status !== "READY") {
+    return { error: "Bonus hanya bisa dibayar saat statusnya siap dibayar." }
+  }
+
+  await ensureAccountingAccounts(companyId)
+  const saldoKas = await getCashBalanceByJenis(companyId, parsed.data.kasJenis, tanggalBayar)
+  const nominal = Number(bonus.nominal)
+  if (saldoKas < nominal) {
+    return {
+      error: `Saldo ${parsed.data.kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nominal.toLocaleString("id-ID")}.`,
+    }
+  }
+
+  const ensured = await ensureKasKategori({ jenis: "KELUAR", kategori: "BONUS_KOLEKTOR" })
+  if ("error" in ensured) return { error: ensured.error }
+
+  let kasId = ""
+  await prisma.$transaction(async (tx) => {
+    const kas = await tx.kasTransaksi.create({
+      data: {
+        companyId,
+        jenis: "KELUAR",
+        kategoriId: ensured.kategoriId,
+        kategoriKey: ensured.key,
+        deskripsi: `Pembayaran bonus kolektor ${bonus.kolektor.name} untuk ${bonus.pinjaman.pengajuan.nasabah.namaLengkap} (${bonus.pinjaman.nomorKontrak})`,
+        jumlah: new Prisma.Decimal(nominal),
+        kasJenis: parsed.data.kasJenis,
+        inputOlehId: actorId,
+        tanggal: tanggalBayar,
+        isApproved: true,
+      },
+    })
+    kasId = kas.id
+
+    await postKasTransactionJournal(tx, kas.id, actorId, { ensureAccounts: false })
+
+    await tx.kolektorBonus.update({
+      where: { id: bonus.id },
+      data: {
+        status: "PAID",
+        paidAt: tanggalBayar,
+        paidById: actorId,
+        catatan: parsed.data.catatan?.trim() || bonus.catatan,
+      },
+    })
+  })
+
+  await writeAuditLog({
+    actorId,
+    entityType: "KOLEKTOR_BONUS",
+    entityId: bonus.id,
+    action: AuditAction.PAYMENT,
+    beforeData: {
+      status: bonus.status,
+      nominal: bonus.nominal.toString(),
+      paidAt: bonus.paidAt?.toISOString() ?? null,
+    },
+    afterData: {
+      status: "PAID",
+      nominal: bonus.nominal.toString(),
+      paidAt: tanggalBayar.toISOString(),
+      kasId,
+      kasJenis: parsed.data.kasJenis,
+    },
+  })
+
+  revalidateKolektorSurfaces()
+  revalidatePath("/kas")
+  revalidatePath("/laporan/buku-besar")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/laba-rugi")
   return { success: true }
 }
 
