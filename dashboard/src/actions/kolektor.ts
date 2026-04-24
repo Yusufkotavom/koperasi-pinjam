@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
+import { AuditAction, RoleType } from "@prisma/client"
+import { z } from "zod"
 import { auth } from "@/lib/auth"
+import { writeAuditLog } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
-import { RoleType } from "@prisma/client"
 import { requireRoles } from "@/lib/roles"
 import { requireCompanyId } from "@/lib/tenant"
 
@@ -18,6 +20,46 @@ function defaultPasswordFromPhone(noHp?: string | null) {
   return "Kolektor123"
 }
 
+type SessionLike = {
+  user?: {
+    id?: string
+    companyId?: string | null
+    roles?: string[]
+  }
+} | null
+
+function revalidateKolektorSurfaces() {
+  revalidatePath("/kolektor")
+  revalidatePath("/nasabah")
+  revalidatePath("/monitoring/kolektor")
+  revalidatePath("/monitoring/tunggakan")
+}
+
+async function getAuthorizedKolektorContext() {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as SessionLike)
+  const { userId } = requireRoles(session as unknown as SessionLike, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+
+  return {
+    session: session as unknown as SessionLike,
+    companyId,
+    actorId: userId,
+  }
+}
+
+const updateKolektorSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(2, "Nama minimal 2 karakter").max(100),
+  email: z.string().trim().toLowerCase().email("Email tidak valid"),
+  isActive: z.boolean(),
+  isAdmin: z.boolean(),
+})
+
+const removeKolektorSchema = z.object({
+  id: z.string().min(1),
+})
+
 export async function getDaftarKolektor() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
@@ -26,7 +68,6 @@ export async function getDaftarKolektor() {
   const users = await prisma.user.findMany({
     where: {
       companyId,
-      isActive: true,
       roles: { some: { role: "KOLEKTOR" } },
     },
     include: {
@@ -44,6 +85,7 @@ export async function getDaftarKolektor() {
     id: u.id,
     name: u.name,
     email: u.email,
+    isActive: u.isActive,
     roles: u.roles.map((r) => r.role),
     totalNasabah: u._count.nasabahSebagaiKolektor,
   }))
@@ -147,7 +189,7 @@ export async function createKolektorManual(input: {
     isAdmin: input.isAdmin,
   })
 
-  revalidatePath("/kolektor")
+  revalidateKolektorSurfaces()
   return { success: true }
 }
 
@@ -185,8 +227,7 @@ export async function createKolektorFromNasabah(input: {
     data: { kolektorId: user.id },
   })
 
-  revalidatePath("/kolektor")
-  revalidatePath("/nasabah")
+  revalidateKolektorSurfaces()
   return { success: true, defaultEmail: generatedEmail }
 }
 
@@ -231,9 +272,179 @@ export async function createKolektorFromKetuaKelompok(input: {
     data: { kolektorId: user.id },
   })
 
-  revalidatePath("/kolektor")
-  revalidatePath("/nasabah")
+  revalidateKolektorSurfaces()
   return { success: true, defaultEmail: generatedEmail }
+}
+
+export async function updateKolektor(input: {
+  id: string
+  name: string
+  email: string
+  isActive: boolean
+  isAdmin: boolean
+}) {
+  const parsed = updateKolektorSchema.safeParse(input)
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input kolektor tidak valid." }
+  }
+
+  const { companyId, actorId } = await getAuthorizedKolektorContext()
+
+  const existing = await prisma.user.findFirst({
+    where: {
+      id: parsed.data.id,
+      companyId,
+      roles: { some: { role: RoleType.KOLEKTOR } },
+    },
+    include: {
+      roles: { select: { role: true } },
+    },
+  })
+
+  if (!existing) return { error: "Kolektor tidak ditemukan." }
+
+  const emailOwner = await prisma.user.findUnique({
+    where: { email: parsed.data.email },
+    select: { id: true, companyId: true },
+  })
+
+  if (emailOwner && emailOwner.id !== existing.id) {
+    return { error: "Email sudah digunakan user lain." }
+  }
+
+  const hasAdminRole = existing.roles.some((role) => role.role === RoleType.ADMIN)
+  const beforeData = {
+    id: existing.id,
+    name: existing.name,
+    email: existing.email,
+    isActive: existing.isActive,
+    roles: existing.roles.map((role) => role.role),
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: existing.id },
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email,
+        isActive: parsed.data.isActive,
+      },
+    })
+
+    if (parsed.data.isAdmin && !hasAdminRole) {
+      await tx.userRole.create({
+        data: { userId: existing.id, role: RoleType.ADMIN },
+      })
+    }
+
+    if (!parsed.data.isAdmin && hasAdminRole) {
+      await tx.userRole.deleteMany({
+        where: { userId: existing.id, role: RoleType.ADMIN },
+      })
+    }
+  })
+
+  const afterRoles: RoleType[] = existing.roles
+    .map((role) => role.role)
+    .filter((role) => role !== RoleType.ADMIN)
+
+  if (parsed.data.isAdmin) afterRoles.push(RoleType.ADMIN)
+
+  await writeAuditLog({
+    actorId,
+    entityType: "KOLEKTOR",
+    entityId: existing.id,
+    action: AuditAction.UPDATE,
+    beforeData,
+    afterData: {
+      id: existing.id,
+      name: parsed.data.name,
+      email: parsed.data.email,
+      isActive: parsed.data.isActive,
+      roles: Array.from(new Set(afterRoles)).sort(),
+    },
+  })
+
+  revalidateKolektorSurfaces()
+  return { success: true }
+}
+
+export async function removeKolektor(input: { id: string }) {
+  const parsed = removeKolektorSchema.safeParse(input)
+  if (!parsed.success) return { error: "Kolektor tidak valid." }
+
+  const { companyId, actorId } = await getAuthorizedKolektorContext()
+
+  const existing = await prisma.user.findFirst({
+    where: {
+      id: parsed.data.id,
+      companyId,
+      roles: { some: { role: RoleType.KOLEKTOR } },
+    },
+    include: {
+      roles: { select: { role: true } },
+      _count: {
+        select: {
+          nasabahSebagaiKolektor: true,
+          kolektorTargets: true,
+        },
+      },
+    },
+  })
+
+  if (!existing) return { error: "Kolektor tidak ditemukan." }
+
+  const remainingRoles = existing.roles.map((role) => role.role).filter((role) => role !== RoleType.KOLEKTOR)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.nasabah.updateMany({
+      where: { companyId, kolektorId: existing.id },
+      data: { kolektorId: null },
+    })
+
+    await tx.kolektorTarget.deleteMany({
+      where: { companyId, kolektorId: existing.id },
+    })
+
+    await tx.userRole.deleteMany({
+      where: { userId: existing.id, role: RoleType.KOLEKTOR },
+    })
+
+    if (remainingRoles.length === 0) {
+      await tx.user.update({
+        where: { id: existing.id },
+        data: { isActive: false },
+      })
+    }
+  })
+
+  await writeAuditLog({
+    actorId,
+    entityType: "KOLEKTOR",
+    entityId: existing.id,
+    action: AuditAction.DELETE,
+    beforeData: {
+      id: existing.id,
+      name: existing.name,
+      email: existing.email,
+      isActive: existing.isActive,
+      roles: existing.roles.map((role) => role.role),
+      totalNasabah: existing._count.nasabahSebagaiKolektor,
+      totalTarget: existing._count.kolektorTargets,
+    },
+    afterData: {
+      id: existing.id,
+      name: existing.name,
+      email: existing.email,
+      isActive: remainingRoles.length === 0 ? false : existing.isActive,
+      roles: remainingRoles.sort(),
+      totalNasabah: 0,
+      totalTarget: 0,
+    },
+  })
+
+  revalidateKolektorSurfaces()
+  return { success: true }
 }
 
 export async function getUserRoleTable() {
