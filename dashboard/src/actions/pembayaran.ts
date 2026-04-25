@@ -111,7 +111,13 @@ export async function getAngsuranJatuhTempo(pinjamanId?: string) {
   return serializeData(result)
 }
 
-export async function getJadwalPembayaran(params?: { search?: string; limit?: number; windowDays?: number | "all" }) {
+export async function getJadwalPembayaran(params?: {
+  search?: string
+  limit?: number
+  windowDays?: number | "all"
+  kelompokId?: string
+  kolektorId?: string
+}) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { companyId } = requireCompanyId(
@@ -120,6 +126,8 @@ export async function getJadwalPembayaran(params?: { search?: string; limit?: nu
 
   const limit = params?.limit ?? 50
   const search = params?.search?.trim()
+  const kelompokId = params?.kelompokId?.trim()
+  const kolektorId = params?.kolektorId?.trim()
   const today = new Date()
   const windowDays = params?.windowDays ?? 7
   const end =
@@ -127,11 +135,24 @@ export async function getJadwalPembayaran(params?: { search?: string; limit?: nu
       ? null
       : new Date(today.getTime() + windowDays * 24 * 60 * 60 * 1000)
 
+  const pinjamanWhere: Prisma.PinjamanWhereInput = {
+    status: { not: "LUNAS" },
+    ...(kelompokId ? { pengajuan: { kelompokId } } : {}),
+    ...(kolektorId
+      ? {
+          pengajuan: {
+            ...(kelompokId ? { kelompokId } : {}),
+            nasabah: { kolektorId },
+          },
+        }
+      : {}),
+  }
+
   const where: Prisma.JadwalAngsuranWhereInput = {
     companyId,
     sudahDibayar: false,
     ...(end ? { tanggalJatuhTempo: { lte: end } } : {}),
-    pinjaman: { status: { not: "LUNAS" } },
+    pinjaman: pinjamanWhere,
   }
 
   if (search) {

@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { getActiveLoanBorrowers, getJadwalPembayaran, getRecentPembayaran } from "@/actions/pembayaran"
+import { getKelompokList, getKolektorList } from "@/actions/nasabah"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -23,18 +24,22 @@ function agingBadge(hari: number) {
 export default async function PembayaranPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ search?: string; window?: string }>
+  searchParams?: Promise<{ search?: string; window?: string; kelompokId?: string; kolektorId?: string }>
 }) {
   const sp = await searchParams
   const search = sp?.search ?? ""
   const windowParam = sp?.window ?? "7"
+  const kelompokId = sp?.kelompokId ?? ""
+  const kolektorId = sp?.kolektorId ?? ""
   const windowDays: number | "all" =
     windowParam === "all" ? "all" : Math.max(1, Number(windowParam) || 7)
 
-  const [jadwal, history, activeBorrowers] = await Promise.all([
-    getJadwalPembayaran({ search, windowDays }),
+  const [jadwal, history, activeBorrowers, kelompokOptions, kolektorOptions] = await Promise.all([
+    getJadwalPembayaran({ search, windowDays, kelompokId, kolektorId }),
     getRecentPembayaran(10),
     getActiveLoanBorrowers(),
+    getKelompokList(),
+    getKolektorList(),
   ])
 
   return (
@@ -56,11 +61,37 @@ export default async function PembayaranPage({
                 <CardTitle className="text-base font-semibold">Jadwal Penagihan Aktif</CardTitle>
                 <CardDescription>Daftar angsuran yang harus segera ditagih atau dibayar</CardDescription>
               </div>
-              <form method="GET" className="flex flex-col md:flex-row gap-3">
+              <form method="GET" className="flex flex-col xl:flex-row gap-3">
                 <div className="relative flex-1 group">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                   <Input name="search" defaultValue={search} placeholder="Cari nama atau nomor kontrak..." className="pl-9 transition-all" />
                 </div>
+                <select
+                  name="kelompokId"
+                  defaultValue={kelompokId}
+                  className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
+                  title="Filter berdasarkan kelompok"
+                >
+                  <option value="">Semua kelompok</option>
+                  {kelompokOptions.map((kelompok) => (
+                    <option key={kelompok.id} value={kelompok.id}>
+                      {kelompok.nama}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  name="kolektorId"
+                  defaultValue={kolektorId}
+                  className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
+                  title="Filter berdasarkan kolektor"
+                >
+                  <option value="">Semua kolektor</option>
+                  {kolektorOptions.map((kolektor) => (
+                    <option key={kolektor.id} value={kolektor.id}>
+                      {kolektor.name}
+                    </option>
+                  ))}
+                </select>
                 <select
                   name="window"
                   defaultValue={windowParam}
