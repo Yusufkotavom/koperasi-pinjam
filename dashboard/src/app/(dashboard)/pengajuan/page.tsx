@@ -22,6 +22,10 @@ function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
 }
 
+function formatTenorLabel(tenor: number, tenorType: "BULANAN" | "MINGGUAN") {
+  return `${tenor} ${tenorType === "MINGGUAN" ? "minggu" : "bulan"}`
+}
+
 export default async function PengajuanListPage({
   searchParams,
 }: {
@@ -117,7 +121,7 @@ export default async function PengajuanListPage({
                       </TableCell>
                       <TableCell className="font-bold text-slate-900 dark:text-slate-200">{fmt(Number(row.plafonDiajukan))}</TableCell>
                       <TableCell className="hidden md:table-cell">
-                        <span className="text-sm font-medium text-slate-500">{row.tenor} bulan</span>
+                        <span className="text-sm font-medium text-slate-500">{formatTenorLabel(row.tenor, row.tenorType)}</span>
                       </TableCell>
                       <TableCell>
                         <Badge className={`${badge.cls} border-0 text-[10px] font-bold px-2 py-0 h-5 uppercase tracking-wide`}>{badge.label}</Badge>
