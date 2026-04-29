@@ -33,6 +33,8 @@ type KasData = {
   totalKeluar: number
   pendingApprovalCount: number
   saldoAwal: number
+  from: Date
+  to: Date
 }
 
 type KasKategori = {
@@ -74,6 +76,8 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
   const [approvalLoadedOnce, setApprovalLoadedOnce] = useState(false)
 
   const saldoAkhir = initialData.saldoAwal + initialData.totalMasuk - initialData.totalKeluar
+  const defaultFrom = getLocalDateInputValue(new Date(initialData.from))
+  const defaultTo = getLocalDateInputValue(new Date(initialData.to))
 
   const kategoriOptions = kategoriRows.filter((k) => k.jenis === jenis)
 
@@ -269,8 +273,8 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
       <div className="grid md:grid-cols-3 gap-6">
         {[
           { label: "Saldo Akhir", value: fmt(saldoAkhir), icon: Wallet, color: "text-emerald-600", bg: "bg-emerald-50/80" },
-          { label: "Kas Masuk Hari Ini", value: fmt(initialData.totalMasuk), icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50/80" },
-          { label: "Kas Keluar Hari Ini", value: fmt(initialData.totalKeluar), icon: TrendingDown, color: "text-red-600", bg: "bg-red-50/80" },
+          { label: "Kas Masuk Periode", value: fmt(initialData.totalMasuk), icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50/80" },
+          { label: "Kas Keluar Periode", value: fmt(initialData.totalKeluar), icon: TrendingDown, color: "text-red-600", bg: "bg-red-50/80" },
         ].map((s) => (
           <Card key={s.label} className="border-none shadow-sm overflow-hidden transition-all hover:scale-[1.02]">
             <CardContent className="p-6 flex items-center gap-4">
@@ -303,6 +307,21 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
 
         <TabsContent value="histori">
           <Card className="border-none shadow-sm overflow-hidden w-full">
+            <CardHeader className="pb-4 border-b border-slate-50 dark:border-slate-800/50">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <CardTitle className="text-base font-semibold">Riwayat Transaksi Kas</CardTitle>
+                  <CardDescription>Filter tanggal untuk cek riwayat hari sebelumnya atau rentang custom.</CardDescription>
+                </div>
+                <form action="/kas" className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 w-full sm:w-auto">
+                  <Input type="date" name="from" defaultValue={defaultFrom} className="h-9" />
+                  <Input type="date" name="to" defaultValue={defaultTo} className="h-9" />
+                  <Button type="submit" size="sm" className="h-9 rounded-lg font-bold uppercase tracking-widest text-[11px]">
+                    Terapkan
+                  </Button>
+                </form>
+              </div>
+            </CardHeader>
             <CardContent className="p-0">
               <div className="w-full overflow-x-auto">
                 <Table className="min-w-[800px]">

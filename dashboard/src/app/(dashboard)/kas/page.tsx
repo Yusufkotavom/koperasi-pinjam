@@ -1,8 +1,16 @@
 import { getKasHarian, getKasKategoriList } from "@/actions/kas"
 import { KasClientPage } from "./kas-client"
 
-export default async function KasPage() {
-  const [data, kategori] = await Promise.all([getKasHarian(), getKasKategoriList()])
+export default async function KasPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ from?: string; to?: string }>
+}) {
+  const sp = await searchParams
+  const [data, kategori] = await Promise.all([
+    getKasHarian({ from: sp?.from, to: sp?.to }),
+    getKasKategoriList(),
+  ])
 
   const normalized = {
     ...data,

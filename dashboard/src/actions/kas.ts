@@ -198,7 +198,19 @@ export async function updateKasKategori(id: string, input: unknown) {
     }
   }
 
+  await ensureAccountingAccounts(companyId)
+
   const row = await prisma.$transaction(async (tx) => {
+    const impactedApprovedKas = await tx.kasTransaksi.findMany({
+      where: {
+        companyId,
+        kategoriId: existing.id,
+        isApproved: true,
+      },
+      select: { id: true },
+      take: 50_000,
+    })
+
     // Keep denormalized display key in sync for existing transactions.
     if (newKey !== existing.key) {
       await tx.kasTransaksi.updateMany({
@@ -207,7 +219,7 @@ export async function updateKasKategori(id: string, input: unknown) {
       })
     }
 
-    return await tx.kasKategori.update({
+    const updatedKategori = await tx.kasKategori.update({
       where: { id },
       data: {
         nama: parsed.data.nama.trim(),
@@ -215,9 +227,29 @@ export async function updateKasKategori(id: string, input: unknown) {
         jenis: parsed.data.jenis,
       },
     })
+
+    if (impactedApprovedKas.length > 0) {
+      const impactedIds = impactedApprovedKas.map((row) => row.id)
+      await tx.journalEntry.deleteMany({
+        where: {
+          sourceType: "KAS",
+          sourceId: { in: impactedIds },
+        },
+      })
+
+      for (const kasRow of impactedApprovedKas) {
+        await postKasTransactionJournal(tx, kasRow.id, userId, { ensureAccounts: false })
+      }
+    }
+
+    return updatedKategori
   })
 
   revalidatePath("/kas")
+  revalidatePath("/laporan/arus-kas")
+  revalidatePath("/laporan/laba-rugi")
+  revalidatePath("/laporan/neraca")
+  revalidatePath("/laporan/buku-besar")
   await writeAuditLog({
     actorId: userId,
     entityType: "KAS_KATEGORI",
@@ -273,27 +305,36 @@ export async function deleteKasKategori(id: string) {
   return { success: true }
 }
 
-export async function getKasHarian(tanggal?: string) {
+export async function getKasHarian(params?: { from?: string; to?: string }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
-  const tgl = tanggal ? new Date(tanggal) : new Date()
-  const startOfDay = new Date(tgl.getFullYear(), tgl.getMonth(), tgl.getDate())
-  const endOfDay = new Date(startOfDay.getTime() + 86400000)
+  const today = new Date()
+  const startDefault = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const endDefault = new Date(startDefault.getTime() + 86400000 - 1)
 
-  const [transaksi, saldoAwal] = await Promise.all([
+  const start = params?.from ? parseDateOnly(params.from) : startDefault
+  const end = params?.to ? parseDateOnly(params.to) : endDefault
+  if (!start || !end) throw new Error("Rentang tanggal tidak valid.")
+
+  const rangeStart = new Date(start)
+  rangeStart.setHours(0, 0, 0, 0)
+  const rangeEnd = new Date(end)
+  rangeEnd.setHours(23, 59, 59, 999)
+  const [fromDate, toDate] = rangeStart <= rangeEnd ? [rangeStart, rangeEnd] : [rangeEnd, rangeStart]
+
+  const [transaksi, saldoAwalByJenis] = await Promise.all([
     prisma.kasTransaksi.findMany({
-      where: { companyId, tanggal: { gte: startOfDay, lt: endOfDay } },
+      where: { companyId, tanggal: { gte: fromDate, lte: toDate } },
       orderBy: { tanggal: "desc" },
       include: { inputOleh: { select: { name: true } } },
       take: 500,
     }),
-    prisma.kasTransaksi.aggregate({
-      where: { companyId, tanggal: { lt: startOfDay } },
-      _sum: {
-        jumlah: true,
-      },
+    prisma.kasTransaksi.groupBy({
+      by: ["jenis"],
+      where: { companyId, tanggal: { lt: fromDate } },
+      _sum: { jumlah: true },
     }),
   ])
 
@@ -301,12 +342,19 @@ export async function getKasHarian(tanggal?: string) {
   const totalKeluar = transaksi.filter((t) => t.jenis === "KELUAR").reduce((a, b) => a + Number(b.jumlah ?? 0), 0)
   const pendingApprovalCount = transaksi.filter((t) => t.isApproved === false).length
 
+  const saldoAwal = saldoAwalByJenis.reduce((acc, row) => {
+    const nominal = Number(row._sum.jumlah ?? 0)
+    return row.jenis === "MASUK" ? acc + nominal : acc - nominal
+  }, 0)
+
   return serializeData({
     transaksi,
     totalMasuk,
     totalKeluar,
     pendingApprovalCount,
-    saldoAwal: Number(saldoAwal?._sum?.jumlah ?? 0),
+    saldoAwal,
+    from: fromDate,
+    to: toDate,
   })
 }
 
