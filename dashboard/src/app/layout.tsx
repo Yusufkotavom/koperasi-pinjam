@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/theme-provider"
 import { NavigationIndicatorProvider } from "@/components/navigation-indicator"
 import { PageViewTransition } from "@/components/page-view-transition"
+import { SessionProvider } from "@/components/session-provider"
 
 export const metadata: Metadata = {
   title: {
@@ -24,17 +25,19 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <NavigationIndicatorProvider>
-            <PageViewTransition>{children}</PageViewTransition>
-            <Toaster richColors position="top-right" />
-          </NavigationIndicatorProvider>
-        </ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <NavigationIndicatorProvider>
+              <PageViewTransition>{children}</PageViewTransition>
+              <Toaster richColors position="top-right" />
+            </NavigationIndicatorProvider>
+          </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   )

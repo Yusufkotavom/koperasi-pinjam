@@ -1,4 +1,4 @@
-import { getDashboardStats } from "@/actions/dashboard"
+import { getDashboardCollectionQuickView, getDashboardStats } from "@/actions/dashboard"
 import Link from "next/link"
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -20,7 +20,7 @@ import {
 import {
   Users, Banknote, TrendingUp, AlertTriangle,
   ArrowUpRight, ArrowDownRight, Clock, UserPlus, ClipboardList,
-  HandCoins, WalletCards, Layers3, BarChart3,
+  HandCoins, WalletCards, Layers3, BarChart3, Target, CircleAlert,
 } from "lucide-react"
 
 function fmt(n: number) {
@@ -48,7 +48,7 @@ function BarChart({ data }: { data: { bulan: string; masuk: number; keluar: numb
 }
 
 export default async function DashboardPage() {
-  const stats = await getDashboardStats()
+  const [stats, quickView] = await Promise.all([getDashboardStats(), getDashboardCollectionQuickView()])
   const company = await getCompanyInfo()
   const timeZone = normalizeTimeZone(company.timeZone)
 
@@ -63,6 +63,20 @@ export default async function DashboardPage() {
 
   const surplusBulanIni = stats.arusKas6Bulan.at(-1)
   const surplusVal = (surplusBulanIni?.masuk ?? 0) - (surplusBulanIni?.keluar ?? 0)
+  const quickPanels = [
+    {
+      title: "Global Mingguan",
+      summary: quickView.weeklyGlobal,
+      risks: quickView.weeklyRisks,
+      href: `/monitoring/tunggakan?tanggalDari=${quickView.weeklyGlobal.tanggalDari}&tanggalSampai=${quickView.weeklyGlobal.tanggalSampai}`,
+    },
+    {
+      title: "Global Bulanan",
+      summary: quickView.monthlyGlobal,
+      risks: quickView.monthlyRisks,
+      href: `/monitoring/tunggakan?tanggalDari=${quickView.monthlyGlobal.tanggalDari}&tanggalSampai=${quickView.monthlyGlobal.tanggalSampai}`,
+    },
+  ]
 
   const statCards = [
     { title: "Total Nasabah Aktif", value: stats.totalNasabah.toLocaleString("id-ID"), change: "Nasabah aktif", trend: "up", icon: Users, color: "text-blue-600", bg: "bg-blue-50/80", id: "total-nasabah" },
@@ -194,6 +208,101 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">Quick View Penagihan</h2>
+            <p className="text-xs text-muted-foreground">Global mingguan dan bulanan: target, realisasi, gap, dan daftar prioritas nasabah.</p>
+          </div>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-6">
+          {quickPanels.map((panel) => (
+            <Card key={panel.title} className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base font-semibold">{panel.title}</CardTitle>
+                    <CardDescription>{panel.summary.tanggalDari} s/d {panel.summary.tanggalSampai}</CardDescription>
+                  </div>
+                  <Button asChild variant="outline" size="sm" className="h-8">
+                    <Link href={panel.href}>Lihat Detail</Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Target</p>
+                    <p className="text-sm font-bold">{fmt(panel.summary.targetDerived)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Realisasi</p>
+                    <p className="text-sm font-bold text-emerald-600">{fmt(panel.summary.realisasiBayar)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Gap</p>
+                    <p className="text-sm font-bold text-red-600">{fmt(panel.summary.gap)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Nasabah Bermasalah</p>
+                    <p className="text-sm font-bold">{panel.summary.nasabahBermasalah.toLocaleString("id-ID")}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-3">
+                    <Target className="size-4 text-slate-600" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Kasus</p>
+                      <p className="text-xs font-semibold">{panel.summary.totalKasus.toLocaleString("id-ID")} jadwal</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3">
+                    <CircleAlert className="size-4 text-red-600" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-red-700/70">Kurang Bayar</p>
+                      <p className="text-xs font-semibold text-red-700">{fmt(panel.summary.totalKurangBayar)}</p>
+                    </div>
+                  </div>
+                </div>
+                {panel.risks.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+                    Tidak ada nasabah bermasalah pada periode ini.
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-slate-100">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nasabah</TableHead>
+                          <TableHead className="text-center">Kasus</TableHead>
+                          <TableHead className="text-center">Telat Maks</TableHead>
+                          <TableHead className="text-right">Kurang Bayar</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {panel.risks.slice(0, 5).map((risk) => (
+                          <TableRow key={risk.nasabahId}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold tracking-tight">{risk.namaLengkap}</span>
+                                <span className="text-[10px] text-muted-foreground">{risk.nomorAnggota}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center text-xs font-semibold">{risk.jumlahAngsuranBermasalah}</TableCell>
+                            <TableCell className="text-center text-xs font-semibold">{risk.maxHariTelat}h</TableCell>
+                            <TableCell className="text-right text-xs font-semibold text-red-600">{fmt(risk.totalKurangBayar)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
       {/* Chart + Top Tunggakan */}

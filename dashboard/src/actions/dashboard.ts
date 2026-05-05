@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { differenceInDays } from "date-fns"
+import { differenceInDays, endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "date-fns"
 import { getCompanyInfo } from "@/actions/settings"
 import { normalizeTimeZone } from "@/lib/datetime"
 import { serializeData } from "@/lib/utils"
@@ -107,6 +107,201 @@ export async function getDashboardStats() {
     penagihanHariIni,
     arusKas6Bulan,
     topTunggakan,
+  })
+}
+
+type CollectionSummary = {
+  tanggalDari: string
+  tanggalSampai: string
+  targetDerived: number
+  realisasiBayar: number
+  gap: number
+  totalKasus: number
+  totalKurangBayar: number
+  nasabahBermasalah: number
+}
+
+type CollectionRiskNasabah = {
+  nasabahId: string
+  namaLengkap: string
+  nomorAnggota: string
+  jumlahAngsuranBermasalah: number
+  totalKurangBayar: number
+  maxHariTelat: number
+}
+
+type CollectionQuickView = {
+  weeklyGlobal: CollectionSummary
+  monthlyGlobal: CollectionSummary
+  weeklyRisks: CollectionRiskNasabah[]
+  monthlyRisks: CollectionRiskNasabah[]
+}
+
+function formatDateOnly(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function parseJadwalTag(catatan?: string | null) {
+  if (!catatan) return null
+  const match = catatan.match(/\[JADWAL:([^\]]+)\]/)
+  return match?.[1] ?? null
+}
+
+async function buildCollectionPeriod(
+  companyId: string,
+  startDate: Date,
+  endDate: Date,
+): Promise<{ summary: CollectionSummary; risks: CollectionRiskNasabah[] }> {
+  const today = new Date()
+  const jadwal = await prisma.jadwalAngsuran.findMany({
+    where: {
+      companyId,
+      tanggalJatuhTempo: { gte: startDate, lte: endDate },
+    },
+    select: {
+      id: true,
+      pinjamanId: true,
+      tanggalJatuhTempo: true,
+      total: true,
+      pinjaman: {
+        select: {
+          pengajuan: {
+            select: {
+              nasabah: {
+                select: {
+                  id: true,
+                  namaLengkap: true,
+                  nomorAnggota: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (jadwal.length === 0) {
+    return {
+      summary: {
+        tanggalDari: formatDateOnly(startDate),
+        tanggalSampai: formatDateOnly(endDate),
+        targetDerived: 0,
+        realisasiBayar: 0,
+        gap: 0,
+        totalKasus: 0,
+        totalKurangBayar: 0,
+        nasabahBermasalah: 0,
+      },
+      risks: [],
+    }
+  }
+
+  const pinjamanIds = Array.from(new Set(jadwal.map((item) => item.pinjamanId)))
+  const pembayaran = await prisma.pembayaran.findMany({
+    where: {
+      companyId,
+      pinjamanId: { in: pinjamanIds },
+      isBatalkan: false,
+      catatan: { contains: "[JADWAL:" },
+    },
+    select: {
+      pinjamanId: true,
+      catatan: true,
+      totalBayar: true,
+      tanggalBayar: true,
+    },
+  })
+
+  const paidByJadwal: Record<string, number> = {}
+  for (const row of pembayaran) {
+    const jadwalId = parseJadwalTag(row.catatan)
+    if (!jadwalId) continue
+    paidByJadwal[jadwalId] = (paidByJadwal[jadwalId] ?? 0) + Number(row.totalBayar)
+  }
+
+  const riskByNasabah: Record<string, CollectionRiskNasabah> = {}
+  let targetDerived = 0
+  let realisasiBayar = 0
+  let totalKasus = 0
+  let totalKurangBayar = 0
+
+  for (const row of jadwal) {
+    const totalTagihan = Number(row.total)
+    const paid = paidByJadwal[row.id] ?? 0
+    const unpaid = Math.max(0, totalTagihan - paid)
+
+    targetDerived += totalTagihan
+    realisasiBayar += Math.min(totalTagihan, paid)
+
+    if (unpaid <= 0) continue
+    totalKasus += 1
+    totalKurangBayar += unpaid
+
+    const nasabah = row.pinjaman.pengajuan.nasabah
+    const hariTelat = Math.max(0, differenceInDays(today, row.tanggalJatuhTempo))
+    const existing = riskByNasabah[nasabah.id]
+    if (!existing) {
+      riskByNasabah[nasabah.id] = {
+        nasabahId: nasabah.id,
+        namaLengkap: nasabah.namaLengkap,
+        nomorAnggota: nasabah.nomorAnggota,
+        jumlahAngsuranBermasalah: 1,
+        totalKurangBayar: unpaid,
+        maxHariTelat: hariTelat,
+      }
+    } else {
+      existing.jumlahAngsuranBermasalah += 1
+      existing.totalKurangBayar += unpaid
+      existing.maxHariTelat = Math.max(existing.maxHariTelat, hariTelat)
+    }
+  }
+
+  const risks = Object.values(riskByNasabah)
+    .sort((a, b) => {
+      if (b.totalKurangBayar !== a.totalKurangBayar) return b.totalKurangBayar - a.totalKurangBayar
+      return b.maxHariTelat - a.maxHariTelat
+    })
+    .slice(0, 10)
+
+  return {
+    summary: {
+      tanggalDari: formatDateOnly(startDate),
+      tanggalSampai: formatDateOnly(endDate),
+      targetDerived,
+      realisasiBayar,
+      gap: Math.max(0, targetDerived - realisasiBayar),
+      totalKasus,
+      totalKurangBayar,
+      nasabahBermasalah: Object.keys(riskByNasabah).length,
+    },
+    risks,
+  }
+}
+
+export async function getDashboardCollectionQuickView(): Promise<CollectionQuickView> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
+
+  const today = new Date()
+  const weeklyStart = startOfWeek(today, { weekStartsOn: 1 })
+  const weeklyEnd = endOfWeek(today, { weekStartsOn: 1 })
+  const monthlyStart = startOfMonth(today)
+  const monthlyEnd = endOfMonth(today)
+
+  const [weekly, monthly] = await Promise.all([
+    buildCollectionPeriod(companyId, weeklyStart, weeklyEnd),
+    buildCollectionPeriod(companyId, monthlyStart, monthlyEnd),
+  ])
+
+  return serializeData({
+    weeklyGlobal: weekly.summary,
+    monthlyGlobal: monthly.summary,
+    weeklyRisks: weekly.risks,
+    monthlyRisks: monthly.risks,
   })
 }
 
