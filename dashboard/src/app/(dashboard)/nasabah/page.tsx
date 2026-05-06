@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getKelompokList, getNasabahList } from "@/actions/nasabah"
 import { Input } from "@/components/ui/input"
 import { DeleteNasabahButton } from "./delete-nasabah-button"
+import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { AutoPrint } from "@/components/print/auto-print"
 
 const statusBadge: Record<string, { label: string; cls: string }> = {
   AKTIF: { label: "Aktif", cls: "bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
@@ -28,13 +30,14 @@ function fmt(n: number) {
 export default async function NasabahPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ search?: string; page?: string; kelompokId?: string; status?: string }>
+  searchParams?: Promise<{ search?: string; page?: string; kelompokId?: string; status?: string; print?: string }>
 }) {
   const sp = await searchParams
   const search = sp?.search ?? ""
   const page = Number(sp?.page ?? 1)
   const kelompokId = sp?.kelompokId ?? ""
   const status = sp?.status ?? ""
+  const isPrint = sp?.print === "1"
 
   const kelompokList = await getKelompokList()
   const { data: nasabahList, total, totalPages } = await getNasabahList({
@@ -47,6 +50,9 @@ export default async function NasabahPage({
 
   return (
     <div className="p-6 space-y-8">
+      {isPrint ? <AutoPrint /> : null}
+      <style>{`@media print { @page { size: A4 landscape; margin: 10mm; } }`}</style>
+      {isPrint ? <CompanyDocumentHeader documentTitle="Master Nasabah" documentNumber={`${total.toLocaleString("id-ID")} data`} /> : null}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Master Nasabah</h1>
@@ -68,10 +74,20 @@ export default async function NasabahPage({
               <CardTitle className="text-base font-semibold">Daftar Nasabah</CardTitle>
               <CardDescription>Kelola data anggota koperasi secara terpusat</CardDescription>
             </div>
-            <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80">
-              <Download className="size-3.5" /> 
-              <span className="hidden sm:inline">Export Data</span>
-            </Button>
+            <div className="flex items-center gap-2 print:hidden">
+              <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80" asChild>
+                <a href={`/api/export/nasabah?search=${encodeURIComponent(search)}&status=${status}&kelompokId=${kelompokId}`}>
+                  <Download className="size-3.5" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </a>
+              </Button>
+              <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80" asChild>
+                <a href={`?search=${encodeURIComponent(search)}&status=${status}&kelompokId=${kelompokId}&print=1`} target="_blank" rel="noreferrer">
+                  <Download className="size-3.5" />
+                  <span className="hidden sm:inline">Export PDF</span>
+                </a>
+              </Button>
+            </div>
           </div>
           <form method="GET" className="flex flex-col lg:flex-row gap-3">
             <div className="relative flex-1 group">
@@ -255,7 +271,7 @@ export default async function NasabahPage({
               )}
             </TableBody>
           </Table>
-          <div className="px-6 py-4 flex items-center justify-between border-t border-slate-50 bg-slate-50/30 dark:border-slate-800/50 dark:bg-slate-900/10 text-xs font-medium text-slate-500 tracking-tight">
+          <div className="px-6 py-4 flex items-center justify-between border-t border-slate-50 bg-slate-50/30 dark:border-slate-800/50 dark:bg-slate-900/10 text-xs font-medium text-slate-500 tracking-tight print:hidden">
             <span>
               {nasabahList.length > 0
                 ? `Menampilkan ${nasabahList.length} dari ${total} nasabah · Halaman ${page} / ${totalPages}`

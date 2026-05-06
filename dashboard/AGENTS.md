@@ -172,3 +172,12 @@ Referensi perencanaan: `SUPER-ADMIN-PLAN.md`.
    - cek login user biasa
    - cek login `SUPER_ADMIN`
    - cek guard middleware untuk route sensitif
+
+## 12. Aturan Dokumentasi Perubahan
+
+- Setiap fitur/perubahan user-facing **wajib** update:
+  - `CHANGELOG.md`
+  - `ROADMAP.md`
+- Untuk fitur export/cetak:
+  - Catat mode (`CSV/PDF`), halaman yang terdampak, dan status (`DONE/IN_PROGRESS/PLANNED`) di roadmap.
+  - Konsistenkan format dokumen dengan komponen header `CompanyDocumentHeader`.

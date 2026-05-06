@@ -4,6 +4,9 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Download } from "lucide-react"
+import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { AutoPrint } from "@/components/print/auto-print"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -12,9 +15,10 @@ function fmt(n: number) {
 export default async function LabaRugiPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ periodMode?: string; month?: string; year?: string; week?: string; from?: string; to?: string }>
+  searchParams?: Promise<{ periodMode?: string; month?: string; year?: string; week?: string; from?: string; to?: string; print?: string }>
 }) {
   const sp = await searchParams
+  const isPrint = sp?.print === "1"
   const data = await getLabaRugiSummary({
     periodMode: sp?.periodMode,
     month: sp?.month,
@@ -26,10 +30,25 @@ export default async function LabaRugiPage({
 
   return (
     <div className="p-6 space-y-6">
+      {isPrint ? <AutoPrint /> : null}
+      <style>{`@media print { @page { size: A4 landscape; margin: 10mm; } }`}</style>
+      {isPrint ? <CompanyDocumentHeader documentTitle="Laporan Laba Rugi" documentNumber={data.period.label} /> : null}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Laporan Laba Rugi</h1>
           <p className="text-muted-foreground text-sm">Periode: {data.period.label}</p>
+          <div className="mt-3 flex items-center gap-2 print:hidden">
+            <Button size="sm" variant="outline" asChild>
+              <a href={`/api/export/laba-rugi?periodMode=${data.period.mode}&month=${data.period.month}&year=${data.period.year}&week=${data.period.week}&from=${data.period.fromInput}&to=${data.period.toInput}`}>
+                <Download className="mr-1 size-3.5" /> Export CSV
+              </a>
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <a href={`?periodMode=${data.period.mode}&month=${data.period.month}&year=${data.period.year}&week=${data.period.week}&from=${data.period.fromInput}&to=${data.period.toInput}&print=1`} target="_blank" rel="noreferrer">
+                <Download className="mr-1 size-3.5" /> Export PDF
+              </a>
+            </Button>
+          </div>
         </div>
         <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">Sumber: Jurnal Akuntansi</Badge>
       </div>

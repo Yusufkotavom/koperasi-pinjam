@@ -160,6 +160,7 @@ function revalidateOperationalPaths() {
     "/kolektor",
     "/monitoring/tunggakan",
     "/monitoring/kolektor",
+    "/monitoring/pokok-berjalan",
     "/laporan/arus-kas",
     "/laporan/buku-besar",
     "/laporan/history-pembayaran",

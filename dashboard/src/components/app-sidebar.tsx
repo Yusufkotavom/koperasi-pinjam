@@ -73,6 +73,7 @@ const baseNavMain = [
     items: [
       { title: "Tunggakan", url: "/monitoring/tunggakan" },
       { title: "Rekap Kolektor", url: "/monitoring/kolektor" },
+      { title: "Pokok Berjalan", url: "/monitoring/pokok-berjalan" },
     ],
   },
   {

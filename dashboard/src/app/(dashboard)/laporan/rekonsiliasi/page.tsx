@@ -1,20 +1,40 @@
 import { getRekonsiliasiKasList } from "@/actions/akuntansi"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RekonsiliasiClient } from "./ui/rekonsiliasi-client"
+import { Button } from "@/components/ui/button"
+import { Download } from "lucide-react"
+import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { AutoPrint } from "@/components/print/auto-print"
 
 export default async function RekonsiliasiPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ year?: string }>
+  searchParams?: Promise<{ year?: string; print?: string }>
 }) {
   const sp = await searchParams
+  const isPrint = sp?.print === "1"
   const data = await getRekonsiliasiKasList({ year: sp?.year })
 
   return (
     <div className="p-6 space-y-6">
+      {isPrint ? <AutoPrint /> : null}
+      <style>{`@media print { @page { size: A4 landscape; margin: 10mm; } }`}</style>
+      {isPrint ? <CompanyDocumentHeader documentTitle="Laporan Rekonsiliasi" documentNumber={sp?.year ?? "Semua Tahun"} /> : null}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Rekonsiliasi Kas/Bank</h1>
         <p className="text-muted-foreground text-sm">Bandingkan saldo sistem dengan saldo statement per periode</p>
+        <div className="mt-3 flex items-center gap-2 print:hidden">
+          <Button size="sm" variant="outline" asChild>
+            <a href={`/api/export/rekonsiliasi?year=${sp?.year ?? ""}`}>
+              <Download className="mr-1 size-3.5" /> Export CSV
+            </a>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <a href={`?year=${sp?.year ?? ""}&print=1`} target="_blank" rel="noreferrer">
+              <Download className="mr-1 size-3.5" /> Export PDF
+            </a>
+          </Button>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-5 gap-6">
@@ -64,4 +84,3 @@ export default async function RekonsiliasiPage({
     </div>
   )
 }
-

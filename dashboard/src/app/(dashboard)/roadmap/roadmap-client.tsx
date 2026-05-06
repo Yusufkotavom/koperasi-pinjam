@@ -17,6 +17,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import type { RoadmapDocSection } from "@/lib/roadmap-docs"
 
 type FeatureStatus = "DONE" | "IN_PROGRESS" | "PLANNED"
 
@@ -201,9 +202,24 @@ function statusFromTab(tab: string): FeatureStatus | "ALL" {
   return "ALL"
 }
 
-export function RoadmapClient() {
+export function RoadmapClient({ docSections = [] }: { docSections?: RoadmapDocSection[] }) {
   const [tab, setTab] = React.useState("all")
   const [query, setQuery] = React.useState("")
+  const mergedSections = React.useMemo<FeatureSection[]>(
+    () => [
+      ...sections,
+      ...docSections.map((section) => ({
+        title: section.title,
+        description: section.description,
+        items: section.items.map((item) => ({
+          title: item.title,
+          status: item.status,
+          notes: item.notes,
+        })),
+      })),
+    ],
+    [docSections],
+  )
 
   const queryNorm = normalize(query)
   const tabStatus = statusFromTab(tab)
@@ -215,7 +231,7 @@ export function RoadmapClient() {
       return normalize(haystack).includes(queryNorm)
     }
 
-    return sections
+    return mergedSections
       .map((section) => {
         const items = section.items.filter((item) => {
           if (tabStatus !== "ALL" && item.status !== tabStatus) return false
@@ -224,10 +240,10 @@ export function RoadmapClient() {
         return { ...section, items }
       })
       .filter((s) => s.items.length > 0)
-  }, [queryNorm, tabStatus])
+  }, [queryNorm, tabStatus, mergedSections])
 
   const counts = React.useMemo(() => {
-    const allItems = sections.flatMap((s) => s.items)
+    const allItems = mergedSections.flatMap((s) => s.items)
     const count = (status: FeatureStatus) => allItems.filter((i) => i.status === status).length
     return {
       total: allItems.length,
@@ -235,7 +251,7 @@ export function RoadmapClient() {
       progress: count("IN_PROGRESS"),
       planned: count("PLANNED"),
     }
-  }, [])
+  }, [mergedSections])
 
   return (
     <div className="space-y-6">

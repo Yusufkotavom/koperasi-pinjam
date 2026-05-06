@@ -2,12 +2,15 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { RoadmapClient } from "./roadmap-client"
 import { ListTodo } from "lucide-react"
+import { getRoadmapDocSections } from "@/lib/roadmap-docs"
 
 export const metadata = {
   title: "Roadmap Fitur",
 }
 
-export default function RoadmapPage() {
+export default async function RoadmapPage() {
+  const docSections = await getRoadmapDocSections()
+
   return (
     <div className="p-6 space-y-6">
       <Card className="border-none shadow-sm overflow-hidden">
@@ -36,8 +39,7 @@ export default function RoadmapPage() {
         </CardContent>
       </Card>
 
-      <RoadmapClient />
+      <RoadmapClient docSections={docSections} />
     </div>
   )
 }
-

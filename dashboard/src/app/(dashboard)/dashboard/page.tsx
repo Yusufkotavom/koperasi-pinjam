@@ -1,4 +1,8 @@
-import { getDashboardCollectionQuickView, getDashboardStats } from "@/actions/dashboard"
+import {
+  getDashboardCollectionQuickView,
+  getDashboardRunningPrincipalStats,
+  getDashboardStats,
+} from "@/actions/dashboard"
 import Link from "next/link"
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -48,7 +52,11 @@ function BarChart({ data }: { data: { bulan: string; masuk: number; keluar: numb
 }
 
 export default async function DashboardPage() {
-  const [stats, quickView] = await Promise.all([getDashboardStats(), getDashboardCollectionQuickView()])
+  const [stats, quickView, runningPrincipal] = await Promise.all([
+    getDashboardStats(),
+    getDashboardCollectionQuickView(),
+    getDashboardRunningPrincipalStats(),
+  ])
   const company = await getCompanyInfo()
   const timeZone = normalizeTimeZone(company.timeZone)
 
@@ -211,6 +219,87 @@ export default async function DashboardPage() {
       </div>
 
       <div className="space-y-4">
+        <Card className="border-none shadow-sm overflow-hidden">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base font-semibold">Pokok Berjalan per Sistem</CardTitle>
+                <CardDescription>
+                  Snapshot outstanding principal aktif saat ini untuk sistem mingguan dan bulanan.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                  Live Snapshot
+                </Badge>
+                <Button asChild variant="outline" size="sm" className="h-8">
+                  <Link href="/monitoring/pokok-berjalan">Lihat Detail</Link>
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-100 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Pokok Berjalan</p>
+                <p className="text-base font-bold">{fmt(runningPrincipal.totalRunningPrincipal)}</p>
+              </div>
+              <div className="rounded-lg border border-slate-100 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Nasabah Aktif Berjalan</p>
+                <p className="text-base font-bold">{runningPrincipal.totalBorrowers.toLocaleString("id-ID")} nasabah</p>
+              </div>
+              <div className="rounded-lg border border-slate-100 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Kontrak Aktif Berjalan</p>
+                <p className="text-base font-bold">{runningPrincipal.totalActiveLoans.toLocaleString("id-ID")} kontrak</p>
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {runningPrincipal.buckets.map((bucket) => (
+                <div key={bucket.tenorType} className="rounded-xl border border-slate-100 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold tracking-tight">{bucket.label}</h3>
+                    <Badge variant="outline" className="text-[10px]">
+                      Share {bucket.riskSharePct.toFixed(1)}%
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-md bg-slate-50 p-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pokok Berjalan</p>
+                      <p className="text-xs font-bold">{fmt(bucket.runningPrincipal)}</p>
+                    </div>
+                    <div className="rounded-md bg-slate-50 p-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Nasabah Berjalan</p>
+                      <p className="text-xs font-bold">{bucket.activeBorrowerCount.toLocaleString("id-ID")} nasabah</p>
+                    </div>
+                    <div className="rounded-md bg-slate-50 p-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Kontrak Aktif</p>
+                      <p className="text-xs font-bold">{bucket.activeLoanCount.toLocaleString("id-ID")} kontrak</p>
+                    </div>
+                    <div className="rounded-md bg-slate-50 p-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Rata2 per Nasabah</p>
+                      <p className="text-xs font-bold">{fmt(bucket.avgPrincipalPerBorrower)}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-md bg-amber-50 p-2">
+                      <p className="text-[10px] uppercase tracking-wider text-amber-700/80">Jatuh Tempo 7 Hari</p>
+                      <p className="text-xs font-bold text-amber-700">{bucket.due7DaysCount.toLocaleString("id-ID")} kontrak</p>
+                    </div>
+                    <div className="rounded-md bg-red-50 p-2">
+                      <p className="text-[10px] uppercase tracking-wider text-red-700/80">Overdue</p>
+                      <p className="text-xs font-bold text-red-700">{bucket.overdueCount.toLocaleString("id-ID")} kontrak</p>
+                    </div>
+                    <div className="rounded-md bg-sky-50 p-2">
+                      <p className="text-[10px] uppercase tracking-wider text-sky-700/80">Rata2 per Kontrak</p>
+                      <p className="text-xs font-bold text-sky-700">{fmt(bucket.avgOutstandingPerLoan)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold tracking-tight">Quick View Penagihan</h2>

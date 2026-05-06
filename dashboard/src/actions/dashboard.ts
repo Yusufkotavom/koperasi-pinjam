@@ -110,6 +110,320 @@ export async function getDashboardStats() {
   })
 }
 
+type DashboardRunningPrincipalBucket = {
+  tenorType: "MINGGUAN" | "BULANAN"
+  label: string
+  activeLoanCount: number
+  activeBorrowerCount: number
+  runningPrincipal: number
+  avgPrincipalPerBorrower: number
+  avgOutstandingPerLoan: number
+  due7DaysCount: number
+  overdueCount: number
+  riskSharePct: number
+}
+
+type DashboardRunningPrincipalStats = {
+  totalRunningPrincipal: number
+  totalBorrowers: number
+  totalActiveLoans: number
+  buckets: DashboardRunningPrincipalBucket[]
+}
+
+export async function getDashboardRunningPrincipalStats(): Promise<DashboardRunningPrincipalStats> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
+
+  const today = new Date()
+  const end7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+  const [activeLoans, dueSoonRows, overdueRows] = await Promise.all([
+    prisma.pinjaman.findMany({
+      where: {
+        companyId,
+        status: { in: ["AKTIF", "MENUNGGAK"] },
+      },
+      select: {
+        id: true,
+        tenorType: true,
+        sisaPinjaman: true,
+        pengajuan: {
+          select: {
+            nasabahId: true,
+          },
+        },
+      },
+    }),
+    prisma.jadwalAngsuran.findMany({
+      where: {
+        companyId,
+        sudahDibayar: false,
+        tanggalJatuhTempo: {
+          gte: today,
+          lte: end7Days,
+        },
+        pinjaman: {
+          status: { in: ["AKTIF", "MENUNGGAK"] },
+        },
+      },
+      select: {
+        pinjamanId: true,
+        pinjaman: {
+          select: {
+            tenorType: true,
+          },
+        },
+      },
+    }),
+    prisma.jadwalAngsuran.findMany({
+      where: {
+        companyId,
+        sudahDibayar: false,
+        tanggalJatuhTempo: {
+          lt: today,
+        },
+        pinjaman: {
+          status: { in: ["AKTIF", "MENUNGGAK"] },
+        },
+      },
+      select: {
+        pinjamanId: true,
+        pinjaman: {
+          select: {
+            tenorType: true,
+          },
+        },
+      },
+    }),
+  ])
+
+  const mapByType: Record<"MINGGUAN" | "BULANAN", {
+    activeLoanCount: number
+    runningPrincipal: number
+    borrowerIds: Set<string>
+    dueLoanIds: Set<string>
+    overdueLoanIds: Set<string>
+  }> = {
+    MINGGUAN: { activeLoanCount: 0, runningPrincipal: 0, borrowerIds: new Set(), dueLoanIds: new Set(), overdueLoanIds: new Set() },
+    BULANAN: { activeLoanCount: 0, runningPrincipal: 0, borrowerIds: new Set(), dueLoanIds: new Set(), overdueLoanIds: new Set() },
+  }
+
+  for (const loan of activeLoans) {
+    const type = loan.tenorType === "MINGGUAN" ? "MINGGUAN" : "BULANAN"
+    mapByType[type].activeLoanCount += 1
+    mapByType[type].runningPrincipal += Number(loan.sisaPinjaman ?? 0)
+    if (loan.pengajuan?.nasabahId) {
+      mapByType[type].borrowerIds.add(loan.pengajuan.nasabahId)
+    }
+  }
+
+  for (const row of dueSoonRows) {
+    const type = row.pinjaman.tenorType === "MINGGUAN" ? "MINGGUAN" : "BULANAN"
+    mapByType[type].dueLoanIds.add(row.pinjamanId)
+  }
+
+  for (const row of overdueRows) {
+    const type = row.pinjaman.tenorType === "MINGGUAN" ? "MINGGUAN" : "BULANAN"
+    mapByType[type].overdueLoanIds.add(row.pinjamanId)
+  }
+
+  const totalRunningPrincipal = mapByType.MINGGUAN.runningPrincipal + mapByType.BULANAN.runningPrincipal
+  const totalBorrowers = new Set([...mapByType.MINGGUAN.borrowerIds, ...mapByType.BULANAN.borrowerIds]).size
+  const totalActiveLoans = mapByType.MINGGUAN.activeLoanCount + mapByType.BULANAN.activeLoanCount
+
+  const buckets: DashboardRunningPrincipalBucket[] = [
+    {
+      tenorType: "MINGGUAN",
+      label: "Sistem Mingguan",
+      activeLoanCount: mapByType.MINGGUAN.activeLoanCount,
+      activeBorrowerCount: mapByType.MINGGUAN.borrowerIds.size,
+      runningPrincipal: mapByType.MINGGUAN.runningPrincipal,
+      avgPrincipalPerBorrower:
+        mapByType.MINGGUAN.borrowerIds.size > 0
+          ? mapByType.MINGGUAN.runningPrincipal / mapByType.MINGGUAN.borrowerIds.size
+          : 0,
+      avgOutstandingPerLoan:
+        mapByType.MINGGUAN.activeLoanCount > 0
+          ? mapByType.MINGGUAN.runningPrincipal / mapByType.MINGGUAN.activeLoanCount
+          : 0,
+      due7DaysCount: mapByType.MINGGUAN.dueLoanIds.size,
+      overdueCount: mapByType.MINGGUAN.overdueLoanIds.size,
+      riskSharePct: totalRunningPrincipal > 0 ? (mapByType.MINGGUAN.runningPrincipal / totalRunningPrincipal) * 100 : 0,
+    },
+    {
+      tenorType: "BULANAN",
+      label: "Sistem Bulanan",
+      activeLoanCount: mapByType.BULANAN.activeLoanCount,
+      activeBorrowerCount: mapByType.BULANAN.borrowerIds.size,
+      runningPrincipal: mapByType.BULANAN.runningPrincipal,
+      avgPrincipalPerBorrower:
+        mapByType.BULANAN.borrowerIds.size > 0
+          ? mapByType.BULANAN.runningPrincipal / mapByType.BULANAN.borrowerIds.size
+          : 0,
+      avgOutstandingPerLoan:
+        mapByType.BULANAN.activeLoanCount > 0
+          ? mapByType.BULANAN.runningPrincipal / mapByType.BULANAN.activeLoanCount
+          : 0,
+      due7DaysCount: mapByType.BULANAN.dueLoanIds.size,
+      overdueCount: mapByType.BULANAN.overdueLoanIds.size,
+      riskSharePct: totalRunningPrincipal > 0 ? (mapByType.BULANAN.runningPrincipal / totalRunningPrincipal) * 100 : 0,
+    },
+  ]
+
+  return serializeData({
+    totalRunningPrincipal,
+    totalBorrowers,
+    totalActiveLoans,
+    buckets,
+  })
+}
+
+type RunningPrincipalMonitoringFilter = {
+  tenorType?: "MINGGUAN" | "BULANAN" | "ALL"
+  status?: "AKTIF" | "MENUNGGAK" | "ALL"
+  search?: string
+}
+
+export async function getRunningPrincipalMonitoring(params?: RunningPrincipalMonitoringFilter) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
+
+  const today = new Date()
+  const end7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const tenorType = params?.tenorType && params.tenorType !== "ALL" ? params.tenorType : undefined
+  const status = params?.status && params.status !== "ALL" ? params.status : undefined
+  const search = params?.search?.trim()
+
+  const loans = await prisma.pinjaman.findMany({
+    where: {
+      companyId,
+      status: status ?? { in: ["AKTIF", "MENUNGGAK"] },
+      ...(tenorType ? { tenorType } : {}),
+      ...(search
+        ? {
+            OR: [
+              { nomorKontrak: { contains: search, mode: "insensitive" } },
+              { pengajuan: { nasabah: { namaLengkap: { contains: search, mode: "insensitive" } } } },
+              { pengajuan: { nasabah: { nomorAnggota: { contains: search, mode: "insensitive" } } } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      nomorKontrak: true,
+      status: true,
+      tenorType: true,
+      pokokPinjaman: true,
+      sisaPinjaman: true,
+      tanggalCair: true,
+      tanggalJatuhTempo: true,
+      pengajuan: {
+        select: {
+          nasabah: {
+            select: {
+              namaLengkap: true,
+              nomorAnggota: true,
+              noHp: true,
+            },
+          },
+          kelompok: {
+            select: {
+              nama: true,
+              wilayah: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [{ tenorType: "asc" }, { sisaPinjaman: "desc" }],
+  })
+
+  const loanIds = loans.map((loan) => loan.id)
+  const [dueSoonRows, overdueRows] = await Promise.all([
+    loanIds.length === 0
+      ? Promise.resolve([])
+      : prisma.jadwalAngsuran.findMany({
+          where: {
+            companyId,
+            pinjamanId: { in: loanIds },
+            sudahDibayar: false,
+            tanggalJatuhTempo: { gte: today, lte: end7Days },
+          },
+          select: { pinjamanId: true },
+        }),
+    loanIds.length === 0
+      ? Promise.resolve([])
+      : prisma.jadwalAngsuran.findMany({
+          where: {
+            companyId,
+            pinjamanId: { in: loanIds },
+            sudahDibayar: false,
+            tanggalJatuhTempo: { lt: today },
+          },
+          select: { pinjamanId: true },
+        }),
+  ])
+
+  const dueSoonByLoanId = new Set(dueSoonRows.map((row) => row.pinjamanId))
+  const overdueByLoanId = new Set(overdueRows.map((row) => row.pinjamanId))
+
+  const rows = loans.map((loan) => {
+    const principal = Number(loan.pokokPinjaman ?? 0)
+    const outstanding = Number(loan.sisaPinjaman ?? 0)
+    const progressPct = principal > 0 ? ((principal - outstanding) / principal) * 100 : 0
+    return {
+      id: loan.id,
+      nomorKontrak: loan.nomorKontrak,
+      status: loan.status,
+      tenorType: loan.tenorType,
+      pokokPinjaman: principal,
+      sisaPinjaman: outstanding,
+      progressPct: Math.max(0, Math.min(100, progressPct)),
+      tanggalCair: loan.tanggalCair,
+      tanggalJatuhTempo: loan.tanggalJatuhTempo,
+      due7Days: dueSoonByLoanId.has(loan.id),
+      overdue: overdueByLoanId.has(loan.id),
+      nasabah: {
+        namaLengkap: loan.pengajuan.nasabah.namaLengkap,
+        nomorAnggota: loan.pengajuan.nasabah.nomorAnggota,
+        noHp: loan.pengajuan.nasabah.noHp,
+      },
+      kelompok: {
+        nama: loan.pengajuan.kelompok?.nama ?? "—",
+        wilayah: loan.pengajuan.kelompok?.wilayah ?? "—",
+      },
+    }
+  })
+
+  const borrowerSet = new Set(rows.map((row) => row.nasabah.nomorAnggota))
+  const summary = {
+    totalPrincipal: rows.reduce((sum, row) => sum + row.pokokPinjaman, 0),
+    totalOutstanding: rows.reduce((sum, row) => sum + row.sisaPinjaman, 0),
+    totalLoans: rows.length,
+    totalBorrowers: borrowerSet.size,
+    due7DaysCount: rows.filter((row) => row.due7Days).length,
+    overdueCount: rows.filter((row) => row.overdue).length,
+    mingguanOutstanding: rows
+      .filter((row) => row.tenorType === "MINGGUAN")
+      .reduce((sum, row) => sum + row.sisaPinjaman, 0),
+    bulananOutstanding: rows
+      .filter((row) => row.tenorType === "BULANAN")
+      .reduce((sum, row) => sum + row.sisaPinjaman, 0),
+  }
+
+  return serializeData({
+    summary,
+    rows,
+  })
+}
+
 type CollectionSummary = {
   tanggalDari: string
   tanggalSampai: string

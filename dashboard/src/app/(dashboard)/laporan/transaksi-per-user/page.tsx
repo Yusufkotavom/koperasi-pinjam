@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { explainRanking } from "@/lib/ranking"
-import { Filter, LayoutGrid, Info, Eye } from "lucide-react"
+import { Filter, LayoutGrid, Info, Eye, Download } from "lucide-react"
+import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { AutoPrint } from "@/components/print/auto-print"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -27,9 +29,11 @@ export default async function TransaksiPerUserPage({
     week?: string
     from?: string
     to?: string
+    print?: string
   }>
 }) {
   const sp = await searchParams
+  const isPrint = sp?.print === "1"
   const view = sp?.view === "kelompok" ? "kelompok" : "user"
   const report = await getLaporanTransaksiUserReport({
     kelompokId: sp?.kelompokId,
@@ -111,9 +115,24 @@ export default async function TransaksiPerUserPage({
 
   return (
     <div className="p-6 space-y-8">
+      {isPrint ? <AutoPrint /> : null}
+      <style>{`@media print { @page { size: A4 landscape; margin: 10mm; } }`}</style>
+      {isPrint ? <CompanyDocumentHeader documentTitle="Laporan Transaksi Per User" documentNumber={report.period.label} /> : null}
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">Laporan Transaksi User</h1>
         <p className="text-muted-foreground text-sm">Analisis kolektibilitas nasabah dan performa kelompok. Periode: {report.period.label}</p>
+        <div className="mt-3 flex items-center gap-2 print:hidden">
+          <Button size="sm" variant="outline" asChild>
+            <a href={`/api/export/transaksi-per-user?kelompokId=${kelompokId}&search=${encodeURIComponent(search)}&periodMode=${report.period.mode}&month=${report.period.month}&year=${report.period.year}&week=${report.period.week}&from=${report.period.fromInput}&to=${report.period.toInput}`}>
+              <Download className="mr-1 size-3.5" /> Export CSV
+            </a>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <a href={`?kelompokId=${kelompokId}&search=${encodeURIComponent(search)}&view=${view}&periodMode=${report.period.mode}&month=${report.period.month}&year=${report.period.year}&week=${report.period.week}&from=${report.period.fromInput}&to=${report.period.toInput}&print=1`} target="_blank" rel="noreferrer">
+              <Download className="mr-1 size-3.5" /> Export PDF
+            </a>
+          </Button>
+        </div>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">

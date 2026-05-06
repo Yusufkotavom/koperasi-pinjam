@@ -4,7 +4,9 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CheckCircle2, TriangleAlert } from "lucide-react"
+import { CheckCircle2, TriangleAlert, Download } from "lucide-react"
+import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { AutoPrint } from "@/components/print/auto-print"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -25,9 +27,10 @@ function BalanceRow({ code, label, nilai }: { code?: string; label: string; nila
 export default async function NeracaPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ periodMode?: string; month?: string; year?: string; week?: string; from?: string; to?: string }>
+  searchParams?: Promise<{ periodMode?: string; month?: string; year?: string; week?: string; from?: string; to?: string; print?: string }>
 }) {
   const sp = await searchParams
+  const isPrint = sp?.print === "1"
   const data = await getNeracaSederhana({
     periodMode: sp?.periodMode,
     month: sp?.month,
@@ -41,12 +44,27 @@ export default async function NeracaPage({
 
   return (
     <div className="p-6 space-y-6">
+      {isPrint ? <AutoPrint /> : null}
+      <style>{`@media print { @page { size: A4 landscape; margin: 10mm; } }`}</style>
+      {isPrint ? <CompanyDocumentHeader documentTitle="Laporan Neraca" documentNumber={data.period.label} /> : null}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Neraca Sederhana</h1>
           <p className="text-muted-foreground text-sm">
             Posisi sampai: {data.period.label}
           </p>
+          <div className="mt-3 flex items-center gap-2 print:hidden">
+            <Button size="sm" variant="outline" asChild>
+              <a href={`/api/export/neraca?periodMode=${data.period.mode}&month=${data.period.month}&year=${data.period.year}&week=${data.period.week}&from=${data.period.fromInput}&to=${data.period.toInput}`}>
+                <Download className="mr-1 size-3.5" /> Export CSV
+              </a>
+            </Button>
+            <Button size="sm" variant="outline" asChild>
+              <a href={`?periodMode=${data.period.mode}&month=${data.period.month}&year=${data.period.year}&week=${data.period.week}&from=${data.period.fromInput}&to=${data.period.toInput}&print=1`} target="_blank" rel="noreferrer">
+                <Download className="mr-1 size-3.5" /> Export PDF
+              </a>
+            </Button>
+          </div>
         </div>
         <Badge
           variant="outline"

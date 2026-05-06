@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table"
 import { FileText, Download, TrendingUp, TrendingDown, Wallet, Calendar } from "lucide-react"
 import { getArusKasReport } from "@/actions/kas"
+import { CompanyDocumentHeader } from "@/components/print/company-document-header"
+import { AutoPrint } from "@/components/print/auto-print"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -12,10 +14,11 @@ function fmt(n: number) {
 export default async function ArusKasLaporanPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ from?: string; to?: string; groupBy?: string }>
+  searchParams?: Promise<{ from?: string; to?: string; groupBy?: string; print?: string }>
 }) {
   const sp = await searchParams
   const groupBy = sp?.groupBy === "WEEK" ? "WEEK" : "MONTH"
+  const isPrint = sp?.print === "1"
 
   const report = await getArusKasReport({
     from: sp?.from,
@@ -36,6 +39,11 @@ export default async function ArusKasLaporanPage({
 
   return (
     <div className="p-6 space-y-8">
+      {isPrint ? <AutoPrint /> : null}
+      <style>{`@media print { @page { size: A4 landscape; margin: 10mm; } }`}</style>
+      {isPrint ? (
+        <CompanyDocumentHeader documentTitle="Laporan Arus Kas" documentNumber={`${fmtDate(report.from)} - ${fmtDate(report.to)}`} />
+      ) : null}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">Laporan Arus Kas</h1>
@@ -50,9 +58,17 @@ export default async function ArusKasLaporanPage({
               </span>
             </a>
           </Button>
-          <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-slate-200 dark:border-slate-800">
-            <Download className="size-3.5" />
-            <span className="hidden sm:inline">Export PDF</span>
+          <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-slate-200 dark:border-slate-800 print:hidden" asChild>
+            <a href={`/api/export/arus-kas?groupBy=${groupBy}&from=${defaultFrom}&to=${defaultTo}`}>
+              <Download className="size-3.5" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </a>
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2 h-9 rounded-lg border-slate-200 dark:border-slate-800 print:hidden" asChild>
+            <a href={`?groupBy=${groupBy}&from=${defaultFrom}&to=${defaultTo}&print=1`} target="_blank" rel="noreferrer">
+              <Download className="size-3.5" />
+              <span className="hidden sm:inline">Export PDF</span>
+            </a>
           </Button>
         </div>
       </div>

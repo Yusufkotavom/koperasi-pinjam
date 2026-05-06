@@ -34,6 +34,15 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 - Panduan penggunaan aplikasi (internal): `PANDUAN-PENGGUNA.md`
 - Panduan `$using-superpowers`: `USING-SUPERPOWERS.md`
 - Perencanaan hak akses super admin: `SUPER-ADMIN-PLAN.md`
+- Changelog produk: `CHANGELOG.md`
+- Roadmap fitur: `ROADMAP.md`
+
+## Disiplin Update Dokumentasi
+
+- Setiap perubahan fitur user-facing harus update:
+  - `CHANGELOG.md`
+  - `ROADMAP.md`
+- Fitur export/cetak harus konsisten memakai pola dokumen internal yang ada (kop `CompanyDocumentHeader` untuk print/PDF).
 
 ## Deploy on Vercel
 
