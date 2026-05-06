@@ -20,9 +20,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, BadgeCheckIcon, BellIcon, LogOutIcon, SettingsIcon } from "lucide-react"
-import { signOut } from "next-auth/react"
+import { ChevronsUpDownIcon, BadgeCheckIcon, BellIcon, Building2, LogOutIcon, SettingsIcon } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { logExitCompanyContext } from "@/actions/platform-admin"
 
 export function NavUser({
   user,
@@ -31,9 +33,15 @@ export function NavUser({
     name: string
     email: string
     avatar?: string
+    roles?: string[]
+    companyId?: string | null
   }
 }) {
   const { isMobile } = useSidebar()
+  const router = useRouter()
+  const { update } = useSession()
+  const isSuperAdmin = user.roles?.includes("SUPER_ADMIN") ?? false
+  const isActingCompany = isSuperAdmin && Boolean(user.companyId)
 
   return (
     <SidebarMenu>
@@ -78,6 +86,20 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              {isActingCompany ? (
+                <DropdownMenuItem
+                  onSelect={async (e) => {
+                    e.preventDefault()
+                    await logExitCompanyContext()
+                    await update({ clearActingCompany: true })
+                    router.push("/platform")
+                    router.refresh()
+                  }}
+                >
+                  <Building2 className="size-4" />
+                  Kembali ke Platform
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem asChild>
                 <Link href="/settings" className="flex items-center gap-2">
                   <SettingsIcon className="size-4" />
