@@ -17,7 +17,7 @@ export default async function SimpananPage({
   const params = await searchParams
   const page = Number(params.page) || 1
   const search = params.search || ""
-  const status = params.status || ""
+  const status = params.status === "all" ? "" : (params.status || "")
 
   return (
     <div className="space-y-6">
@@ -61,12 +61,12 @@ export default async function SimpananPage({
                 />
               </div>
             </form>
-            <Select name="status" defaultValue={status}>
+            <Select name="status" defaultValue={status || "all"}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Semua Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Semua Status</SelectItem>
+                <SelectItem value="all">Semua Status</SelectItem>
                 <SelectItem value="AKTIF">Aktif</SelectItem>
                 <SelectItem value="TUTUP">Tutup</SelectItem>
               </SelectContent>
