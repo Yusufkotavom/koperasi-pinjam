@@ -1,6 +1,8 @@
 "use client"
 
+import * as React from "react"
 import { ViewTransition } from "react"
+import { usePathname } from "next/navigation"
 import { AppLink } from "@/components/app-link"
 import {
   Collapsible,
@@ -33,6 +35,17 @@ export function NavMain({
     }[]
   }[]
 }) {
+  const pathname = usePathname()
+  const activeTitle = React.useMemo(() => {
+    const found = items.find((item) => item.items?.some((subItem) => pathname.startsWith(subItem.url)))
+    return found?.title ?? items.find((item) => item.isActive)?.title ?? null
+  }, [items, pathname])
+  const [openTitle, setOpenTitle] = React.useState<string | null>(activeTitle)
+
+  React.useEffect(() => {
+    if (activeTitle) setOpenTitle(activeTitle)
+  }, [activeTitle])
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -40,7 +53,12 @@ export function NavMain({
         {items.map((item) => (
           <Collapsible
             key={item.title}
-            defaultOpen={item.isActive}
+            open={item.items?.length ? openTitle === item.title : false}
+            onOpenChange={
+              item.items?.length
+                ? (nextOpen) => setOpenTitle(nextOpen ? item.title : null)
+                : undefined
+            }
             render={<SidebarMenuItem />}
           >
             {item.items?.length ? (
