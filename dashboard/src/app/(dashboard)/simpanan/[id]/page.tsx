@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getSimpananById } from "@/actions/simpanan"
 import { TutupSimpananButton } from "./tutup-button"
+import { TransaksiSimpananButton } from "./transaksi-button"
+import { HitungBagiHasilButton } from "./hitung-bagi-hasil-button"
 import { ArrowLeft, Edit } from "lucide-react"
 import { format } from "date-fns"
 import { id as localeId } from "date-fns/locale"
@@ -40,6 +42,13 @@ export default async function SimpananDetailPage({ params }: { params: Promise<{
         <div className="flex gap-2">
           {simpanan.status === "AKTIF" && (
             <>
+              <TransaksiSimpananButton simpananId={id} saldoTersedia={saldoTersedia} jenis="SETOR" />
+              <TransaksiSimpananButton simpananId={id} saldoTersedia={saldoTersedia} jenis="TARIK" />
+              <HitungBagiHasilButton
+                simpananId={id}
+                persenBagiHasil={persenBagiHasil}
+                saldoAwal={saldoAwal}
+              />
               <Button asChild variant="outline">
                 <Link href={`/simpanan/${id}/edit`}>
                   <Edit className="mr-2 h-4 w-4" />

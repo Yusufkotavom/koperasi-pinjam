@@ -64,6 +64,7 @@ const baseNavMain = [
     items: [
       { title: "Daftar Simpanan", url: "/simpanan" },
       { title: "Simpanan Baru", url: "/simpanan/baru" },
+      { title: "Bagi Hasil", url: "/simpanan/bagi-hasil" },
     ],
   },
   {

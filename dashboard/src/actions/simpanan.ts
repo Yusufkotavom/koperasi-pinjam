@@ -338,3 +338,167 @@ export async function getSimpananAvailable() {
 
   return serializeData(data)
 }
+
+// ========================
+// BAGI HASIL
+// ========================
+
+export async function hitungBagiHasil(simpananId: string, periode: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as any)
+
+  try {
+    requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+  } catch {
+    return { error: "Tidak memiliki hak akses untuk hitung bagi hasil." }
+  }
+
+  const simpanan = await prisma.simpanan.findFirst({
+    where: { id: simpananId, companyId, status: "AKTIF" },
+  })
+  if (!simpanan) return { error: "Simpanan tidak ditemukan atau sudah ditutup." }
+
+  // Cek apakah sudah ada bagi hasil untuk periode ini
+  const existing = await prisma.bagiHasilSimpanan.findUnique({
+    where: { simpananId_periode: { simpananId, periode } },
+  })
+  if (existing) return { error: `Bagi hasil periode ${periode} sudah dihitung.` }
+
+  // Hitung bagi hasil berdasar saldo awal
+  const saldoAwal = Number(simpanan.saldoAwal)
+  const persenBagiHasil = Number(simpanan.persenBagiHasil)
+  const jumlahBagiHasil = (saldoAwal * persenBagiHasil) / 100
+
+  const bagiHasil = await prisma.bagiHasilSimpanan.create({
+    data: {
+      companyId,
+      simpananId,
+      periode,
+      jumlahBagiHasil: new Prisma.Decimal(jumlahBagiHasil),
+      statusBayar: "BELUM_BAYAR",
+    },
+  })
+
+  revalidatePath("/simpanan")
+  revalidatePath(`/simpanan/${simpananId}`)
+  revalidatePath("/simpanan/bagi-hasil")
+  return { success: true, data: serializeData(bagiHasil) }
+}
+
+export async function bayarBagiHasil(bagiHasilId: string, catatanBayar?: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as any)
+
+  let userId: string
+  try {
+    const required = requireRoles(session, [RoleType.ADMIN, RoleType.MANAGER, RoleType.PIMPINAN])
+    userId = required.userId
+  } catch {
+    return { error: "Tidak memiliki hak akses untuk bayar bagi hasil." }
+  }
+
+  const bagiHasil = await prisma.bagiHasilSimpanan.findFirst({
+    where: { id: bagiHasilId, companyId },
+    include: { simpanan: true },
+  })
+  if (!bagiHasil) return { error: "Bagi hasil tidak ditemukan." }
+  if (bagiHasil.statusBayar === "SUDAH_BAYAR") return { error: "Bagi hasil sudah dibayar." }
+
+  const jumlahBagiHasil = Number(bagiHasil.jumlahBagiHasil)
+
+  await prisma.$transaction(async (tx) => {
+    // Update status bagi hasil
+    await tx.bagiHasilSimpanan.update({
+      where: { id: bagiHasilId },
+      data: {
+        statusBayar: "SUDAH_BAYAR",
+        tanggalBayar: new Date(),
+        catatanBayar,
+      },
+    })
+
+    // Catat di kas keluar
+    const kategori = await tx.kasKategori.findFirst({
+      where: { companyId, key: "BAGI_HASIL_SIMPANAN" },
+    })
+
+    if (!kategori) {
+      // Buat kategori baru jika belum ada
+      await tx.kasKategori.create({
+        data: {
+          companyId,
+          key: "BAGI_HASIL_SIMPANAN",
+          nama: "Bagi Hasil Simpanan",
+          jenis: "KELUAR",
+          accountId: null,
+        },
+      })
+    }
+
+    const kategoriId = kategori?.id || (await tx.kasKategori.findFirst({
+      where: { companyId, key: "BAGI_HASIL_SIMPANAN" },
+      select: { id: true },
+    }))!.id
+
+    await tx.kasTransaksi.create({
+      data: {
+        companyId,
+        jenis: "KELUAR",
+        kategoriId,
+        kategoriKey: "BAGI_HASIL_SIMPANAN",
+        deskripsi: `Bagi hasil simpanan ${bagiHasil.simpanan.nomorRekening} periode ${bagiHasil.periode}`,
+        jumlah: new Prisma.Decimal(jumlahBagiHasil),
+        kasJenis: "TUNAI",
+        inputOlehId: userId,
+        tanggal: new Date(),
+        referensiId: bagiHasilId,
+      },
+    })
+  })
+
+  revalidatePath("/simpanan")
+  revalidatePath(`/simpanan/${bagiHasil.simpananId}`)
+  revalidatePath("/simpanan/bagi-hasil")
+  return { success: true }
+}
+
+export async function getBagiHasilList(params: {
+  page?: number
+  status?: string
+}) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as any)
+
+  const page = params.page ?? 1
+  const limit = 20
+
+  const where: Prisma.BagiHasilSimpananWhereInput = {
+    AND: [
+      { companyId },
+      params.status ? { statusBayar: params.status as "BELUM_BAYAR" | "SUDAH_BAYAR" } : {},
+    ],
+  }
+
+  const [data, total] = await Promise.all([
+    prisma.bagiHasilSimpanan.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { periode: "desc" },
+      include: {
+        simpanan: {
+          select: {
+            nomorRekening: true,
+            namaPenyimpan: true,
+          },
+        },
+      },
+    }),
+    prisma.bagiHasilSimpanan.count({ where }),
+  ])
+
+  return serializeData({ data, total, page, totalPages: Math.ceil(total / limit) })
+}
