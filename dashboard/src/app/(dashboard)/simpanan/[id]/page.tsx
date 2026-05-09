@@ -92,7 +92,7 @@ export default async function SimpananDetailPage({ params }: { params: Promise<{
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
-              {persenBagiHasil}% / {simpanan.periodeBagiHasil}
+              {persenBagiHasil}% / {simpanan.periodeBagiHasil} bulan
             </div>
             <p className="text-sm text-muted-foreground mt-1">Saldo awal: Rp {saldoAwal.toLocaleString("id-ID")}</p>
           </CardContent>

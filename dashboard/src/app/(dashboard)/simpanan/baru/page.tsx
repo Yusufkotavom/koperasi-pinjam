@@ -118,18 +118,21 @@ export default function SimpananBaruPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="periodeBagiHasil">
-                  Periode Bagi Hasil <span className="text-red-500">*</span>
+                  Periode Bagi Hasil (bulan) <span className="text-red-500">*</span>
                 </Label>
-                <Select name="periodeBagiHasil" defaultValue="BULANAN" required>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BULANAN">Bulanan</SelectItem>
-                    <SelectItem value="TRIWULAN">Triwulan (3 bulan)</SelectItem>
-                    <SelectItem value="TAHUNAN">Tahunan</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="periodeBagiHasil"
+                  name="periodeBagiHasil"
+                  type="number"
+                  required
+                  min="1"
+                  step="1"
+                  defaultValue="1"
+                  placeholder="Misal: 1 (bulanan), 3 (triwulan), 12 (tahunan)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Masukkan jumlah bulan: 1 = bulanan, 3 = triwulan, 12 = tahunan, atau custom
+                </p>
               </div>
             </div>
 

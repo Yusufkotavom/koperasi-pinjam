@@ -7,7 +7,7 @@ export const simpananSchema = z.object({
   alamat: z.string().optional(),
   saldoAwal: z.coerce.number().min(100000, "Saldo minimal Rp 100.000"),
   persenBagiHasil: z.coerce.number().min(0).max(100, "Persen 0-100"),
-  periodeBagiHasil: z.enum(["BULANAN", "TRIWULAN", "TAHUNAN"]).default("BULANAN"),
+  periodeBagiHasil: z.coerce.number().int().min(1, "Periode minimal 1 bulan").default(1),
 })
 
 export type SimpananInput = z.infer<typeof simpananSchema>

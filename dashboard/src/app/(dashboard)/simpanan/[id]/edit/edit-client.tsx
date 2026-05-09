@@ -21,7 +21,7 @@ interface Props {
     noHp: string
     alamat?: string | null
     persenBagiHasil: string
-    periodeBagiHasil: string
+    periodeBagiHasil: number
   }
 }
 
@@ -39,7 +39,7 @@ export default function EditSimpananClient({ simpanan }: Props) {
       noHp: formData.get("noHp") as string,
       alamat: formData.get("alamat") as string,
       persenBagiHasil: Number(formData.get("persenBagiHasil")),
-      periodeBagiHasil: formData.get("periodeBagiHasil") as "BULANAN" | "TRIWULAN" | "TAHUNAN",
+      periodeBagiHasil: Number(formData.get("periodeBagiHasil")),
     }
 
     const result = await updateSimpanan(simpanan.id, input)
@@ -120,18 +120,21 @@ export default function EditSimpananClient({ simpanan }: Props) {
 
               <div className="space-y-2">
                 <Label htmlFor="periodeBagiHasil">
-                  Periode Bagi Hasil <span className="text-red-500">*</span>
+                  Periode Bagi Hasil (bulan) <span className="text-red-500">*</span>
                 </Label>
-                <Select name="periodeBagiHasil" defaultValue={simpanan.periodeBagiHasil} required>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BULANAN">Bulanan</SelectItem>
-                    <SelectItem value="TRIWULAN">Triwulan (3 bulan)</SelectItem>
-                    <SelectItem value="TAHUNAN">Tahunan</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="periodeBagiHasil"
+                  name="periodeBagiHasil"
+                  type="number"
+                  required
+                  min="1"
+                  step="1"
+                  defaultValue={simpanan.periodeBagiHasil}
+                  placeholder="Misal: 1 (bulanan), 3 (triwulan), 12 (tahunan)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Masukkan jumlah bulan: 1 = bulanan, 3 = triwulan, 12 = tahunan, atau custom
+                </p>
               </div>
             </div>
 

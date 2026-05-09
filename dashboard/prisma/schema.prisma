@@ -299,7 +299,7 @@ model Simpanan {
   
   // Bagi hasil
   persenBagiHasil   Decimal                  @db.Decimal(5, 2) // misal 2.50 untuk 2.5%
-  periodeBagiHasil  PeriodeBagiHasil         @default(BULANAN)
+  periodeBagiHasil  Int                      @default(1) // periode dalam bulan (1-12+)
   
   // Status
   status            StatusSimpanan           @default(AKTIF)
@@ -711,12 +711,6 @@ enum StatusPengembalian {
 enum JenisTransaksiSimpanan {
   SETOR
   TARIK
-}
-
-enum PeriodeBagiHasil {
-  BULANAN
-  TRIWULAN
-  TAHUNAN
 }
 
 enum StatusBayar {
