@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { getSimpananList } from "@/actions/simpanan"
-import { PlusCircle, Search } from "lucide-react"
+import { PlusCircle, Search, Download } from "lucide-react"
 
 export default async function SimpananPage({
   searchParams,
@@ -26,12 +26,20 @@ export default async function SimpananPage({
           <h1 className="text-3xl font-bold tracking-tight">Simpanan</h1>
           <p className="text-muted-foreground">Kelola simpanan modal dari penyimpan</p>
         </div>
-        <Button asChild>
-          <Link href="/simpanan/baru">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Simpanan Baru
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/api/export/simpanan?search=${search}&status=${status}`}>
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/simpanan/baru">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Simpanan Baru
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
