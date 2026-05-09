@@ -4,6 +4,7 @@ Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
 ## 2026-05-09
+- ops(db-backup): tambah mekanisme backup/restore PostgreSQL via script `scripts/db/backup.sh` dan `scripts/db/restore.sh`, plus runbook `docs/DB-BACKUP-RUNBOOK.md`.
 - feat(simpanan): tambah modul **Simpanan** untuk kelola modal dari penyimpan non-anggota.
 - feat(simpanan): CRUD simpanan dengan identitas jelas (nama, NIK, HP, alamat, nomor rekening auto-generate).
 - feat(simpanan): tracking saldo tersedia vs terpakai, persen bagi hasil, dan periode bagi hasil (bulanan/triwulan/tahunan).

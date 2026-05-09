@@ -14,6 +14,9 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
+    "db:backup": "bash ./scripts/db/backup.sh",
+    "db:backup:dry-run": "BACKUP_DRY_RUN=1 bash ./scripts/db/backup.sh",
+    "db:restore": "bash ./scripts/db/restore.sh",
     "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "db:studio": "prisma studio"
   },

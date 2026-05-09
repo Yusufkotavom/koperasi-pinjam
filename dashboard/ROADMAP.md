@@ -97,3 +97,8 @@ Meningkatkan kecepatan kerja tim operasional.
 - [ ] Saved filter preset per user pada halaman monitoring/laporan
 - [x] Baseline automated test export API (Vitest)
 - [x] Baseline smoke E2E (Playwright) untuk health-check UI
+
+## Operasional & Keamanan Data
+Ketahanan operasional untuk environment production.
+- [x] Mekanisme backup/restore DB PostgreSQL berbasis script + runbook
+- [ ] Otomasi offsite backup (S3/Blob storage) dengan rotasi 30-90 hari
