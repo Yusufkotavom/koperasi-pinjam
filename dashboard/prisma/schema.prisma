@@ -81,6 +81,8 @@ model User {
   pengajuanDisetujui     Pengajuan[]       @relation("ApproverPengajuan")
   pengajuanDisurvey      Pengajuan[]       @relation("SurveyorPengajuan")
   rekonsiliasiDibuat     RekonsiliasiKas[] @relation("RekonsiliasiCreatedBy")
+  simpananDibuat         Simpanan[]        @relation("SimpananCreatedBy")
+  transaksiSimpananInput TransaksiSimpanan[] @relation("TransaksiSimpananInputBy")
   roles                  UserRole[]
   company                Company?          @relation("UserCompany", fields: [companyId], references: [id])
 
@@ -116,7 +118,6 @@ model Nasabah {
   kolektor      User?         @relation("KolektorNasabah", fields: [kolektorId], references: [id])
   pengajuan     Pengajuan[]
   penjamin      Penjamin[]
-  simpanan      Simpanan[]
 
   @@unique([companyId, nomorAnggota])
   @@unique([companyId, nik])
@@ -197,33 +198,42 @@ model Pengajuan {
 }
 
 model Pinjaman {
-  id                String           @id @default(cuid())
-  nomorKontrak      String           @unique
-  pengajuanId       String           @unique
-  pokokPinjaman     Decimal          @db.Decimal(15, 2)
+  id                String                @id @default(cuid())
+  nomorKontrak      String                @unique
+  pengajuanId       String                @unique
+  pokokPinjaman     Decimal               @db.Decimal(15, 2)
   tenor             Int
-  bungaPerBulan     Decimal          @db.Decimal(5, 4)
-  angsuranPokok     Decimal          @db.Decimal(15, 2)
-  angsuranBunga     Decimal          @db.Decimal(15, 2)
-  totalAngsuran     Decimal          @db.Decimal(15, 2)
-  potonganAdmin     Decimal          @default(0) @db.Decimal(15, 2)
-  potonganProvisi   Decimal          @default(0) @db.Decimal(15, 2)
-  nilaiCair         Decimal          @db.Decimal(15, 2)
+  bungaPerBulan     Decimal               @db.Decimal(5, 4)
+  angsuranPokok     Decimal               @db.Decimal(15, 2)
+  angsuranBunga     Decimal               @db.Decimal(15, 2)
+  totalAngsuran     Decimal               @db.Decimal(15, 2)
+  potonganAdmin     Decimal               @default(0) @db.Decimal(15, 2)
+  potonganProvisi   Decimal               @default(0) @db.Decimal(15, 2)
+  nilaiCair         Decimal               @db.Decimal(15, 2)
   tanggalCair       DateTime
   tanggalJatuhTempo DateTime
-  sisaPinjaman      Decimal          @db.Decimal(15, 2)
-  status            StatusPinjaman   @default(AKTIF)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  tenorType         TenorType        @default(BULANAN)
+  sisaPinjaman      Decimal               @db.Decimal(15, 2)
+  status            StatusPinjaman        @default(AKTIF)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  tenorType         TenorType             @default(BULANAN)
   companyId         String
+  
+  // Sumber dana pencairan
+  sumberDana        SumberDana            @default(KAS)
+  simpananId        String?
+  kasJenis          KasJenis?
+  
   bonusKolektor     KolektorBonus?
   jadwalAngsuran    JadwalAngsuran[]
   pembayaran        Pembayaran[]
-  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  pengajuan         Pengajuan        @relation(fields: [pengajuanId], references: [id])
+  company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  pengajuan         Pengajuan             @relation(fields: [pengajuanId], references: [id])
+  simpanan          Simpanan?             @relation(fields: [simpananId], references: [id])
+  penggunaanSimpanan PenggunaanSimpanan[]
 
   @@index([companyId])
+  @@index([simpananId])
   @@map("pinjaman")
 }
 
@@ -272,17 +282,105 @@ model Pembayaran {
 }
 
 model Simpanan {
-  id        String   @id @default(cuid())
-  nasabahId String
-  jenis     String
-  jumlah    Decimal  @db.Decimal(15, 2)
-  tanggal   DateTime @default(now())
-  companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  nasabah   Nasabah  @relation(fields: [nasabahId], references: [id])
-
-  @@index([companyId])
+  id                String                   @id @default(cuid())
+  companyId         String
+  nomorRekening     String                   // Auto-generated: SMP-YYYYMMDD-XXX
+  
+  // Identitas penyimpan (bisa non-nasabah)
+  namaPenyimpan     String
+  nik               String?
+  noHp              String
+  alamat            String?
+  
+  // Saldo tracking
+  saldoAwal         Decimal                  @db.Decimal(15, 2)
+  saldoTersedia     Decimal                  @db.Decimal(15, 2) // saldo yang bisa dipakai
+  saldoTerpakai     Decimal                  @default(0) @db.Decimal(15, 2) // sedang dipakai untuk pinjaman
+  
+  // Bagi hasil
+  persenBagiHasil   Decimal                  @db.Decimal(5, 2) // misal 2.50 untuk 2.5%
+  periodeBagiHasil  PeriodeBagiHasil         @default(BULANAN)
+  
+  // Status
+  status            StatusSimpanan           @default(AKTIF)
+  tanggalBuka       DateTime                 @default(now())
+  tanggalTutup      DateTime?
+  catatanPenutupan  String?
+  
+  // Audit
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  createdById       String?
+  
+  // Relations
+  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy         User?                    @relation("SimpananCreatedBy", fields: [createdById], references: [id])
+  pinjaman          Pinjaman[]
+  penggunaan        PenggunaanSimpanan[]
+  transaksi         TransaksiSimpanan[]
+  bagiHasil         BagiHasilSimpanan[]
+  
+  @@unique([companyId, nomorRekening])
+  @@unique([companyId, nik])
+  @@index([companyId, status])
   @@map("simpanan")
+}
+
+model PenggunaanSimpanan {
+  id              String              @id @default(cuid())
+  companyId       String
+  simpananId      String
+  pinjamanId      String
+  
+  jumlahDigunakan Decimal             @db.Decimal(15, 2)
+  tanggalPakai    DateTime            @default(now())
+  tanggalKembali  DateTime?
+  statusKembali   StatusPengembalian  @default(TERPAKAI)
+  
+  simpanan        Simpanan            @relation(fields: [simpananId], references: [id], onDelete: Cascade)
+  pinjaman        Pinjaman            @relation(fields: [pinjamanId], references: [id], onDelete: Cascade)
+  
+  @@index([simpananId])
+  @@index([pinjamanId])
+  @@index([companyId])
+  @@map("penggunaan_simpanan")
+}
+
+model TransaksiSimpanan {
+  id          String                  @id @default(cuid())
+  companyId   String
+  simpananId  String
+  
+  jenis       JenisTransaksiSimpanan
+  jumlah      Decimal                 @db.Decimal(15, 2)
+  tanggal     DateTime                @default(now())
+  keterangan  String?
+  inputOlehId String?
+  
+  simpanan    Simpanan                @relation(fields: [simpananId], references: [id], onDelete: Cascade)
+  inputOleh   User?                   @relation("TransaksiSimpananInputBy", fields: [inputOlehId], references: [id])
+  
+  @@index([simpananId])
+  @@index([companyId])
+  @@map("transaksi_simpanan")
+}
+
+model BagiHasilSimpanan {
+  id              String      @id @default(cuid())
+  companyId       String
+  simpananId      String
+  
+  periode         String      // "2026-01" atau "2026-Q1"
+  jumlahBagiHasil Decimal     @db.Decimal(15, 2)
+  tanggalBayar    DateTime?
+  statusBayar     StatusBayar @default(BELUM_BAYAR)
+  catatanBayar    String?
+  
+  simpanan        Simpanan    @relation(fields: [simpananId], references: [id], onDelete: Cascade)
+  
+  @@unique([simpananId, periode])
+  @@index([companyId, statusBayar])
+  @@map("bagi_hasil_simpanan")
 }
 
 model Account {
@@ -588,6 +686,42 @@ enum StatusPinjaman {
 enum MetodeBayar {
   TUNAI
   TRANSFER
+}
+
+enum KasJenis {
+  TUNAI
+  BANK
+}
+
+enum SumberDana {
+  KAS
+  SIMPANAN
+}
+
+enum StatusSimpanan {
+  AKTIF
+  TUTUP
+}
+
+enum StatusPengembalian {
+  TERPAKAI
+  DIKEMBALIKAN
+}
+
+enum JenisTransaksiSimpanan {
+  SETOR
+  TARIK
+}
+
+enum PeriodeBagiHasil {
+  BULANAN
+  TRIWULAN
+  TAHUNAN
+}
+
+enum StatusBayar {
+  BELUM_BAYAR
+  SUDAH_BAYAR
 }
 
 enum JenisKas {

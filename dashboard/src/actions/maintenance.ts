@@ -578,19 +578,18 @@ async function backfillAccountingJournals(companyId: string, postedById: string)
 
   const simpananRows = await prisma.simpanan.findMany({
     where: { companyId },
-    include: { nasabah: { select: { namaLengkap: true } } },
   })
   for (const simpanan of simpananRows) {
     await postJournalEntry(prisma, {
       companyId,
       sourceType: "SIMPANAN",
       sourceId: simpanan.id,
-      entryDate: simpanan.tanggal,
-      description: `Backfill simpanan ${simpanan.jenis} ${simpanan.nasabah.namaLengkap}`,
+      entryDate: simpanan.tanggalBuka,
+      description: `Backfill simpanan ${simpanan.namaPenyimpan}`,
       postedById,
       lines: [
-        { accountCode: "CASH_TUNAI", debit: Number(simpanan.jumlah) },
-        { accountCode: "SIMPANAN_ANGGOTA", credit: Number(simpanan.jumlah) },
+        { accountCode: "CASH_TUNAI", debit: Number(simpanan.saldoAwal) },
+        { accountCode: "SIMPANAN_ANGGOTA", credit: Number(simpanan.saldoAwal) },
       ],
     })
   }
@@ -643,17 +642,6 @@ async function importDemoData(companyId: string, inputOlehId: string) {
       },
     })
     nasabahRows.push(nasabah)
-
-    const simpananCount = await prisma.simpanan.count({ where: { companyId, nasabahId: nasabah.id } })
-    if (simpananCount === 0) {
-      await prisma.simpanan.createMany({
-        data: [
-          { companyId, nasabahId: nasabah.id, jenis: "POKOK", jumlah: new Prisma.Decimal(100_000) },
-          { companyId, nasabahId: nasabah.id, jenis: "WAJIB", jumlah: new Prisma.Decimal(50_000 + index * 5_000) },
-          { companyId, nasabahId: nasabah.id, jenis: "SUKARELA", jumlah: new Prisma.Decimal(index * 25_000) },
-        ],
-      })
-    }
   }
 
   for (const [index, nasabah] of nasabahRows.slice(0, DEMO_LOAN_COUNT).entries()) {

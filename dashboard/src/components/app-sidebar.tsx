@@ -4,7 +4,7 @@ import * as React from "react"
 import {
   LayoutDashboard, Users, FileText,
   FileBarChart, AlertTriangle, Building2, Landmark,
-  BookOpen, LifeBuoy, Settings
+  BookOpen, LifeBuoy, Settings, Wallet
 } from "lucide-react"
 import type { AccountingMode } from "@/lib/accounting-mode"
 
@@ -55,6 +55,15 @@ const baseNavMain = [
       { title: "Pencairan", url: "/pencairan" },
       { title: "Pembayaran Angsuran", url: "/pembayaran" },
       { title: "Arus Kas", url: "/kas" },
+    ],
+  },
+  {
+    title: "Simpanan",
+    url: "/simpanan",
+    icon: <Wallet />,
+    items: [
+      { title: "Daftar Simpanan", url: "/simpanan" },
+      { title: "Simpanan Baru", url: "/simpanan/baru" },
     ],
   },
   {

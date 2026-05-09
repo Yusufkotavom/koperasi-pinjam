@@ -415,7 +415,6 @@ export async function deleteNasabah(id: string) {
       _count: {
         select: {
           pengajuan: true,
-          simpanan: true,
         },
       },
     },
@@ -428,11 +427,8 @@ export async function deleteNasabah(id: string) {
   const nasabahCompany = await prisma.nasabah.findFirst({ where: { id, companyId }, select: { id: true } })
   if (!nasabahCompany) return { success: false, error: "Forbidden" }
 
-  if (nasabah._count.pengajuan > 0 || nasabah._count.simpanan > 0) {
-    return {
-      success: false,
-      error: "Nasabah sudah memiliki histori pengajuan/simpanan. Gunakan status Non Aktif agar histori tetap aman.",
-    }
+  if (nasabah._count.pengajuan > 0) {
+    return { success: false, error: `Nasabah ${nasabah.namaLengkap} memiliki ${nasabah._count.pengajuan} pengajuan. Tidak bisa dihapus.` }
   }
 
   await prisma.nasabah.delete({ where: { id } })
