@@ -29,7 +29,7 @@ export default function SimpananBaruPage() {
       alamat: formData.get("alamat") as string,
       saldoAwal: Number(formData.get("saldoAwal")),
       persenBagiHasil: Number(formData.get("persenBagiHasil")),
-      periodeBagiHasil: formData.get("periodeBagiHasil") as "BULANAN" | "TRIWULAN" | "TAHUNAN",
+      periodeBagiHasil: Number(formData.get("periodeBagiHasil")),
     }
 
     const result = await createSimpanan(input)
