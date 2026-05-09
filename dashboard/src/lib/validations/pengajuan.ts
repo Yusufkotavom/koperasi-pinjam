@@ -34,7 +34,19 @@ export const pencairanSchema = z.object({
     z.coerce.number().min(0).optional(),
   ),
   tanggalCair: z.string().min(1, "Tanggal cair wajib diisi"),
-  kasJenis: z.enum(["TUNAI", "BANK"]).default("TUNAI"),
-})
+  sumberDana: z.enum(["KAS", "SIMPANAN"]).default("KAS"),
+  kasJenis: z.enum(["TUNAI", "BANK"]).optional(),
+  simpananId: z.string().optional(),
+}).refine(
+  (data) => {
+    if (data.sumberDana === "KAS") return !!data.kasJenis
+    if (data.sumberDana === "SIMPANAN") return !!data.simpananId
+    return true
+  },
+  {
+    message: "Pilih kas jenis atau simpanan sesuai sumber dana",
+    path: ["sumberDana"],
+  }
+)
 
 export type PencairanInput = z.infer<typeof pencairanSchema>

@@ -229,6 +229,36 @@ export async function postPencairanJournal(
   }, options)
 }
 
+export async function postPencairanJournalFromSimpanan(
+  db: DbClient,
+  input: {
+    companyId: string
+    pinjamanId: string
+    tanggalCair: Date
+    pokokPinjaman: number
+    nilaiCair: number
+    potonganAdmin: number
+    potonganProvisi: number
+    description: string
+    postedById?: string | null
+  },
+  options?: JournalOptions,
+) {
+  return postJournalEntry(db, {
+    companyId: input.companyId,
+    sourceType: "PENCAIRAN",
+    sourceId: input.pinjamanId,
+    entryDate: input.tanggalCair,
+    description: input.description,
+    postedById: input.postedById,
+    lines: [
+      { accountCode: "PIUTANG_PINJAMAN", debit: input.pokokPinjaman, memo: "Pengakuan piutang" },
+      { accountCode: "SIMPANAN_ANGGOTA", credit: input.nilaiCair, memo: "Simpanan digunakan" },
+      { accountCode: "PENDAPATAN_ADMIN", credit: input.potonganAdmin + input.potonganProvisi, memo: "Biaya admin/provisi" },
+    ],
+  }, options)
+}
+
 export async function postKasTransactionJournal(
   db: DbClient,
   kasId: string,

@@ -10,7 +10,7 @@ import { requireRoles } from "@/lib/roles"
 import { writeApprovalLog, writeAuditLog } from "@/lib/audit"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
-import { ensureAccountingAccounts, getCashBalanceByJenis, postJournalEntry, postPencairanJournal } from "@/lib/accounting"
+import { ensureAccountingAccounts, getCashBalanceByJenis, postJournalEntry, postPencairanJournal, postPencairanJournalFromSimpanan } from "@/lib/accounting"
 import { requireCompanyId } from "@/lib/tenant"
 import { z } from "zod"
 import { getKolektorBonusConfig } from "./settings"
@@ -230,7 +230,7 @@ export async function cairkanPinjaman(input: unknown) {
   const parsed = pencairanSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { pengajuanId, potonganAdmin, potonganProvisi, bonusKolektorNominal, tanggalCair, kasJenis } = parsed.data
+  const { pengajuanId, potonganAdmin, potonganProvisi, bonusKolektorNominal, tanggalCair, sumberDana, kasJenis, simpananId } = parsed.data
   const bonusConfig = await getKolektorBonusConfig()
   const resolvedBonusKolektorNominal = bonusKolektorNominal ?? bonusConfig.nominal
 
@@ -265,29 +265,50 @@ export async function cairkanPinjaman(input: unknown) {
   const nomorKontrak = `KNT-${Date.now().toString(36).toUpperCase()}`
 
   await ensureAccountingAccounts(companyId)
-  const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCairEndOfDay)
-  if (saldoKas < nilaiCair) {
-    const pendingMasuk = await prisma.kasTransaksi.aggregate({
-      where: {
-        companyId,
-        jenis: "MASUK",
-        kasJenis,
-        isApproved: false,
-      },
-      _count: { id: true },
-      _sum: { jumlah: true },
-    })
-    const pendingCount = pendingMasuk._count.id
-    const pendingAmount = Number(pendingMasuk._sum.jumlah ?? 0)
 
-    return {
-      error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}.${pendingCount > 0 ? ` Ada ${pendingCount} transaksi kas masuk pending (Rp ${pendingAmount.toLocaleString("id-ID")}) yang belum dihitung ke saldo.` : ""} Setor modal/simpanan dan pastikan approval kas selesai sebelum pencairan.`,
+  // Validasi saldo berdasar sumber dana
+  if (sumberDana === "KAS") {
+    if (!kasJenis) return { error: "Pilih jenis kas (TUNAI/BANK)" }
+    const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCairEndOfDay)
+    if (saldoKas < nilaiCair) {
+      const pendingMasuk = await prisma.kasTransaksi.aggregate({
+        where: {
+          companyId,
+          jenis: "MASUK",
+          kasJenis,
+          isApproved: false,
+        },
+        _count: { id: true },
+        _sum: { jumlah: true },
+      })
+      const pendingCount = pendingMasuk._count.id
+      const pendingAmount = Number(pendingMasuk._sum.jumlah ?? 0)
+
+      return {
+        error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}.${pendingCount > 0 ? ` Ada ${pendingCount} transaksi kas masuk pending (Rp ${pendingAmount.toLocaleString("id-ID")}) yang belum dihitung ke saldo.` : ""} Setor modal/simpanan dan pastikan approval kas selesai sebelum pencairan.`,
+      }
+    }
+  } else if (sumberDana === "SIMPANAN") {
+    if (!simpananId) return { error: "Pilih simpanan" }
+    const simpanan = await prisma.simpanan.findFirst({
+      where: { id: simpananId, companyId, status: "AKTIF" },
+    })
+    if (!simpanan) return { error: "Simpanan tidak ditemukan atau sudah ditutup." }
+
+    const saldoTersedia = Number(simpanan.saldoTersedia)
+    if (saldoTersedia < nilaiCair) {
+      return {
+        error: `Saldo simpanan ${simpanan.namaPenyimpan} tidak cukup. Tersedia Rp ${saldoTersedia.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}.`,
+      }
     }
   }
 
-  // Pastikan kategori kas tersedia sebelum transaksi
-  const ensured = await ensureKasKategori({ jenis: "KELUAR", kategori: "PENCAIRAN" })
-  if ("error" in ensured) return { error: ensured.error }
+  // Pastikan kategori kas tersedia sebelum transaksi (hanya untuk KAS)
+  let ensured: any = null
+  if (sumberDana === "KAS") {
+    ensured = await ensureKasKategori({ jenis: "KELUAR", kategori: "PENCAIRAN" })
+    if ("error" in ensured) return { error: ensured.error }
+  }
 
   // Buat pinjaman + jadwal angsuran dalam 1 transaksi
   const pinjaman = await prisma.$transaction(async (tx) => {
@@ -310,6 +331,9 @@ export async function cairkanPinjaman(input: unknown) {
         tanggalJatuhTempo: tglJatuhTempo,
         sisaPinjaman: new Prisma.Decimal(plafon),
         status: "AKTIF",
+        sumberDana,
+        simpananId: sumberDana === "SIMPANAN" ? simpananId : null,
+        kasJenis: sumberDana === "KAS" ? kasJenis : null,
       },
     })
 
@@ -348,34 +372,71 @@ export async function cairkanPinjaman(input: unknown) {
       })
     }
 
-    // Catat di kas keluar
-    await tx.kasTransaksi.create({
-      data: {
-        companyId,
-        jenis: "KELUAR",
-        kategoriId: ensured.kategoriId,
-        kategoriKey: ensured.key,
-        deskripsi: `Pencairan pinjaman ${nomorKontrak}`,
-        jumlah: new Prisma.Decimal(nilaiCair),
-        kasJenis,
-        inputOlehId: userId,
-        tanggal: tglCair,
-        referensiId: pin.id,
-      },
-    })
+    // Jika dari KAS: catat kas keluar
+    if (sumberDana === "KAS" && ensured) {
+      await tx.kasTransaksi.create({
+        data: {
+          companyId,
+          jenis: "KELUAR",
+          kategoriId: ensured.kategoriId,
+          kategoriKey: ensured.key,
+          deskripsi: `Pencairan pinjaman ${nomorKontrak}`,
+          jumlah: new Prisma.Decimal(nilaiCair),
+          kasJenis: kasJenis!,
+          inputOlehId: userId,
+          tanggal: tglCair,
+          referensiId: pin.id,
+        },
+      })
 
-    await postPencairanJournal(tx, {
-      companyId,
-      pinjamanId: pin.id,
-      tanggalCair: tglCair,
-      kasJenis,
-      pokokPinjaman: plafon,
-      nilaiCair,
-      potonganAdmin,
-      potonganProvisi,
-      description: `Pencairan pinjaman ${nomorKontrak}`,
-      postedById: userId,
-    }, { ensureAccounts: false })
+      await postPencairanJournal(tx, {
+        companyId,
+        pinjamanId: pin.id,
+        tanggalCair: tglCair,
+        kasJenis: kasJenis!,
+        pokokPinjaman: plafon,
+        nilaiCair,
+        potonganAdmin,
+        potonganProvisi,
+        description: `Pencairan pinjaman ${nomorKontrak}`,
+        postedById: userId,
+      }, { ensureAccounts: false })
+    }
+
+    // Jika dari SIMPANAN: update saldo dan buat tracking
+    if (sumberDana === "SIMPANAN" && simpananId) {
+      await tx.simpanan.update({
+        where: { id: simpananId },
+        data: {
+          saldoTersedia: { decrement: nilaiCair },
+          saldoTerpakai: { increment: nilaiCair },
+        },
+      })
+
+      await tx.penggunaanSimpanan.create({
+        data: {
+          companyId,
+          simpananId,
+          pinjamanId: pin.id,
+          jumlahDigunakan: new Prisma.Decimal(nilaiCair),
+          tanggalPakai: tglCair,
+          statusKembali: "TERPAKAI",
+        },
+      })
+
+      // Jurnal untuk pencairan dari simpanan
+      await postPencairanJournalFromSimpanan(tx, {
+        companyId,
+        pinjamanId: pin.id,
+        tanggalCair: tglCair,
+        pokokPinjaman: plafon,
+        nilaiCair,
+        potonganAdmin,
+        potonganProvisi,
+        description: `Pencairan pinjaman ${nomorKontrak} dari simpanan`,
+        postedById: userId,
+      }, { ensureAccounts: false })
+    }
 
     return pin
   })

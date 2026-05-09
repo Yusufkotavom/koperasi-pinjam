@@ -549,6 +549,36 @@ export async function inputPembayaran(input: {
           eligibleAt: tanggalBayar,
         },
       })
+
+      // Kembalikan saldo simpanan jika pinjaman dari simpanan
+      if (jadwal.pinjaman.sumberDana === "SIMPANAN" && jadwal.pinjaman.simpananId) {
+        const penggunaan = await tx.penggunaanSimpanan.findFirst({
+          where: {
+            pinjamanId: jadwal.pinjamanId,
+            statusKembali: "TERPAKAI",
+          },
+        })
+
+        if (penggunaan) {
+          const jumlahDigunakan = Number(penggunaan.jumlahDigunakan)
+
+          await tx.simpanan.update({
+            where: { id: jadwal.pinjaman.simpananId },
+            data: {
+              saldoTersedia: { increment: jumlahDigunakan },
+              saldoTerpakai: { decrement: jumlahDigunakan },
+            },
+          })
+
+          await tx.penggunaanSimpanan.update({
+            where: { id: penggunaan.id },
+            data: {
+              tanggalKembali: tanggalBayar,
+              statusKembali: "DIKEMBALIKAN",
+            },
+          })
+        }
+      }
     }
 
     const kasJenis = input.metode === "TRANSFER" ? "BANK" : "TUNAI"
