@@ -53,11 +53,13 @@ Kelola modal dari penyimpan non-anggota untuk pencairan pinjaman.
 - [x] Jurnal akuntansi pencairan dari simpanan
 - [x] Auto-kembalikan saldo saat pinjaman lunas
 - [x] Tutup simpanan dengan validasi saldo terpakai = 0
-- [ ] Transaksi setor/tarik simpanan
-- [ ] Hitung bagi hasil otomatis per periode
-- [ ] Bayar bagi hasil simpanan
-- [ ] Export CSV/PDF simpanan
+- [x] Transaksi setor/tarik simpanan
+- [x] Hitung bagi hasil manual per periode
+- [x] Bayar bagi hasil simpanan
+- [x] Export CSV simpanan
 - [ ] Dashboard simpanan (total modal, terpakai, ROI)
+- [ ] Auto-hitung bagi hasil via cron job
+- [ ] Notifikasi ke penyimpan saat dana dipakai/dikembalikan
 
 ## Kas & Akuntansi
 Menjaga konsistensi arus kas dan jurnal akuntansi.

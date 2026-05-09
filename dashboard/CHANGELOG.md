@@ -14,7 +14,12 @@ Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 - feat(akuntansi): jurnal pencairan dari simpanan (Debit PIUTANG_PINJAMAN, Credit SIMPANAN_ANGGOTA).
 - feat(simpanan): edit simpanan (nama, HP, alamat, % bagi hasil, periode) - NIK dan saldo awal read-only.
 - feat(simpanan): tutup simpanan dengan validasi saldo terpakai = 0, input alasan penutupan.
-- feat(ui): tambah menu sidebar **Simpanan** dengan icon Wallet.
+- feat(simpanan): transaksi setor/tarik simpanan dengan dialog form dan validasi saldo.
+- feat(simpanan): hitung bagi hasil manual per periode (YYYY-MM) dengan estimasi otomatis.
+- feat(simpanan): bayar bagi hasil dengan catat kas keluar dan update status.
+- feat(simpanan): halaman `/simpanan/bagi-hasil` untuk kelola pembayaran bagi hasil.
+- feat(simpanan): export CSV simpanan dengan filter search dan status.
+- feat(ui): tambah menu sidebar **Simpanan** dengan submenu (Daftar, Baru, Bagi Hasil).
 - feat(ui): detail simpanan menampilkan penggunaan untuk pinjaman aktif dan riwayat transaksi.
 
 ## 2026-05-06
