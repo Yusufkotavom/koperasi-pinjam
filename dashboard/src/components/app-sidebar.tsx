@@ -53,6 +53,7 @@ const baseNavMain = [
     items: [
       { title: "Pengajuan Pinjaman", url: "/pengajuan" },
       { title: "Pencairan", url: "/pencairan" },
+      { title: "Daftar Pinjaman", url: "/pinjaman" },
       { title: "Pembayaran Angsuran", url: "/pembayaran" },
       { title: "Arus Kas", url: "/kas" },
     ],

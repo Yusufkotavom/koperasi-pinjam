@@ -155,7 +155,7 @@ export async function createSimpanan(input: SimpananInput) {
       saldoTersedia: new Prisma.Decimal(saldoAwal),
       saldoTerpakai: new Prisma.Decimal(0),
       persenBagiHasil: new Prisma.Decimal(persenBagiHasil),
-      periodeBagiHasil,
+      periodeBagiHasil: periodeBagiHasil as "BULANAN" | "TRIWULAN" | "TAHUNAN",
       status: "AKTIF",
       createdById: userId,
     },
