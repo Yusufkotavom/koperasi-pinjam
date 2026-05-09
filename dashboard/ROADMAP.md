@@ -33,12 +33,31 @@ Alur inti kredit dari request sampai pembayaran cicilan.
 - [x] Pengajuan pinjaman (baru, daftar, detail, approval)
 - [x] Simulasi angsuran editable (bunga/desimal lebih fleksibel)
 - [x] Pencairan pinjaman dengan validasi saldo kas
+- [x] Pencairan dari simpanan (pilih sumber dana: KAS atau SIMPANAN)
 - [x] Submit guard anti double-submit pada pencairan
 - [x] Backdate pencairan dan transaksi kas
 - [x] Pembayaran angsuran + pembatalan pembayaran
 - [x] Filter schedule aktif untuk proses pembayaran
+- [x] Auto-kembalikan saldo simpanan saat pinjaman lunas
 - [ ] Batch posting pembayaran (multi kontrak)
 - [ ] Reminder otomatis untuk angsuran jatuh tempo
+
+## Simpanan & Modal Alternatif
+Kelola modal dari penyimpan non-anggota untuk pencairan pinjaman.
+- [x] CRUD simpanan (create/list/detail/edit)
+- [x] Identitas penyimpan (nama, NIK, HP, alamat, nomor rekening)
+- [x] Tracking saldo tersedia vs terpakai
+- [x] Bagi hasil (persen + periode: bulanan/triwulan/tahunan)
+- [x] Integrasi pencairan: pilih simpanan spesifik dari dropdown
+- [x] Tracking penggunaan simpanan per pinjaman
+- [x] Jurnal akuntansi pencairan dari simpanan
+- [x] Auto-kembalikan saldo saat pinjaman lunas
+- [x] Tutup simpanan dengan validasi saldo terpakai = 0
+- [ ] Transaksi setor/tarik simpanan
+- [ ] Hitung bagi hasil otomatis per periode
+- [ ] Bayar bagi hasil simpanan
+- [ ] Export CSV/PDF simpanan
+- [ ] Dashboard simpanan (total modal, terpakai, ROI)
 
 ## Kas & Akuntansi
 Menjaga konsistensi arus kas dan jurnal akuntansi.

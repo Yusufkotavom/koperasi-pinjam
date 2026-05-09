@@ -3,6 +3,20 @@
 Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
+## 2026-05-09
+- feat(simpanan): tambah modul **Simpanan** untuk kelola modal dari penyimpan non-anggota.
+- feat(simpanan): CRUD simpanan dengan identitas jelas (nama, NIK, HP, alamat, nomor rekening auto-generate).
+- feat(simpanan): tracking saldo tersedia vs terpakai, persen bagi hasil, dan periode bagi hasil (bulanan/triwulan/tahunan).
+- feat(pencairan): integrasi pencairan pinjaman dari simpanan - user pilih sumber dana (KAS atau SIMPANAN) dengan dropdown simpanan spesifik.
+- feat(pencairan): validasi saldo simpanan sebelum cairkan, kurangi `saldoTersedia`, tambah `saldoTerpakai`.
+- feat(pencairan): tracking penggunaan simpanan per pinjaman (`PenggunaanSimpanan`) dengan info pinjaman yang pakai simpanan.
+- feat(pelunasan): kembalikan saldo simpanan otomatis saat pinjaman lunas (increment `saldoTersedia`, decrement `saldoTerpakai`).
+- feat(akuntansi): jurnal pencairan dari simpanan (Debit PIUTANG_PINJAMAN, Credit SIMPANAN_ANGGOTA).
+- feat(simpanan): edit simpanan (nama, HP, alamat, % bagi hasil, periode) - NIK dan saldo awal read-only.
+- feat(simpanan): tutup simpanan dengan validasi saldo terpakai = 0, input alasan penutupan.
+- feat(ui): tambah menu sidebar **Simpanan** dengan icon Wallet.
+- feat(ui): detail simpanan menampilkan penggunaan untuk pinjaman aktif dan riwayat transaksi.
+
 ## 2026-05-06
 - feat(nasabah-export): aktifkan tombol export di Master Nasabah menjadi `Export CSV` dan `Export PDF` (landscape).
 - feat(api-export): tambah endpoint `/api/export/nasabah` dengan dukungan filter `search`, `status`, `kelompokId`.
