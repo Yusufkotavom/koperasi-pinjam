@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getSimpananById } from "@/actions/simpanan"
-import { ArrowLeft, Edit, XCircle } from "lucide-react"
+import { TutupSimpananButton } from "./tutup-button"
+import { ArrowLeft, Edit } from "lucide-react"
 import { format } from "date-fns"
 import { id as localeId } from "date-fns/locale"
 
@@ -45,10 +46,7 @@ export default async function SimpananDetailPage({ params }: { params: Promise<{
                   Edit
                 </Link>
               </Button>
-              <Button variant="destructive" disabled={saldoTerpakai > 0}>
-                <XCircle className="mr-2 h-4 w-4" />
-                Tutup Simpanan
-              </Button>
+              <TutupSimpananButton simpananId={id} saldoTerpakai={saldoTerpakai} />
             </>
           )}
         </div>
