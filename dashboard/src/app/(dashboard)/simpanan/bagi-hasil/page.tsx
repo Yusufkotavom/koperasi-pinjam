@@ -2,7 +2,6 @@ import { Suspense } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { getBagiHasilList } from "@/actions/simpanan"
@@ -18,7 +17,7 @@ export default async function BagiHasilPage({
 }) {
   const params = await searchParams
   const page = Number(params.page) || 1
-  const status = params.status || ""
+  const status = params.status === "BELUM_BAYAR" || params.status === "SUDAH_BAYAR" ? params.status : ""
 
   return (
     <div className="space-y-6">
@@ -42,18 +41,14 @@ export default async function BagiHasilPage({
           <CardDescription>Bagi hasil yang perlu dibayar</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex gap-4">
-            <Select name="status" defaultValue={status}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Semua Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Semua Status</SelectItem>
-                <SelectItem value="BELUM_BAYAR">Belum Bayar</SelectItem>
-                <SelectItem value="SUDAH_BAYAR">Sudah Bayar</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <form action="/simpanan/bagi-hasil" className="mb-4 flex items-center gap-3">
+            <select name="status" defaultValue={status} className="h-9 rounded-md border bg-background px-3 text-sm">
+              <option value="">Semua Status</option>
+              <option value="BELUM_BAYAR">Belum Bayar</option>
+              <option value="SUDAH_BAYAR">Sudah Bayar</option>
+            </select>
+            <Button type="submit" size="sm">Terapkan</Button>
+          </form>
 
           <Suspense fallback={<div>Loading...</div>}>
             <BagiHasilTable page={page} status={status} />

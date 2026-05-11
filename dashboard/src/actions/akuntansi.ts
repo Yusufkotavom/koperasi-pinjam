@@ -296,6 +296,22 @@ function accountGroupLabel(type: string) {
   return "beban"
 }
 
+function formatDetailMethod(raw?: string | null) {
+  if (!raw) return null
+  const key = raw.toUpperCase()
+  if (key === "TRANSFER" || key === "BANK") return "Transfer Bank"
+  if (key === "TUNAI" || key === "CASH") return "Tunai"
+  return raw
+}
+
+function formatKasCategory(raw?: string | null) {
+  if (!raw) return null
+  return raw
+    .split("_")
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ")
+}
+
 export async function getLedgerKasReport(params?: { kasJenis?: string; accountId?: string; accountCode?: string } & ReportPeriodInput) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
@@ -352,6 +368,62 @@ export async function getLedgerKasReport(params?: { kasJenis?: string; accountId
     }),
   ])
 
+  const paymentSourceIds = rows
+    .filter((row) => row.journalEntry.sourceType === "PEMBAYARAN" && row.journalEntry.sourceId)
+    .map((row) => row.journalEntry.sourceId!)
+  const cashSourceIds = rows
+    .filter((row) => row.journalEntry.sourceType === "KAS" && row.journalEntry.sourceId)
+    .map((row) => row.journalEntry.sourceId!)
+  const disbursementSourceIds = rows
+    .filter((row) => row.journalEntry.sourceType === "PENCAIRAN" && row.journalEntry.sourceId)
+    .map((row) => row.journalEntry.sourceId!)
+
+  const [pembayaranSources, kasSources, pencairanSources] = await Promise.all([
+    paymentSourceIds.length
+      ? prisma.pembayaran.findMany({
+          where: { companyId, id: { in: paymentSourceIds } },
+          select: {
+            id: true,
+            nomorTransaksi: true,
+            metode: true,
+            buktiBayarUrl: true,
+            pinjaman: {
+              select: {
+                nomorKontrak: true,
+                pengajuan: { select: { nasabah: { select: { namaLengkap: true, nomorAnggota: true } } } },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    cashSourceIds.length
+      ? prisma.kasTransaksi.findMany({
+          where: { companyId, id: { in: cashSourceIds } },
+          select: {
+            id: true,
+            kategoriKey: true,
+            deskripsi: true,
+            kasJenis: true,
+            buktiUrl: true,
+          },
+        })
+      : Promise.resolve([]),
+    disbursementSourceIds.length
+      ? prisma.pinjaman.findMany({
+          where: { companyId, id: { in: disbursementSourceIds } },
+          select: {
+            id: true,
+            nomorKontrak: true,
+            pengajuan: { select: { nasabah: { select: { namaLengkap: true, nomorAnggota: true } } } },
+          },
+        })
+      : Promise.resolve([]),
+  ])
+
+  const pembayaranMap = new Map(pembayaranSources.map((row) => [row.id, row]))
+  const kasMap = new Map(kasSources.map((row) => [row.id, row]))
+  const pencairanMap = new Map(pencairanSources.map((row) => [row.id, row]))
+
   let saldo = openingLines.reduce(
     (sum, line) => sum + signedBalance(selectedAccount.type, Number(line.debit), Number(line.credit)),
     0,
@@ -361,18 +433,58 @@ export async function getLedgerKasReport(params?: { kasJenis?: string; accountId
     const debit = Number(r.debit)
     const kredit = Number(r.credit)
     saldo += signedBalance(selectedAccount.type, debit, kredit)
+    const sourceId = r.journalEntry.sourceId
+    const sourceType = r.journalEntry.sourceType
+    const pembayaran = sourceType === "PEMBAYARAN" && sourceId ? pembayaranMap.get(sourceId) : null
+    const kas = sourceType === "KAS" && sourceId ? kasMap.get(sourceId) : null
+    const pencairan = sourceType === "PENCAIRAN" && sourceId ? pencairanMap.get(sourceId) : null
+
+    const detailJenis =
+      sourceType === "PEMBAYARAN"
+        ? "Pembayaran Angsuran"
+        : sourceType === "PENCAIRAN"
+          ? "Pencairan Pinjaman"
+          : sourceType === "KAS"
+            ? "Kas Masuk/Keluar"
+            : sourceType
+    const detailNama =
+      pembayaran?.pinjaman?.pengajuan?.nasabah?.namaLengkap ??
+      pencairan?.pengajuan?.nasabah?.namaLengkap ??
+      "-"
+    const detailNomorAnggota =
+      pembayaran?.pinjaman?.pengajuan?.nasabah?.nomorAnggota ??
+      pencairan?.pengajuan?.nasabah?.nomorAnggota ??
+      null
+    const detailReferensi =
+      pembayaran?.nomorTransaksi ??
+      pembayaran?.pinjaman?.nomorKontrak ??
+      pencairan?.nomorKontrak ??
+      sourceId ??
+      null
+    const detailMetode = formatDetailMethod(pembayaran?.metode ?? kas?.kasJenis ?? null)
+    const detailBuktiUrl = pembayaran?.buktiBayarUrl ?? kas?.buktiUrl ?? null
+    const detailKategori = formatKasCategory(kas?.kategoriKey ?? null)
+
     return {
       id: r.id,
       tanggal: r.journalEntry.entryDate,
       kategori: r.journalEntry.sourceType,
       deskripsi: r.memo || r.journalEntry.description,
-      buktiUrl: null,
+      buktiUrl: detailBuktiUrl,
       debit,
       kredit,
       saldo,
       inputOleh: r.journalEntry.postedBy?.name ?? "-",
       journalEntryId: r.journalEntry.id,
       sourceId: r.journalEntry.sourceId,
+      detail: {
+        jenis: detailJenis,
+        nama: detailNama,
+        nomorAnggota: detailNomorAnggota,
+        referensi: detailReferensi,
+        metode: detailMetode,
+        kategoriKas: detailKategori,
+      },
     }
   })
 

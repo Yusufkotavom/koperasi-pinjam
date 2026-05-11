@@ -21,6 +21,12 @@ export async function GET(request: Request) {
   const rows = report.data.map((row) => ({
     tanggal: new Date(row.tanggal).toISOString().slice(0, 10),
     kategori: row.kategori,
+    detail_jenis: row.detail.jenis,
+    detail_nama: row.detail.nama,
+    detail_nomor_anggota: row.detail.nomorAnggota ?? "",
+    detail_referensi: row.detail.referensi ?? "",
+    detail_metode: row.detail.metode ?? "",
+    detail_kategori_kas: row.detail.kategoriKas ?? "",
     deskripsi: row.deskripsi,
     debit: row.debit,
     kredit: row.kredit,
@@ -31,4 +37,3 @@ export async function GET(request: Request) {
 
   return csvResponse(rows, `laporan-buku-besar-${new Date().toISOString().slice(0, 10)}.csv`)
 }
-

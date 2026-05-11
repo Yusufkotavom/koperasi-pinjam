@@ -114,6 +114,7 @@ export default async function BukuBesarPage({
               <TableRow className="bg-muted/40">
                 <TableHead>Tanggal</TableHead>
                 <TableHead>Kategori</TableHead>
+                <TableHead>Detail</TableHead>
                 <TableHead>Deskripsi</TableHead>
                 <TableHead>Bukti</TableHead>
                 <TableHead className="text-right">Debit</TableHead>
@@ -125,7 +126,7 @@ export default async function BukuBesarPage({
             <TableBody>
               {report.data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                     Belum ada transaksi pada periode ini.
                   </TableCell>
                 </TableRow>
@@ -134,6 +135,19 @@ export default async function BukuBesarPage({
                   <TableRow key={r.id} className="hover:bg-muted/30">
                     <TableCell className="text-xs text-muted-foreground">{new Date(r.tanggal).toLocaleDateString("id-ID")}</TableCell>
                     <TableCell className="font-mono text-xs">{r.kategori}</TableCell>
+                    <TableCell className="text-xs">
+                      <div className="space-y-0.5">
+                        <div className="font-medium">{r.detail.jenis}</div>
+                        <div className="text-muted-foreground">
+                          {r.detail.nama !== "-" ? `${r.detail.nama}${r.detail.nomorAnggota ? ` · ${r.detail.nomorAnggota}` : ""}` : "-"}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {r.detail.referensi ? `Ref: ${r.detail.referensi}` : "-"}
+                          {r.detail.metode ? ` · ${r.detail.metode}` : ""}
+                          {r.detail.kategoriKas ? ` · ${r.detail.kategoriKas}` : ""}
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm">{r.deskripsi}</TableCell>
                     <TableCell className="text-xs">
                       {r.buktiUrl ? (

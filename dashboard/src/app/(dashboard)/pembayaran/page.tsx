@@ -32,7 +32,11 @@ export default async function PembayaranPage({
   const kelompokId = sp?.kelompokId ?? ""
   const kolektorId = sp?.kolektorId ?? ""
   const windowDays: number | "all" =
-    windowParam === "all" ? "all" : Math.max(1, Number(windowParam) || 7)
+    windowParam === "all"
+      ? "all"
+      : windowParam === "today"
+        ? 0
+        : Math.max(1, Number(windowParam) || 7)
 
   const [jadwal, history, activeBorrowers, kelompokOptions, kolektorOptions] = await Promise.all([
     getJadwalPembayaran({ search, windowDays, kelompokId, kolektorId }),
@@ -98,6 +102,7 @@ export default async function PembayaranPage({
                   className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
                   title="Tampilkan jadwal mendekati jatuh tempo"
                 >
+                  <option value="today">Hari ini</option>
                   <option value="7">≤ 7 hari</option>
                   <option value="14">≤ 14 hari</option>
                   <option value="30">≤ 30 hari</option>

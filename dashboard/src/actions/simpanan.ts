@@ -474,11 +474,12 @@ export async function getBagiHasilList(params: {
 
   const page = params.page ?? 1
   const limit = 20
+  const status = params.status === "BELUM_BAYAR" || params.status === "SUDAH_BAYAR" ? params.status : undefined
 
   const where: Prisma.BagiHasilSimpananWhereInput = {
     AND: [
       { companyId },
-      params.status ? { statusBayar: params.status as "BELUM_BAYAR" | "SUDAH_BAYAR" } : {},
+      status ? { statusBayar: status } : {},
     ],
   }
 

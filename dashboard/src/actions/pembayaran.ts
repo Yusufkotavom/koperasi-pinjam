@@ -133,7 +133,11 @@ export async function getJadwalPembayaran(params?: {
   const end =
     windowDays === "all"
       ? null
-      : new Date(today.getTime() + windowDays * 24 * 60 * 60 * 1000)
+      : (() => {
+          const endDate = new Date(today.getTime() + windowDays * 24 * 60 * 60 * 1000)
+          endDate.setHours(23, 59, 59, 999)
+          return endDate
+        })()
 
   const pinjamanWhere: Prisma.PinjamanWhereInput = {
     status: { not: "LUNAS" },

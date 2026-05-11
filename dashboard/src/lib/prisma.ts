@@ -10,10 +10,26 @@ type GlobalPrisma = typeof globalThis & {
 
 const globalForPrisma = globalThis as GlobalPrisma
 
+function normalizeDatabaseUrl(raw?: string) {
+  if (!raw) return raw
+  try {
+    const parsed = new URL(raw)
+    const sslmode = parsed.searchParams.get("sslmode")?.toLowerCase()
+    if (sslmode === "prefer" || sslmode === "require" || sslmode === "verify-ca") {
+      parsed.searchParams.set("sslmode", "verify-full")
+      parsed.searchParams.delete("uselibpqcompat")
+      return parsed.toString()
+    }
+    return raw
+  } catch {
+    return raw
+  }
+}
+
 const pool =
   globalForPrisma.pgPool ??
   new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: normalizeDatabaseUrl(process.env.DATABASE_URL),
   })
 
 const adapter = new PrismaPg(pool)
