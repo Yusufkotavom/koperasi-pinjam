@@ -101,4 +101,5 @@ Meningkatkan kecepatan kerja tim operasional.
 ## Operasional & Keamanan Data
 Ketahanan operasional untuk environment production.
 - [x] Mekanisme backup/restore DB PostgreSQL berbasis script + runbook
+- [x] Platform super admin untuk trigger snapshot Neon + restore ke branch baru
 - [ ] Otomasi offsite backup (S3/Blob storage) dengan rotasi 30-90 hari

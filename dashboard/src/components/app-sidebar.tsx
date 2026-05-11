@@ -160,6 +160,7 @@ export function AppSidebar({ user, company, accountingMode, ...props }: AppSideb
             { title: "Overview", url: "/platform" },
             { title: "Companies", url: "/platform/companies" },
             { title: "Users", url: "/platform/users" },
+            { title: "Backups", url: "/platform/backups" },
           ],
         },
         ...baseNavMain,

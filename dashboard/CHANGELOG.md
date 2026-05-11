@@ -4,6 +4,8 @@ Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
 ## 2026-05-09
+- feat(platform-backup): tambah halaman `/platform/backups` (SUPER_ADMIN) untuk create snapshot Neon, list snapshot, dan restore ke branch baru.
+- feat(platform-backup): tambah server actions Neon API dengan audit trail `PLATFORM_BACKUP` untuk aksi snapshot/restore.
 - ops(db-backup): tambah mekanisme backup/restore PostgreSQL via script `scripts/db/backup.sh` dan `scripts/db/restore.sh`, plus runbook `docs/DB-BACKUP-RUNBOOK.md`.
 - feat(simpanan): tambah modul **Simpanan** untuk kelola modal dari penyimpan non-anggota.
 - feat(simpanan): CRUD simpanan dengan identitas jelas (nama, NIK, HP, alamat, nomor rekening auto-generate).
