@@ -19,7 +19,9 @@ export default async function PinjamanPage({
   const params = await searchParams
   const page = Number(params.page) || 1
   const search = params.search || ""
-  const status = params.status || ""
+  const statusParam = params.status || ""
+  const status = statusParam === "ALL" ? "" : statusParam
+  const statusSelectValue = status || "ALL"
 
   return (
     <div className="space-y-6">
@@ -49,12 +51,12 @@ export default async function PinjamanPage({
                 />
               </div>
             </form>
-            <Select name="status" defaultValue={status}>
+            <Select name="status" defaultValue={statusSelectValue}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Semua Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Semua Status</SelectItem>
+                <SelectItem value="ALL">Semua Status</SelectItem>
                 <SelectItem value="AKTIF">Aktif</SelectItem>
                 <SelectItem value="LUNAS">Lunas</SelectItem>
               </SelectContent>
