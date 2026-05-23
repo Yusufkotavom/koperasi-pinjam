@@ -23,6 +23,7 @@ export default async function TunggakanPage({
   searchParams?: Promise<{
     tanggalDari?: string
     tanggalSampai?: string
+    tenorType?: "ALL" | "MINGGUAN" | "BULANAN"
     kolektorId?: string
     kelompokId?: string
     wilayah?: string
@@ -32,6 +33,7 @@ export default async function TunggakanPage({
   const params = {
     tanggalDari: sp?.tanggalDari,
     tanggalSampai: sp?.tanggalSampai,
+    tenorType: sp?.tenorType ?? "ALL",
     kolektorId: sp?.kolektorId,
     kelompokId: sp?.kelompokId,
     wilayah: sp?.wilayah,
@@ -60,9 +62,14 @@ export default async function TunggakanPage({
              <Calendar className="size-4 text-primary" />
              <CardTitle className="text-base font-semibold">Filter Monitoring</CardTitle>
           </div>
-          <form className="grid grid-cols-1 md:grid-cols-6 gap-3" action="/monitoring/tunggakan">
+          <form className="grid grid-cols-1 md:grid-cols-7 gap-3" action="/monitoring/tunggakan">
             <Input type="date" name="tanggalDari" defaultValue={params.tanggalDari} />
             <Input type="date" name="tanggalSampai" defaultValue={params.tanggalSampai} />
+            <select name="tenorType" defaultValue={params.tenorType} className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900">
+              <option value="ALL">Semua skema pinjaman</option>
+              <option value="MINGGUAN">Skema mingguan</option>
+              <option value="BULANAN">Skema bulanan</option>
+            </select>
             <select name="kolektorId" defaultValue={params.kolektorId ?? ""} className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900">
               <option value="">Semua kolektor</option>
               {filterOptions.kolektor.map((k) => (

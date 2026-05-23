@@ -625,6 +625,7 @@ type TunggakanFilter = {
   kolektorId?: string
   kelompokId?: string
   wilayah?: string
+  tenorType?: "ALL" | "MINGGUAN" | "BULANAN"
 }
 
 export async function getTunggakanFilterOptions() {
@@ -674,14 +675,17 @@ export async function getTunggakanList(params?: TunggakanFilter) {
   const today = new Date()
   const tanggalDari = params?.tanggalDari ? startOfDay(new Date(params.tanggalDari)) : undefined
   const tanggalSampai = params?.tanggalSampai ? endOfDay(new Date(params.tanggalSampai)) : undefined
+  const tenorType = params?.tenorType === "MINGGUAN" || params?.tenorType === "BULANAN" ? params.tenorType : undefined
 
-  const tanggalFilter =
-    tanggalDari || tanggalSampai
-      ? {
-          ...(tanggalDari ? { gte: tanggalDari } : {}),
-          ...(tanggalSampai ? { lte: tanggalSampai } : {}),
-        }
-      : { lt: today }
+  let tanggalFilter: { gte?: Date; lte?: Date; lt?: Date }
+  if (tanggalDari || tanggalSampai) {
+    tanggalFilter = {
+      ...(tanggalDari ? { gte: tanggalDari } : {}),
+      ...(tanggalSampai ? { lte: tanggalSampai } : {}),
+    }
+  } else {
+    tanggalFilter = { lt: today }
+  }
 
   const jadwals = await prisma.jadwalAngsuran.findMany({
     where: {
@@ -689,6 +693,7 @@ export async function getTunggakanList(params?: TunggakanFilter) {
       sudahDibayar: false,
       tanggalJatuhTempo: tanggalFilter,
       pinjaman: {
+        ...(tenorType ? { tenorType } : {}),
         pengajuan: {
           ...(params?.kelompokId ? { kelompokId: params.kelompokId } : {}),
           ...(params?.wilayah

@@ -3,6 +3,10 @@
 Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
+## 2026-05-20
+- feat(monitoring): tambah filter skema pinjaman `MINGGUAN` dan `BULANAN` pada halaman `/monitoring/tunggakan`.
+- feat(monitoring): filter tunggakan sekarang bisa dibatasi berdasarkan `pinjaman.tenorType` selain filter tanggal/kolektor/kelompok/wilayah.
+
 ## 2026-05-09
 - feat(platform-backup): tambah halaman `/platform/backups` (SUPER_ADMIN) untuk create snapshot Neon, list snapshot, dan restore ke branch baru.
 - feat(platform-backup): tambah server actions Neon API dengan audit trail `PLATFORM_BACKUP` untuk aksi snapshot/restore.

@@ -19,6 +19,7 @@ Ringkasan inti operasional untuk pengurus dan admin harian.
 ## Monitoring Operasional
 Monitoring kualitas portofolio pinjaman dan ritme penagihan.
 - [x] Monitoring tunggakan (aging report)
+- [x] Filter skema pinjaman monitoring tunggakan (mingguan/bulanan)
 - [x] Rekap kolektor (target, realisasi, setoran, tunggakan)
 - [x] Monitoring pokok berjalan detail kontrak (`/monitoring/pokok-berjalan`)
 - [x] Export CSV multi-mode untuk monitoring pokok berjalan (detail/summary/per-sistem/risk/per-nasabah)
