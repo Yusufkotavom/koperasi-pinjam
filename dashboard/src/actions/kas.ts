@@ -975,3 +975,98 @@ export async function getTransaksiPerUserReport(params?: TransaksiPerUserFilter)
     filterOptions: users.map((u) => ({ id: u.id, name: u.name })),
   }
 }
+
+type ArusKasFilter = {
+  tanggalDari?: string
+  tanggalSampai?: string
+  jenis?: "MASUK" | "KELUAR"
+  kasJenis?: "TUNAI" | "BANK"
+  kategori?: string
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function endOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+}
+
+export async function getArusKasFilterOptions() {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  const kategoriRows = await prisma.kasTransaksi.findMany({
+    select: { kategori: true },
+    distinct: ["kategori"],
+    orderBy: { kategori: "asc" },
+  })
+
+  return {
+    kategori: kategoriRows.map((row) => row.kategori),
+  }
+}
+
+export async function getArusKasReport(params?: ArusKasFilter) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  const now = new Date()
+  const tanggalDari = params?.tanggalDari ? startOfDay(new Date(params.tanggalDari)) : new Date(now.getFullYear(), now.getMonth() - 5, 1)
+  const tanggalSampai = params?.tanggalSampai ? endOfDay(new Date(params.tanggalSampai)) : endOfDay(now)
+
+  const where = {
+    tanggal: { gte: tanggalDari, lte: tanggalSampai },
+    ...(params?.jenis ? { jenis: params.jenis } : {}),
+    ...(params?.kasJenis ? { kasJenis: params.kasJenis } : {}),
+    ...(params?.kategori ? { kategori: params.kategori } : {}),
+  } as const
+
+  const transaksi = await prisma.kasTransaksi.findMany({
+    where,
+    orderBy: { tanggal: "desc" },
+    include: { inputOleh: { select: { name: true } } },
+  })
+
+  const totalMasuk = transaksi
+    .filter((item) => item.jenis === "MASUK")
+    .reduce((sum, item) => sum + Number(item.jumlah), 0)
+  const totalKeluar = transaksi
+    .filter((item) => item.jenis === "KELUAR")
+    .reduce((sum, item) => sum + Number(item.jumlah), 0)
+
+  const monthly: { bulan: string; masuk: number; keluar: number; surplus: number }[] = []
+  const cursor = new Date(tanggalDari.getFullYear(), tanggalDari.getMonth(), 1)
+  while (cursor <= tanggalSampai) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59, 999)
+    const entries = transaksi.filter((item) => item.tanggal >= monthStart && item.tanggal <= monthEnd)
+    const masuk = entries.filter((item) => item.jenis === "MASUK").reduce((sum, item) => sum + Number(item.jumlah), 0)
+    const keluar = entries.filter((item) => item.jenis === "KELUAR").reduce((sum, item) => sum + Number(item.jumlah), 0)
+    monthly.push({
+      bulan: monthStart.toLocaleDateString("id-ID", { month: "short", year: "2-digit" }),
+      masuk,
+      keluar,
+      surplus: masuk - keluar,
+    })
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+
+  return {
+    summary: {
+      totalMasuk,
+      totalKeluar,
+      totalSurplus: totalMasuk - totalKeluar,
+      totalTransaksi: transaksi.length,
+    },
+    monthly,
+    transaksi,
+    filterInfo: {
+      tanggalDari: tanggalDari.toISOString(),
+      tanggalSampai: tanggalSampai.toISOString(),
+      jenis: params?.jenis ?? null,
+      kasJenis: params?.kasJenis ?? null,
+      kategori: params?.kategori ?? null,
+    },
+  }
+}

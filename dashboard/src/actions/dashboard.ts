@@ -2,11 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { differenceInDays, endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "date-fns"
-import { getCompanyInfo } from "@/actions/settings"
-import { normalizeTimeZone } from "@/lib/datetime"
-import { serializeData } from "@/lib/utils"
-import { requireCompanyId } from "@/lib/tenant"
+import { differenceInDays } from "date-fns"
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -16,607 +12,172 @@ function endOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
 }
 
-export async function getDashboardStats() {
+type DashboardFilter = {
+  tanggalDari?: string
+  tanggalSampai?: string
+  kolektorId?: string
+  kelompokId?: string
+  wilayah?: string
+}
+
+export async function getDashboardFilterOptions() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(
-    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
-  )
 
-  const company = await getCompanyInfo()
-  const timeZone = normalizeTimeZone(company.timeZone)
+  const [kolektor, kelompok, wilayahRows] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        isActive: true,
+        roles: { some: { role: "KOLEKTOR" } },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.kelompok.findMany({
+      select: { id: true, nama: true },
+      orderBy: { nama: "asc" },
+    }),
+    prisma.kelompok.findMany({
+      where: { wilayah: { not: null } },
+      select: { wilayah: true },
+      distinct: ["wilayah"],
+      orderBy: { wilayah: "asc" },
+    }),
+  ])
+
+  return {
+    kolektor,
+    kelompok,
+    wilayah: wilayahRows.map((w) => w.wilayah).filter((w): w is string => Boolean(w)),
+  }
+}
+
+export async function getDashboardStats(params?: DashboardFilter) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
   const today = new Date()
+  const tanggalDari = params?.tanggalDari ? startOfDay(new Date(params.tanggalDari)) : undefined
+  const tanggalSampai = params?.tanggalSampai ? endOfDay(new Date(params.tanggalSampai)) : undefined
 
-  const startToday = startOfDay(today)
-  const endToday = new Date(startToday.getTime() + 86400000)
+  const nasabahFilter = {
+    ...(params?.kolektorId ? { kolektorId: params.kolektorId } : {}),
+    ...(params?.kelompokId ? { kelompokId: params.kelompokId } : {}),
+    ...(params?.wilayah ? { kelompok: { wilayah: params.wilayah } } : {}),
+  }
 
-  const [totalNasabah, pinjamanAktif, totalOutstanding, jadwalTelat, penagihanHariIni] = await Promise.all([
-    prisma.nasabah.count({ where: { companyId, status: "AKTIF" } }),
-    prisma.pinjaman.count({ where: { companyId, status: "AKTIF" } }),
+  const pengajuanFilter = {
+    ...(params?.kolektorId ? { nasabah: { kolektorId: params.kolektorId } } : {}),
+    ...(params?.kelompokId ? { kelompokId: params.kelompokId } : {}),
+    ...(params?.wilayah ? { kelompok: { wilayah: params.wilayah } } : {}),
+  }
+
+  const tunggakanDateFilter =
+    tanggalDari || tanggalSampai
+      ? {
+          ...(tanggalDari ? { gte: tanggalDari } : {}),
+          ...(tanggalSampai ? { lte: tanggalSampai } : {}),
+        }
+      : { lt: today }
+
+  const [totalNasabah, pinjamanAktif, totalOutstanding, jadwalTelat] = await Promise.all([
+    prisma.nasabah.count({ where: { status: "AKTIF", ...nasabahFilter } }),
+    prisma.pinjaman.count({ where: { status: "AKTIF", pengajuan: pengajuanFilter } }),
     prisma.pinjaman.aggregate({
-      where: { companyId, status: { in: ["AKTIF", "MENUNGGAK"] } },
+      where: { status: { in: ["AKTIF", "MENUNGGAK"] }, pengajuan: pengajuanFilter },
       _sum: { sisaPinjaman: true },
     }),
     prisma.jadwalAngsuran.findMany({
-      where: { companyId, sudahDibayar: false, tanggalJatuhTempo: { lt: today } },
-      select: {
-        total: true,
+      where: {
+        sudahDibayar: false,
+        tanggalJatuhTempo: tunggakanDateFilter,
+        pinjaman: { pengajuan: pengajuanFilter },
+      },
+      include: {
         pinjaman: {
-          select: {
+          include: {
             pengajuan: {
-              select: {
+              include: {
                 kelompok: { select: { nama: true, wilayah: true } },
+                nasabah: { select: { namaLengkap: true } },
               },
             },
           },
         },
       },
-      take: 1000,
-    }),
-    prisma.jadwalAngsuran.count({
-      where: { companyId, sudahDibayar: false, tanggalJatuhTempo: { gte: startToday, lt: endToday } },
     }),
   ])
 
-  const totalTunggakan = jadwalTelat.reduce((sum, j) => sum + Number(j.total ?? 0), 0)
+  const totalTunggakan = jadwalTelat.reduce((sum, j) => sum + Number(j.total), 0)
 
-  // Arus kas 6 bulan terakhir (Parallel)
-  const bulanQueries = []
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
+  const startToday = tanggalDari ?? startOfDay(today)
+  const endToday = tanggalSampai ?? new Date(startToday.getTime() + 86400000)
+  const penagihanHariIni = await prisma.jadwalAngsuran.count({
+    where: {
+      sudahDibayar: false,
+      tanggalJatuhTempo: { gte: startToday, lte: endToday },
+      pinjaman: { pengajuan: pengajuanFilter },
+    },
+  })
+
+  const periodStart = tanggalDari ?? new Date(today.getFullYear(), today.getMonth() - 5, 1)
+  const periodEnd = tanggalSampai ?? endOfDay(today)
+
+  const arusKas6Bulan = []
+  const cursor = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1)
+  while (cursor <= periodEnd) {
+    const d = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const endD = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59)
-    bulanQueries.push(
-      prisma.kasTransaksi.groupBy({
-        by: ["jenis"],
-        where: { companyId, tanggal: { gte: d, lte: endD }, isApproved: true },
-        _sum: { jumlah: true },
-      }).then(res => ({ date: d, data: res }))
-    )
-  }
 
-  const bulanResults = await Promise.all(bulanQueries)
-  const arusKas6Bulan = bulanResults.map(res => {
-    const masuk = res.data.find((b) => b.jenis === "MASUK")?._sum?.jumlah
-    const keluar = res.data.find((b) => b.jenis === "KELUAR")?._sum?.jumlah
-    return {
-      bulan: new Intl.DateTimeFormat("id-ID", { timeZone, month: "short", year: "2-digit" }).format(res.date),
+    const bulanData = await prisma.kasTransaksi.groupBy({
+      by: ["jenis"],
+      where: {
+        tanggal: { gte: d, lte: endD },
+      },
+      _sum: { jumlah: true },
+    })
+
+    const masuk = bulanData.find((b) => b.jenis === "MASUK")?._sum.jumlah
+    const keluar = bulanData.find((b) => b.jenis === "KELUAR")?._sum.jumlah
+
+    arusKas6Bulan.push({
+      bulan: d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" }),
       masuk: Number(masuk ?? 0),
       keluar: Number(keluar ?? 0),
-    }
-  })
+    })
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
 
   const tunggakanPerKelompok: Record<string, { nama: string; wilayah: string; total: number; count: number }> = {}
   for (const j of jadwalTelat) {
-    const k = j.pinjaman?.pengajuan?.kelompok
+    const k = j.pinjaman.pengajuan.kelompok
     if (!k) continue
     if (!tunggakanPerKelompok[k.nama]) {
       tunggakanPerKelompok[k.nama] = { nama: k.nama, wilayah: k.wilayah ?? "", total: 0, count: 0 }
     }
-    tunggakanPerKelompok[k.nama].total += Number(j.total ?? 0)
+    tunggakanPerKelompok[k.nama].total += Number(j.total)
     tunggakanPerKelompok[k.nama].count += 1
   }
   const topTunggakan = Object.values(tunggakanPerKelompok)
     .sort((a, b) => b.total - a.total)
     .slice(0, 5)
 
-  return serializeData({
+  return {
+    filterInfo: {
+      tanggalDari: tanggalDari?.toISOString() ?? null,
+      tanggalSampai: tanggalSampai?.toISOString() ?? null,
+      kolektorId: params?.kolektorId ?? null,
+      kelompokId: params?.kelompokId ?? null,
+      wilayah: params?.wilayah ?? null,
+    },
     totalNasabah,
     pinjamanAktif,
-    totalOutstanding: Number(totalOutstanding?._sum?.sisaPinjaman ?? 0),
+    totalOutstanding: Number(totalOutstanding._sum.sisaPinjaman ?? 0),
     totalTunggakan,
     penagihanHariIni,
     arusKas6Bulan,
     topTunggakan,
-  })
-}
-
-type DashboardRunningPrincipalBucket = {
-  tenorType: "MINGGUAN" | "BULANAN"
-  label: string
-  activeLoanCount: number
-  activeBorrowerCount: number
-  runningPrincipal: number
-  avgPrincipalPerBorrower: number
-  avgOutstandingPerLoan: number
-  due7DaysCount: number
-  overdueCount: number
-  riskSharePct: number
-}
-
-type DashboardRunningPrincipalStats = {
-  totalRunningPrincipal: number
-  totalBorrowers: number
-  totalActiveLoans: number
-  buckets: DashboardRunningPrincipalBucket[]
-}
-
-export async function getDashboardRunningPrincipalStats(): Promise<DashboardRunningPrincipalStats> {
-  const session = await auth()
-  if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(
-    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
-  )
-
-  const today = new Date()
-  const end7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-  const [activeLoans, dueSoonRows, overdueRows] = await Promise.all([
-    prisma.pinjaman.findMany({
-      where: {
-        companyId,
-        status: { in: ["AKTIF", "MENUNGGAK"] },
-      },
-      select: {
-        id: true,
-        tenorType: true,
-        sisaPinjaman: true,
-        pengajuan: {
-          select: {
-            nasabahId: true,
-          },
-        },
-      },
-    }),
-    prisma.jadwalAngsuran.findMany({
-      where: {
-        companyId,
-        sudahDibayar: false,
-        tanggalJatuhTempo: {
-          gte: today,
-          lte: end7Days,
-        },
-        pinjaman: {
-          status: { in: ["AKTIF", "MENUNGGAK"] },
-        },
-      },
-      select: {
-        pinjamanId: true,
-        pinjaman: {
-          select: {
-            tenorType: true,
-          },
-        },
-      },
-    }),
-    prisma.jadwalAngsuran.findMany({
-      where: {
-        companyId,
-        sudahDibayar: false,
-        tanggalJatuhTempo: {
-          lt: today,
-        },
-        pinjaman: {
-          status: { in: ["AKTIF", "MENUNGGAK"] },
-        },
-      },
-      select: {
-        pinjamanId: true,
-        pinjaman: {
-          select: {
-            tenorType: true,
-          },
-        },
-      },
-    }),
-  ])
-
-  const mapByType: Record<"MINGGUAN" | "BULANAN", {
-    activeLoanCount: number
-    runningPrincipal: number
-    borrowerIds: Set<string>
-    dueLoanIds: Set<string>
-    overdueLoanIds: Set<string>
-  }> = {
-    MINGGUAN: { activeLoanCount: 0, runningPrincipal: 0, borrowerIds: new Set(), dueLoanIds: new Set(), overdueLoanIds: new Set() },
-    BULANAN: { activeLoanCount: 0, runningPrincipal: 0, borrowerIds: new Set(), dueLoanIds: new Set(), overdueLoanIds: new Set() },
   }
-
-  for (const loan of activeLoans) {
-    const type = loan.tenorType === "MINGGUAN" ? "MINGGUAN" : "BULANAN"
-    mapByType[type].activeLoanCount += 1
-    mapByType[type].runningPrincipal += Number(loan.sisaPinjaman ?? 0)
-    if (loan.pengajuan?.nasabahId) {
-      mapByType[type].borrowerIds.add(loan.pengajuan.nasabahId)
-    }
-  }
-
-  for (const row of dueSoonRows) {
-    const type = row.pinjaman.tenorType === "MINGGUAN" ? "MINGGUAN" : "BULANAN"
-    mapByType[type].dueLoanIds.add(row.pinjamanId)
-  }
-
-  for (const row of overdueRows) {
-    const type = row.pinjaman.tenorType === "MINGGUAN" ? "MINGGUAN" : "BULANAN"
-    mapByType[type].overdueLoanIds.add(row.pinjamanId)
-  }
-
-  const totalRunningPrincipal = mapByType.MINGGUAN.runningPrincipal + mapByType.BULANAN.runningPrincipal
-  const totalBorrowers = new Set([...mapByType.MINGGUAN.borrowerIds, ...mapByType.BULANAN.borrowerIds]).size
-  const totalActiveLoans = mapByType.MINGGUAN.activeLoanCount + mapByType.BULANAN.activeLoanCount
-
-  const buckets: DashboardRunningPrincipalBucket[] = [
-    {
-      tenorType: "MINGGUAN",
-      label: "Sistem Mingguan",
-      activeLoanCount: mapByType.MINGGUAN.activeLoanCount,
-      activeBorrowerCount: mapByType.MINGGUAN.borrowerIds.size,
-      runningPrincipal: mapByType.MINGGUAN.runningPrincipal,
-      avgPrincipalPerBorrower:
-        mapByType.MINGGUAN.borrowerIds.size > 0
-          ? mapByType.MINGGUAN.runningPrincipal / mapByType.MINGGUAN.borrowerIds.size
-          : 0,
-      avgOutstandingPerLoan:
-        mapByType.MINGGUAN.activeLoanCount > 0
-          ? mapByType.MINGGUAN.runningPrincipal / mapByType.MINGGUAN.activeLoanCount
-          : 0,
-      due7DaysCount: mapByType.MINGGUAN.dueLoanIds.size,
-      overdueCount: mapByType.MINGGUAN.overdueLoanIds.size,
-      riskSharePct: totalRunningPrincipal > 0 ? (mapByType.MINGGUAN.runningPrincipal / totalRunningPrincipal) * 100 : 0,
-    },
-    {
-      tenorType: "BULANAN",
-      label: "Sistem Bulanan",
-      activeLoanCount: mapByType.BULANAN.activeLoanCount,
-      activeBorrowerCount: mapByType.BULANAN.borrowerIds.size,
-      runningPrincipal: mapByType.BULANAN.runningPrincipal,
-      avgPrincipalPerBorrower:
-        mapByType.BULANAN.borrowerIds.size > 0
-          ? mapByType.BULANAN.runningPrincipal / mapByType.BULANAN.borrowerIds.size
-          : 0,
-      avgOutstandingPerLoan:
-        mapByType.BULANAN.activeLoanCount > 0
-          ? mapByType.BULANAN.runningPrincipal / mapByType.BULANAN.activeLoanCount
-          : 0,
-      due7DaysCount: mapByType.BULANAN.dueLoanIds.size,
-      overdueCount: mapByType.BULANAN.overdueLoanIds.size,
-      riskSharePct: totalRunningPrincipal > 0 ? (mapByType.BULANAN.runningPrincipal / totalRunningPrincipal) * 100 : 0,
-    },
-  ]
-
-  return serializeData({
-    totalRunningPrincipal,
-    totalBorrowers,
-    totalActiveLoans,
-    buckets,
-  })
-}
-
-type RunningPrincipalMonitoringFilter = {
-  tenorType?: "MINGGUAN" | "BULANAN" | "ALL"
-  status?: "AKTIF" | "MENUNGGAK" | "ALL"
-  search?: string
-}
-
-export async function getRunningPrincipalMonitoring(params?: RunningPrincipalMonitoringFilter) {
-  const session = await auth()
-  if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(
-    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
-  )
-
-  const today = new Date()
-  const end7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
-  const tenorType = params?.tenorType && params.tenorType !== "ALL" ? params.tenorType : undefined
-  const status = params?.status && params.status !== "ALL" ? params.status : undefined
-  const search = params?.search?.trim()
-
-  const loans = await prisma.pinjaman.findMany({
-    where: {
-      companyId,
-      status: status ?? { in: ["AKTIF", "MENUNGGAK"] },
-      ...(tenorType ? { tenorType } : {}),
-      ...(search
-        ? {
-            OR: [
-              { nomorKontrak: { contains: search, mode: "insensitive" } },
-              { pengajuan: { nasabah: { namaLengkap: { contains: search, mode: "insensitive" } } } },
-              { pengajuan: { nasabah: { nomorAnggota: { contains: search, mode: "insensitive" } } } },
-            ],
-          }
-        : {}),
-    },
-    select: {
-      id: true,
-      nomorKontrak: true,
-      status: true,
-      tenorType: true,
-      pokokPinjaman: true,
-      sisaPinjaman: true,
-      tanggalCair: true,
-      tanggalJatuhTempo: true,
-      pengajuan: {
-        select: {
-          nasabah: {
-            select: {
-              namaLengkap: true,
-              nomorAnggota: true,
-              noHp: true,
-            },
-          },
-          kelompok: {
-            select: {
-              nama: true,
-              wilayah: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: [{ tenorType: "asc" }, { sisaPinjaman: "desc" }],
-  })
-
-  const loanIds = loans.map((loan) => loan.id)
-  const [dueSoonRows, overdueRows] = await Promise.all([
-    loanIds.length === 0
-      ? Promise.resolve([])
-      : prisma.jadwalAngsuran.findMany({
-          where: {
-            companyId,
-            pinjamanId: { in: loanIds },
-            sudahDibayar: false,
-            tanggalJatuhTempo: { gte: today, lte: end7Days },
-          },
-          select: { pinjamanId: true },
-        }),
-    loanIds.length === 0
-      ? Promise.resolve([])
-      : prisma.jadwalAngsuran.findMany({
-          where: {
-            companyId,
-            pinjamanId: { in: loanIds },
-            sudahDibayar: false,
-            tanggalJatuhTempo: { lt: today },
-          },
-          select: { pinjamanId: true },
-        }),
-  ])
-
-  const dueSoonByLoanId = new Set(dueSoonRows.map((row) => row.pinjamanId))
-  const overdueByLoanId = new Set(overdueRows.map((row) => row.pinjamanId))
-
-  const rows = loans.map((loan) => {
-    const principal = Number(loan.pokokPinjaman ?? 0)
-    const outstanding = Number(loan.sisaPinjaman ?? 0)
-    const progressPct = principal > 0 ? ((principal - outstanding) / principal) * 100 : 0
-    return {
-      id: loan.id,
-      nomorKontrak: loan.nomorKontrak,
-      status: loan.status,
-      tenorType: loan.tenorType,
-      pokokPinjaman: principal,
-      sisaPinjaman: outstanding,
-      progressPct: Math.max(0, Math.min(100, progressPct)),
-      tanggalCair: loan.tanggalCair,
-      tanggalJatuhTempo: loan.tanggalJatuhTempo,
-      due7Days: dueSoonByLoanId.has(loan.id),
-      overdue: overdueByLoanId.has(loan.id),
-      nasabah: {
-        namaLengkap: loan.pengajuan.nasabah.namaLengkap,
-        nomorAnggota: loan.pengajuan.nasabah.nomorAnggota,
-        noHp: loan.pengajuan.nasabah.noHp,
-      },
-      kelompok: {
-        nama: loan.pengajuan.kelompok?.nama ?? "—",
-        wilayah: loan.pengajuan.kelompok?.wilayah ?? "—",
-      },
-    }
-  })
-
-  const borrowerSet = new Set(rows.map((row) => row.nasabah.nomorAnggota))
-  const summary = {
-    totalPrincipal: rows.reduce((sum, row) => sum + row.pokokPinjaman, 0),
-    totalOutstanding: rows.reduce((sum, row) => sum + row.sisaPinjaman, 0),
-    totalLoans: rows.length,
-    totalBorrowers: borrowerSet.size,
-    due7DaysCount: rows.filter((row) => row.due7Days).length,
-    overdueCount: rows.filter((row) => row.overdue).length,
-    mingguanOutstanding: rows
-      .filter((row) => row.tenorType === "MINGGUAN")
-      .reduce((sum, row) => sum + row.sisaPinjaman, 0),
-    bulananOutstanding: rows
-      .filter((row) => row.tenorType === "BULANAN")
-      .reduce((sum, row) => sum + row.sisaPinjaman, 0),
-  }
-
-  return serializeData({
-    summary,
-    rows,
-  })
-}
-
-type CollectionSummary = {
-  tanggalDari: string
-  tanggalSampai: string
-  targetDerived: number
-  realisasiBayar: number
-  gap: number
-  totalKasus: number
-  totalKurangBayar: number
-  nasabahBermasalah: number
-}
-
-type CollectionRiskNasabah = {
-  nasabahId: string
-  namaLengkap: string
-  nomorAnggota: string
-  jumlahAngsuranBermasalah: number
-  totalKurangBayar: number
-  maxHariTelat: number
-}
-
-type CollectionQuickView = {
-  weeklyGlobal: CollectionSummary
-  monthlyGlobal: CollectionSummary
-  weeklyRisks: CollectionRiskNasabah[]
-  monthlyRisks: CollectionRiskNasabah[]
-}
-
-function formatDateOnly(date: Date) {
-  return date.toISOString().slice(0, 10)
-}
-
-function parseJadwalTag(catatan?: string | null) {
-  if (!catatan) return null
-  const match = catatan.match(/\[JADWAL:([^\]]+)\]/)
-  return match?.[1] ?? null
-}
-
-async function buildCollectionPeriod(
-  companyId: string,
-  startDate: Date,
-  endDate: Date,
-): Promise<{ summary: CollectionSummary; risks: CollectionRiskNasabah[] }> {
-  const today = new Date()
-  const jadwal = await prisma.jadwalAngsuran.findMany({
-    where: {
-      companyId,
-      tanggalJatuhTempo: { gte: startDate, lte: endDate },
-    },
-    select: {
-      id: true,
-      pinjamanId: true,
-      tanggalJatuhTempo: true,
-      total: true,
-      pinjaman: {
-        select: {
-          pengajuan: {
-            select: {
-              nasabah: {
-                select: {
-                  id: true,
-                  namaLengkap: true,
-                  nomorAnggota: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-
-  if (jadwal.length === 0) {
-    return {
-      summary: {
-        tanggalDari: formatDateOnly(startDate),
-        tanggalSampai: formatDateOnly(endDate),
-        targetDerived: 0,
-        realisasiBayar: 0,
-        gap: 0,
-        totalKasus: 0,
-        totalKurangBayar: 0,
-        nasabahBermasalah: 0,
-      },
-      risks: [],
-    }
-  }
-
-  const pinjamanIds = Array.from(new Set(jadwal.map((item) => item.pinjamanId)))
-  const pembayaran = await prisma.pembayaran.findMany({
-    where: {
-      companyId,
-      pinjamanId: { in: pinjamanIds },
-      isBatalkan: false,
-      catatan: { contains: "[JADWAL:" },
-    },
-    select: {
-      pinjamanId: true,
-      catatan: true,
-      totalBayar: true,
-      tanggalBayar: true,
-    },
-  })
-
-  const paidByJadwal: Record<string, number> = {}
-  for (const row of pembayaran) {
-    const jadwalId = parseJadwalTag(row.catatan)
-    if (!jadwalId) continue
-    paidByJadwal[jadwalId] = (paidByJadwal[jadwalId] ?? 0) + Number(row.totalBayar)
-  }
-
-  const riskByNasabah: Record<string, CollectionRiskNasabah> = {}
-  let targetDerived = 0
-  let realisasiBayar = 0
-  let totalKasus = 0
-  let totalKurangBayar = 0
-
-  for (const row of jadwal) {
-    const totalTagihan = Number(row.total)
-    const paid = paidByJadwal[row.id] ?? 0
-    const unpaid = Math.max(0, totalTagihan - paid)
-
-    targetDerived += totalTagihan
-    realisasiBayar += Math.min(totalTagihan, paid)
-
-    if (unpaid <= 0) continue
-    totalKasus += 1
-    totalKurangBayar += unpaid
-
-    const nasabah = row.pinjaman.pengajuan.nasabah
-    const hariTelat = Math.max(0, differenceInDays(today, row.tanggalJatuhTempo))
-    const existing = riskByNasabah[nasabah.id]
-    if (!existing) {
-      riskByNasabah[nasabah.id] = {
-        nasabahId: nasabah.id,
-        namaLengkap: nasabah.namaLengkap,
-        nomorAnggota: nasabah.nomorAnggota,
-        jumlahAngsuranBermasalah: 1,
-        totalKurangBayar: unpaid,
-        maxHariTelat: hariTelat,
-      }
-    } else {
-      existing.jumlahAngsuranBermasalah += 1
-      existing.totalKurangBayar += unpaid
-      existing.maxHariTelat = Math.max(existing.maxHariTelat, hariTelat)
-    }
-  }
-
-  const risks = Object.values(riskByNasabah)
-    .sort((a, b) => {
-      if (b.totalKurangBayar !== a.totalKurangBayar) return b.totalKurangBayar - a.totalKurangBayar
-      return b.maxHariTelat - a.maxHariTelat
-    })
-    .slice(0, 10)
-
-  return {
-    summary: {
-      tanggalDari: formatDateOnly(startDate),
-      tanggalSampai: formatDateOnly(endDate),
-      targetDerived,
-      realisasiBayar,
-      gap: Math.max(0, targetDerived - realisasiBayar),
-      totalKasus,
-      totalKurangBayar,
-      nasabahBermasalah: Object.keys(riskByNasabah).length,
-    },
-    risks,
-  }
-}
-
-export async function getDashboardCollectionQuickView(): Promise<CollectionQuickView> {
-  const session = await auth()
-  if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(
-    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
-  )
-
-  const today = new Date()
-  const weeklyStart = startOfWeek(today, { weekStartsOn: 1 })
-  const weeklyEnd = endOfWeek(today, { weekStartsOn: 1 })
-  const monthlyStart = startOfMonth(today)
-  const monthlyEnd = endOfMonth(today)
-
-  const [weekly, monthly] = await Promise.all([
-    buildCollectionPeriod(companyId, weeklyStart, weeklyEnd),
-    buildCollectionPeriod(companyId, monthlyStart, monthlyEnd),
-  ])
-
-  return serializeData({
-    weeklyGlobal: weekly.summary,
-    monthlyGlobal: monthly.summary,
-    weeklyRisks: weekly.risks,
-    monthlyRisks: monthly.risks,
-  })
 }
 
 type TunggakanFilter = {
@@ -625,20 +186,15 @@ type TunggakanFilter = {
   kolektorId?: string
   kelompokId?: string
   wilayah?: string
-  tenorType?: "ALL" | "MINGGUAN" | "BULANAN"
 }
 
 export async function getTunggakanFilterOptions() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(
-    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
-  )
 
   const [kolektor, kelompok, wilayahRows] = await Promise.all([
     prisma.user.findMany({
       where: {
-        companyId,
         isActive: true,
         roles: { some: { role: "KOLEKTOR" } },
       },
@@ -646,12 +202,11 @@ export async function getTunggakanFilterOptions() {
       orderBy: { name: "asc" },
     }),
     prisma.kelompok.findMany({
-      where: { companyId },
       select: { id: true, nama: true },
       orderBy: { nama: "asc" },
     }),
     prisma.kelompok.findMany({
-      where: { companyId, wilayah: { not: null } },
+      where: { wilayah: { not: null } },
       select: { wilayah: true },
       distinct: ["wilayah"],
       orderBy: { wilayah: "asc" },
@@ -668,32 +223,24 @@ export async function getTunggakanFilterOptions() {
 export async function getTunggakanList(params?: TunggakanFilter) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(
-    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
-  )
 
   const today = new Date()
   const tanggalDari = params?.tanggalDari ? startOfDay(new Date(params.tanggalDari)) : undefined
   const tanggalSampai = params?.tanggalSampai ? endOfDay(new Date(params.tanggalSampai)) : undefined
-  const tenorType = params?.tenorType === "MINGGUAN" || params?.tenorType === "BULANAN" ? params.tenorType : undefined
 
-  let tanggalFilter: { gte?: Date; lte?: Date; lt?: Date }
-  if (tanggalDari || tanggalSampai) {
-    tanggalFilter = {
-      ...(tanggalDari ? { gte: tanggalDari } : {}),
-      ...(tanggalSampai ? { lte: tanggalSampai } : {}),
-    }
-  } else {
-    tanggalFilter = { lt: today }
-  }
+  const tanggalFilter =
+    tanggalDari || tanggalSampai
+      ? {
+          ...(tanggalDari ? { gte: tanggalDari } : {}),
+          ...(tanggalSampai ? { lte: tanggalSampai } : {}),
+        }
+      : { lt: today }
 
   const jadwals = await prisma.jadwalAngsuran.findMany({
     where: {
-      companyId,
       sudahDibayar: false,
       tanggalJatuhTempo: tanggalFilter,
       pinjaman: {
-        ...(tenorType ? { tenorType } : {}),
         pengajuan: {
           ...(params?.kelompokId ? { kelompokId: params.kelompokId } : {}),
           ...(params?.wilayah
@@ -758,7 +305,7 @@ export async function getTunggakanList(params?: TunggakanFilter) {
   }
 
   const outstandingTotal = await prisma.pinjaman.aggregate({
-    where: { companyId, status: { in: ["AKTIF", "MENUNGGAK", "MACET"] } },
+    where: { status: { in: ["AKTIF", "MENUNGGAK", "MACET"] } },
     _sum: { sisaPinjaman: true },
   })
 
@@ -768,7 +315,7 @@ export async function getTunggakanList(params?: TunggakanFilter) {
   const outstanding = Number(outstandingTotal._sum.sisaPinjaman ?? 0)
   const nplRatio = outstanding > 0 ? (nplOutstanding / outstanding) * 100 : 0
 
-  return serializeData({
+  return {
     data,
     summary: {
       totalKasus: data.length,
@@ -778,7 +325,7 @@ export async function getTunggakanList(params?: TunggakanFilter) {
       nplRatio,
       buckets,
     },
-  })
+  }
 }
 
 type KelompokOverview = {
@@ -804,25 +351,19 @@ export async function getKelompokOverview(search?: string): Promise<{
 }> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(
-    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
-  )
 
   const today = new Date()
 
   const kelompok = await prisma.kelompok.findMany({
-    where: {
-      companyId,
-      ...(search
-        ? {
-            OR: [
-              { nama: { contains: search, mode: "insensitive" } },
-              { kode: { contains: search, mode: "insensitive" } },
-              { wilayah: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
+    where: search
+      ? {
+          OR: [
+            { nama: { contains: search, mode: "insensitive" } },
+            { kode: { contains: search, mode: "insensitive" } },
+            { wilayah: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
     include: {
       nasabah: {
         select: {
@@ -889,10 +430,10 @@ export async function getKelompokOverview(search?: string): Promise<{
   const totalPinjamanAktif = data.reduce((sum, item) => sum + item.pinjamanAktif, 0)
   const avgAnggotaPerKelompok = totalKelompok > 0 ? Math.round(totalAnggota / totalKelompok) : 0
 
-  return serializeData({
+  return {
     data,
     summary: { totalKelompok, totalAnggota, totalPinjamanAktif, avgAnggotaPerKelompok },
-  })
+  }
 }
 
 type KolektorOverview = {
@@ -917,12 +458,10 @@ type KolektorFilter = {
 export async function getKolektorFilterOptions() {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const [kolektor, wilayahRows] = await Promise.all([
     prisma.user.findMany({
       where: {
-        companyId,
         isActive: true,
         roles: { some: { role: "KOLEKTOR" } },
       },
@@ -930,7 +469,7 @@ export async function getKolektorFilterOptions() {
       orderBy: { name: "asc" },
     }),
     prisma.kelompok.findMany({
-      where: { companyId, wilayah: { not: null } },
+      where: { wilayah: { not: null } },
       select: { wilayah: true },
       distinct: ["wilayah"],
       orderBy: { wilayah: "asc" },
@@ -943,10 +482,187 @@ export async function getKolektorFilterOptions() {
   }
 }
 
+type PinjamanDetailFilter = {
+  periode?: 'minggu' | 'bulan'
+  tanggalDari?: string
+  tanggalSampai?: string
+  kolektorId?: string
+  kelompokId?: string
+  wilayah?: string
+}
+
+export async function getPinjamanDetail(params?: PinjamanDetailFilter) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  const today = new Date()
+  const tanggalDari = params?.tanggalDari ? startOfDay(new Date(params.tanggalDari)) : undefined
+  const tanggalSampai = params?.tanggalSampai ? endOfDay(new Date(params.tanggalSampai)) : undefined
+
+  // Filter untuk pinjaman
+  const pinjamanFilter = {
+    pengajuan: {
+      ...(params?.kolektorId ? { nasabah: { kolektorId: params.kolektorId } } : {}),
+      ...(params?.kelompokId ? { kelompokId: params.kelompokId } : {}),
+      ...(params?.wilayah ? { kelompok: { wilayah: params.wilayah } } : {}),
+    }
+  }
+
+  // Ambil semua pinjaman aktif
+  const pinjamanAktif = await prisma.pinjaman.findMany({
+    where: {
+      status: { in: ["AKTIF", "MENUNGGAK"] },
+      ...pinjamanFilter,
+    },
+    include: {
+      pengajuan: {
+        include: {
+          nasabah: { select: { namaLengkap: true, nomorAnggota: true } },
+          kelompok: { select: { nama: true, wilayah: true } },
+        },
+      },
+      jadwalAngsuran: {
+        where: {
+          sudahDibayar: false,
+          ...(tanggalDari || tanggalSampai ? {
+            tanggalJatuhTempo: {
+              ...(tanggalDari ? { gte: tanggalDari } : {}),
+              ...(tanggalSampai ? { lte: tanggalSampai } : {}),
+            }
+          } : {}),
+        },
+        orderBy: { tanggalJatuhTempo: 'asc' },
+      },
+      pembayaran: {
+        where: {
+          isBatalkan: false,
+          ...(tanggalDari || tanggalSampai ? {
+            tanggalBayar: {
+              ...(tanggalDari ? { gte: tanggalDari } : {}),
+              ...(tanggalSampai ? { lte: tanggalSampai } : {}),
+            }
+          } : {}),
+        },
+        orderBy: { tanggalBayar: 'desc' },
+      },
+    },
+  })
+
+  // Hitung statistik per periode
+  const periodStats = []
+  if (params?.periode === 'minggu') {
+    // Statistik mingguan untuk 8 minggu terakhir
+    for (let i = 7; i >= 0; i--) {
+      const startWeek = new Date(today)
+      startWeek.setDate(today.getDate() - (i * 7))
+      startWeek.setHours(0, 0, 0, 0)
+
+      const endWeek = new Date(startWeek)
+      endWeek.setDate(startWeek.getDate() + 6)
+      endWeek.setHours(23, 59, 59, 999)
+
+      const weeklyData = await calculatePeriodStats(startWeek, endWeek, pinjamanFilter)
+      periodStats.push({
+        periode: `${startWeek.getDate()}/${startWeek.getMonth() + 1}`,
+        ...weeklyData,
+      })
+    }
+  } else {
+    // Statistik bulanan untuk 6 bulan terakhir
+    for (let i = 5; i >= 0; i--) {
+      const startMonth = new Date(today.getFullYear(), today.getMonth() - i, 1)
+      const endMonth = new Date(today.getFullYear(), today.getMonth() - i + 1, 0, 23, 59, 59)
+
+      const monthlyData = await calculatePeriodStats(startMonth, endMonth, pinjamanFilter)
+      periodStats.push({
+        periode: startMonth.toLocaleDateString("id-ID", { month: "short", year: "2-digit" }),
+        ...monthlyData,
+      })
+    }
+  }
+
+  // Ringkasan keseluruhan
+  const totalPiutang = pinjamanAktif.reduce((sum, p) => sum + Number(p.sisaPinjaman), 0)
+  const totalTunggakan = pinjamanAktif.reduce((sum, p) =>
+    sum + p.jadwalAngsuran.reduce((inner, j) => inner + Number(j.total), 0), 0
+  )
+  const totalBayarPeriode = pinjamanAktif.reduce((sum, p) =>
+    sum + p.pembayaran.reduce((inner, b) => inner + Number(b.totalBayar), 0), 0
+  )
+
+  return {
+    summary: {
+      totalPinjaman: pinjamanAktif.length,
+      totalPiutang,
+      totalTunggakan,
+      totalBayarPeriode,
+      rasioTunggakan: totalPiutang > 0 ? (totalTunggakan / totalPiutang) * 100 : 0,
+    },
+    periodStats,
+    detailPinjaman: pinjamanAktif.map(p => ({
+      id: p.id,
+      nomorKontrak: p.nomorKontrak,
+      nasabah: p.pengajuan.nasabah.namaLengkap,
+      nomorAnggota: p.pengajuan.nasabah.nomorAnggota,
+      kelompok: p.pengajuan.kelompok?.nama || '-',
+      wilayah: p.pengajuan.kelompok?.wilayah || '-',
+      pokokPinjaman: Number(p.pokokPinjaman),
+      sisaPinjaman: Number(p.sisaPinjaman),
+      status: p.status,
+      tunggakan: p.jadwalAngsuran.reduce((sum, j) => sum + Number(j.total), 0),
+      pembayaranTerakhir: p.pembayaran[0] ? {
+        tanggal: p.pembayaran[0].tanggalBayar,
+        jumlah: Number(p.pembayaran[0].totalBayar),
+      } : null,
+    })),
+  }
+}
+
+async function calculatePeriodStats(startDate: Date, endDate: Date, pinjamanFilter: any) {
+  const [pembayaran, jadwalJatuhTempo, pencairan] = await Promise.all([
+    // Pembayaran dalam periode
+    prisma.pembayaran.aggregate({
+      where: {
+        isBatalkan: false,
+        tanggalBayar: { gte: startDate, lte: endDate },
+        pinjaman: pinjamanFilter,
+      },
+      _sum: { totalBayar: true },
+      _count: true,
+    }),
+    // Jadwal jatuh tempo dalam periode
+    prisma.jadwalAngsuran.aggregate({
+      where: {
+        tanggalJatuhTempo: { gte: startDate, lte: endDate },
+        pinjaman: pinjamanFilter,
+      },
+      _sum: { total: true },
+      _count: true,
+    }),
+    // Pencairan dalam periode
+    prisma.pinjaman.aggregate({
+      where: {
+        tanggalCair: { gte: startDate, lte: endDate },
+        ...pinjamanFilter,
+      },
+      _sum: { nilaiCair: true },
+      _count: true,
+    }),
+  ])
+
+  return {
+    pembayaran: Number(pembayaran._sum.totalBayar || 0),
+    countPembayaran: pembayaran._count,
+    jatuhTempo: Number(jadwalJatuhTempo._sum.total || 0),
+    countJatuhTempo: jadwalJatuhTempo._count,
+    pencairan: Number(pencairan._sum.nilaiCair || 0),
+    countPencairan: pencairan._count,
+  }
+}
+
 export async function getKolektorOverview(params?: KolektorFilter): Promise<KolektorOverview[]> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
-  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
 
   const now = new Date()
   const year = Number(params?.year ?? now.getFullYear())
@@ -956,7 +672,6 @@ export async function getKolektorOverview(params?: KolektorFilter): Promise<Kole
 
   const kolektorList = await prisma.user.findMany({
     where: {
-      companyId,
       isActive: true,
       roles: { some: { role: "KOLEKTOR" } },
       ...(params?.kolektorId ? { id: params.kolektorId } : {}),
@@ -985,9 +700,8 @@ export async function getKolektorOverview(params?: KolektorFilter): Promise<Kole
       },
       kasDiinput: {
         where: {
-          companyId,
           jenis: "MASUK",
-          kategoriKey: { in: ["ANGSURAN", "PELUNASAN"] },
+          kategori: { in: ["ANGSURAN", "PELUNASAN"] },
           tanggal: { gte: startMonth, lt: endMonth },
         },
         select: { jumlah: true },
@@ -1026,7 +740,7 @@ export async function getKolektorOverview(params?: KolektorFilter): Promise<Kole
     orderBy: { name: "asc" },
   })
 
-  return serializeData(kolektorList.map((k) => {
+  return kolektorList.map((k) => {
     const kelompokSet = new Set(k.nasabahSebagaiKolektor.map((n) => n.kelompokId).filter(Boolean))
     let realisasi = 0
     let tunggakan = 0
@@ -1062,5 +776,5 @@ export async function getKolektorOverview(params?: KolektorFilter): Promise<Kole
       setoran,
       pencapaian,
     }
-  }))
+  })
 }
