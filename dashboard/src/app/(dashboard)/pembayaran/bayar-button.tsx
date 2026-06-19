@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { inputPembayaran } from "@/actions/pembayaran"
+import { useState, useTransition, useEffect } from "react"
+import { inputPembayaran, hitungTotalPelunasan } from "@/actions/pembayaran"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,6 +49,26 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
   const [savedNominal, setSavedNominal] = useState<number>(0)
   const [savedDenda, setSavedDenda] = useState<number>(0)
   const [savedMode, setSavedMode] = useState<"FULL" | "PARSIAL" | "PELUNASAN">("FULL")
+  const [pelunasanCalc, setPelunasanCalc] = useState<{ pokok: number; bunga: number; denda: number; total: number } | null>(null)
+  const [pelunasanNego, setPelunasanNego] = useState("")
+  const [isCalcLoading, setIsCalcLoading] = useState(false)
+
+  useEffect(() => {
+    if (mode !== "PELUNASAN" || !isOpen) {
+      setPelunasanCalc(null)
+      return
+    }
+    let cancelled = false
+    setIsCalcLoading(true)
+    hitungTotalPelunasan(jadwalId, tanggalBayar || undefined).then((result) => {
+      if (cancelled) return
+      setIsCalcLoading(false)
+      if ("error" in result) return
+      setPelunasanCalc(result)
+      setPelunasanNego(result.total.toString())
+    })
+    return () => { cancelled = true }
+  }, [mode, isOpen, tanggalBayar, jadwalId])
 
   const handleSuccessOpenChange = (open: boolean) => {
     setIsSuccessOpen(open)
@@ -72,6 +92,7 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
           jadwalAngsuranId: jadwalId,
           mode,
           jumlahBayar: mode === "PARSIAL" ? jumlah : undefined,
+          nominalNego: mode === "PELUNASAN" && pelunasanCalc && Number(pelunasanNego) !== pelunasanCalc.total ? Number(pelunasanNego) : undefined,
           metode,
           buktiBayarUrl: buktiBayarUrl.trim() || undefined,
           tanggalBayar: tanggalBayar || undefined,
@@ -158,6 +179,51 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
                   placeholder="Contoh: 50000"
                   required
                 />
+              </div>
+            )}
+
+            {mode === "PELUNASAN" && (
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                {isCalcLoading ? (
+                  <p className="text-xs text-muted-foreground">Menghitung pelunasan...</p>
+                ) : pelunasanCalc ? (
+                  <>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Sisa Pokok</span>
+                        <span className="font-semibold">{fmt(pelunasanCalc.pokok)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Bunga Proporsional</span>
+                        <span className="font-semibold">{fmt(pelunasanCalc.bunga)}</span>
+                      </div>
+                      {pelunasanCalc.denda > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Denda</span>
+                          <span className="font-semibold text-rose-600">{fmt(pelunasanCalc.denda)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t border-slate-100 pt-1 dark:border-slate-800">
+                        <span className="font-bold">Total Kalkulasi</span>
+                        <span className="font-bold">{fmt(pelunasanCalc.total)}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Nominal Negosiasi (Rp)</Label>
+                      <Input
+                        type="number"
+                        value={pelunasanNego}
+                        onChange={(e) => setPelunasanNego(e.target.value)}
+                        placeholder={pelunasanCalc.total.toString()}
+                      />
+                      {Number(pelunasanNego) < pelunasanCalc.total && Number(pelunasanNego) > 0 && (
+                        <p className="text-[10px] text-amber-600">
+                          Diskon {fmt(pelunasanCalc.total - Number(pelunasanNego))} dari kalkulasi
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
 

@@ -79,6 +79,52 @@ async function getPaidForJadwal(pinjamanId: string, jadwalAngsuranId: string) {
   )
 }
 
+export async function hitungTotalPelunasan(jadwalAngsuranId: string, tanggalBayar?: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
+
+  const jadwal = await prisma.jadwalAngsuran.findFirst({
+    where: { id: jadwalAngsuranId, companyId },
+    include: { pinjaman: true },
+  })
+  if (!jadwal) return { error: "Data angsuran tidak ditemukan." }
+
+  const tanggalBayarDate = tanggalBayar ? new Date(tanggalBayar) : new Date()
+  const sisaPinjaman = Number(jadwal.pinjaman.sisaPinjaman)
+
+  const allJadwals = await prisma.jadwalAngsuran.findMany({
+    where: { pinjamanId: jadwal.pinjamanId },
+    orderBy: { angsuranKe: "asc" },
+  })
+  const cairDate = new Date(jadwal.pinjaman.tanggalCair)
+  const bayarMs = tanggalBayarDate.getTime()
+  let bungaProporsional = 0
+  let prevDueMs = cairDate.getTime()
+  for (const j of allJadwals) {
+    const dueMs = j.tanggalJatuhTempo.getTime()
+    if (!j.sudahDibayar) {
+      if (bayarMs >= dueMs) {
+        bungaProporsional += Number(j.bunga)
+      } else if (bayarMs > prevDueMs) {
+        const periodMs = dueMs - prevDueMs
+        const elapsedMs = bayarMs - prevDueMs
+        const ratio = periodMs > 0 ? Math.min(1, elapsedMs / periodMs) : 0
+        bungaProporsional += Number(j.bunga) * ratio
+      }
+    }
+    prevDueMs = dueMs
+  }
+
+  const dendaConfig = await getDendaConfig()
+  const denda = hitungDenda(sisaPinjaman, jadwal.tanggalJatuhTempo, tanggalBayarDate, dendaConfig)
+  const total = sisaPinjaman + bungaProporsional + denda
+
+  return { pokok: sisaPinjaman, bunga: bungaProporsional, denda, total }
+}
+
 export async function getAngsuranJatuhTempo(pinjamanId?: string) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
@@ -398,6 +444,7 @@ export async function inputPembayaran(input: {
   jadwalAngsuranId: string
   mode?: ModePembayaran
   jumlahBayar?: number
+  nominalNego?: number
   metode: MetodePembayaran
   buktiBayarUrl?: string
   catatan?: string
@@ -443,6 +490,32 @@ export async function inputPembayaran(input: {
   const paid = await getPaidForJadwal(jadwal.pinjamanId, jadwal.id)
   const dendaConfig = await getDendaConfig()
 
+  // Hitung bunga proporsional untuk pelunasan dipercepat
+  let bungaLunasProporsional = 0
+  if (mode === "PELUNASAN") {
+    const allJadwals = await prisma.jadwalAngsuran.findMany({
+      where: { pinjamanId: jadwal.pinjamanId },
+      orderBy: { angsuranKe: "asc" },
+    })
+    const cairDate = new Date(jadwal.pinjaman.tanggalCair)
+    const bayarMs = tanggalBayar.getTime()
+    let prevDueMs = cairDate.getTime()
+    for (const j of allJadwals) {
+      const dueMs = j.tanggalJatuhTempo.getTime()
+      if (!j.sudahDibayar) {
+        if (bayarMs >= dueMs) {
+          bungaLunasProporsional += Number(j.bunga)
+        } else if (bayarMs > prevDueMs) {
+          const periodMs = dueMs - prevDueMs
+          const elapsedMs = bayarMs - prevDueMs
+          const ratio = periodMs > 0 ? Math.min(1, elapsedMs / periodMs) : 0
+          bungaLunasProporsional += Number(j.bunga) * ratio
+        }
+      }
+      prevDueMs = dueMs
+    }
+  }
+
   const dendaHariIni = hitungDenda(sisaPinjaman, jadwal.tanggalJatuhTempo, tanggalBayar, dendaConfig)
   const dendaSisa = Math.max(0, dendaHariIni - paid.denda)
   const pokokSisa = Math.max(0, Number(jadwal.pokok) - paid.pokok)
@@ -454,13 +527,24 @@ export async function inputPembayaran(input: {
   }
 
   const requestedJumlah = Number(input.jumlahBayar ?? 0)
+  const nominalNego = input.nominalNego != null ? Number(input.nominalNego) : 0
 
-  const jumlahBayar =
-    mode === "PELUNASAN"
-      ? sisaPinjaman + dendaSisa
-      : mode === "PARSIAL"
-        ? requestedJumlah
-        : totalTagihanSisa
+  let jumlahBayar: number
+  if (mode === "PELUNASAN") {
+    const totalKewajibanLunas = sisaPinjaman + bungaLunasProporsional + dendaSisa
+    if (nominalNego > 0) {
+      if (nominalNego > totalKewajibanLunas + 0.01) {
+        return { error: `Nominal negosiasi melebihi total kewajiban pelunasan (Rp ${totalKewajibanLunas.toLocaleString("id-ID")}).` }
+      }
+      jumlahBayar = nominalNego
+    } else {
+      jumlahBayar = totalKewajibanLunas
+    }
+  } else if (mode === "PARSIAL") {
+    jumlahBayar = requestedJumlah
+  } else {
+    jumlahBayar = totalTagihanSisa
+  }
 
   if (!Number.isFinite(jumlahBayar) || jumlahBayar <= 0) {
     return { error: "Jumlah pembayaran tidak valid." }
@@ -472,11 +556,19 @@ export async function inputPembayaran(input: {
     return { error: "Jumlah pembayaran melebihi total tagihan sisa." }
   }
 
-  const alokasiDenda = mode === "PELUNASAN" ? dendaSisa : Math.min(jumlahBayar, dendaSisa)
-  const sisaSetelahDenda = jumlahBayar - alokasiDenda
-  const alokasiBunga = mode === "PELUNASAN" ? 0 : Math.min(sisaSetelahDenda, bungaSisa)
-  const sisaSetelahBunga = sisaSetelahDenda - alokasiBunga
-  const alokasiPokok = mode === "PELUNASAN" ? sisaPinjaman : Math.min(sisaSetelahBunga, pokokSisa)
+  let alokasiDenda: number, alokasiBunga: number, alokasiPokok: number
+  if (mode === "PELUNASAN") {
+    alokasiDenda = Math.min(jumlahBayar, dendaSisa)
+    const sisa1 = jumlahBayar - alokasiDenda
+    alokasiPokok = Math.min(sisa1, sisaPinjaman)
+    alokasiBunga = sisa1 - alokasiPokok
+  } else {
+    alokasiDenda = Math.min(jumlahBayar, dendaSisa)
+    const sisaSetelahDenda = jumlahBayar - alokasiDenda
+    alokasiBunga = Math.min(sisaSetelahDenda, bungaSisa)
+    const sisaSetelahBunga = sisaSetelahDenda - alokasiBunga
+    alokasiPokok = Math.min(sisaSetelahBunga, pokokSisa)
+  }
 
   const metaCatatan = [jadwalTag(jadwal.id), `mode=${mode}`]
   if (input.catatan?.trim()) metaCatatan.push(input.catatan.trim())
