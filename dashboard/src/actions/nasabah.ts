@@ -38,12 +38,15 @@ function getUniqueConstraintFields(error: unknown): string[] {
   return []
 }
 
+export type NasabahSort = "latest" | "oldest" | "name_asc" | "name_desc" | "nomor_asc" | "nomor_desc"
+
 export async function getNasabahList(params: {
   page?: number
   limit?: number
   search?: string
   status?: string
   kelompokId?: string
+  sort?: NasabahSort
 }) {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
@@ -55,6 +58,17 @@ export async function getNasabahList(params: {
   const page = params.page ?? 1
   const limit = params.limit ?? 20
   const skip = (page - 1) * limit
+
+  const orderByMap: Record<NasabahSort, Record<string, string>[]> = {
+    latest: [{ createdAt: "desc" }],
+    oldest: [{ createdAt: "asc" }],
+    name_asc: [{ namaLengkap: "asc" }],
+    name_desc: [{ namaLengkap: "desc" }],
+    nomor_asc: [{ nomorAnggota: "asc" }],
+    nomor_desc: [{ nomorAnggota: "desc" }],
+  }
+  const sort: NasabahSort = params.sort ?? "latest"
+  const orderBy = orderByMap[sort] ?? orderByMap.latest
 
   const where = {
     AND: [
@@ -78,7 +92,7 @@ export async function getNasabahList(params: {
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: "desc" },
+      orderBy,
       include: {
         kelompok: { select: { nama: true } },
         kolektor: { select: { name: true } },

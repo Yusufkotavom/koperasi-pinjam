@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getKelompokList, getNasabahList } from "@/actions/nasabah"
+import { getKelompokList, getNasabahList, type NasabahSort } from "@/actions/nasabah"
 import { Input } from "@/components/ui/input"
 import { DeleteNasabahButton } from "./delete-nasabah-button"
 import { CompanyDocumentHeader } from "@/components/print/company-document-header"
@@ -30,23 +30,35 @@ function fmt(n: number) {
 export default async function NasabahPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ search?: string; page?: string; kelompokId?: string; status?: string; print?: string }>
+  searchParams?: Promise<{ search?: string; page?: string; kelompokId?: string; status?: string; print?: string; limit?: string; sort?: string }>
 }) {
   const sp = await searchParams
   const search = sp?.search ?? ""
   const page = Number(sp?.page ?? 1)
   const kelompokId = sp?.kelompokId ?? ""
   const status = sp?.status ?? ""
+  const limit = Number(sp?.limit ?? 20) as 20 | 50 | 100
+  const sort = (sp?.sort ?? "latest") as NasabahSort
   const isPrint = sp?.print === "1"
 
   const kelompokList = await getKelompokList()
   const { data: nasabahList, total, totalPages } = await getNasabahList({
     page,
     search,
-    limit: 20,
+    limit,
     kelompokId: kelompokId || undefined,
     status: status || undefined,
+    sort,
   })
+
+  const qp = (overrides: Record<string, string | number> = {}) => {
+    const params = new URLSearchParams()
+    const merged = { search, status, kelompokId, limit: String(limit), sort, page: String(page), ...overrides }
+    for (const [k, v] of Object.entries(merged)) {
+      if (v && v !== "" && v !== "0") params.set(k, String(v))
+    }
+    return params.toString()
+  }
 
   return (
     <div className="p-6 space-y-8">
@@ -76,13 +88,13 @@ export default async function NasabahPage({
             </div>
             <div className="flex items-center gap-2 print:hidden">
               <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80" asChild>
-                <a href={`/api/export/nasabah?search=${encodeURIComponent(search)}&status=${status}&kelompokId=${kelompokId}`}>
+                <a href={`/api/export/nasabah?${qp({ page: "1" })}`}>
                   <Download className="size-3.5" />
                   <span className="hidden sm:inline">Export CSV</span>
                 </a>
               </Button>
               <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80" asChild>
-                <a href={`?search=${encodeURIComponent(search)}&status=${status}&kelompokId=${kelompokId}&print=1`} target="_blank" rel="noreferrer">
+                <a href={`?${qp({ print: "1" })}`} target="_blank" rel="noreferrer">
                   <Download className="size-3.5" />
                   <span className="hidden sm:inline">Export PDF</span>
                 </a>
@@ -117,6 +129,29 @@ export default async function NasabahPage({
               <option value="AKTIF">Aktif</option>
               <option value="NON_AKTIF">Non Aktif</option>
               <option value="KELUAR">Keluar</option>
+            </select>
+            <select
+              name="sort"
+              defaultValue={sort}
+              className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
+              title="Urutkan"
+            >
+              <option value="latest">Terbaru ditambahkan</option>
+              <option value="oldest">Terlama ditambahkan</option>
+              <option value="name_asc">Nama A-Z</option>
+              <option value="name_desc">Nama Z-A</option>
+              <option value="nomor_asc">No. Anggota A-Z</option>
+              <option value="nomor_desc">No. Anggota Z-A</option>
+            </select>
+            <select
+              name="limit"
+              defaultValue={limit}
+              className="h-9 rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/5 transition-all dark:border-slate-800 dark:bg-slate-900"
+              title="Jumlah per halaman"
+            >
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
             </select>
             <Button type="submit" variant="secondary" className="px-6">Cari</Button>
           </form>
@@ -279,10 +314,10 @@ export default async function NasabahPage({
             </span>
             <div className="flex gap-2">
               <Button variant="outline" size="xs" asChild disabled={page <= 1} className="h-8 px-3 rounded-lg border-slate-200 dark:border-slate-800">
-                <Link href={`?search=${search}&page=${page - 1}`}>Sebelumnya</Link>
+                <Link href={`?${qp({ page: page - 1 })}`}>Sebelumnya</Link>
               </Button>
               <Button variant="outline" size="xs" asChild disabled={page >= totalPages} className="h-8 px-3 rounded-lg border-slate-200 dark:border-slate-800">
-                <Link href={`?search=${search}&page=${page + 1}`}>Berikutnya</Link>
+                <Link href={`?${qp({ page: page + 1 })}`}>Berikutnya</Link>
               </Button>
             </div>
           </div>
