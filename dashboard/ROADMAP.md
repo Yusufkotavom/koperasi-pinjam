@@ -40,6 +40,8 @@ Alur inti kredit dari request sampai pembayaran cicilan.
 - [x] Pembayaran angsuran + pembatalan pembayaran
 - [x] Filter schedule aktif untuk proses pembayaran
 - [x] Auto-kembalikan saldo simpanan saat pinjaman lunas
+- [x] Pelunasan dipercepat dengan bunga proporsional (hitung per hari aktual per angsuran)
+- [x] Nominal negosiasi pelunasan (diskon bunga, pokok tetap lunas penuh)
 - [ ] Batch posting pembayaran (multi kontrak)
 - [ ] Reminder otomatis untuk angsuran jatuh tempo
 
@@ -84,6 +86,7 @@ Kelola data inti dan output dokumen operasional.
 - [x] Upload dokumen ke Vercel Blob
 - [x] Export CSV master nasabah dengan filter (search/status/kelompok)
 - [x] Export PDF landscape master nasabah dengan kop `CompanyDocumentHeader`
+- [x] Filter limit fleksibel (20/50/100) dan sorting (terbaru/terlama, nama A-Z/Z-A, no. anggota) di Master Nasabah
 - [ ] Import data nasabah/kelompok via CSV template
 - [ ] Arsip dokumen dengan tag + pencarian cepat
 

@@ -3,6 +3,13 @@
 Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
+## 2026-06-19
+- fix(pembayaran): pelunasan dipercepat sekarang menghitung **bunga proporsional** berdasarkan hari aktual per angsuran (bukan menghapus semua bunga). Angsuran yang sudah lewat jatuh tempo = bunga penuh, yang belum = proporsional.
+- feat(pembayaran): **nominal negosiasi** pada pelunasan dipercepat — user bisa edit nominal bayar (misal kesepakatan diskon). Alokasi: denda → pokok → bunga, sehingga pokok selalu lunas penuh.
+- feat(pembayaran): tambah server action `hitungTotalPelunasan` untuk kalkulasi breakdown pelunasan (pokok + bunga proporsional + denda) sebelum submit.
+- feat(nasabah): tambah dropdown **limit** (20/50/100 per halaman) dan **sorting** (terbaru/terlama ditambahkan, nama A-Z/Z-A, no. anggota A-Z/Z-A) di Master Nasabah.
+- fix(nasabah): semua parameter filter (search, status, kelompok, limit, sort) sekarang preserved di navigasi pagination dan link export CSV/PDF.
+
 ## 2026-05-20
 - feat(monitoring): tambah filter skema pinjaman `MINGGUAN` dan `BULANAN` pada halaman `/monitoring/tunggakan`.
 - feat(monitoring): filter tunggakan sekarang bisa dibatasi berdasarkan `pinjaman.tenorType` selain filter tanggal/kolektor/kelompok/wilayah.
