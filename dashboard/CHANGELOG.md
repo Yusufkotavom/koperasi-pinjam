@@ -4,6 +4,8 @@ Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
 ## 2026-10-13
+- feat(credit-scoring): **skor agregat per-pinjaman berbobot recency** — skor tiap pinjaman dihitung dari rata-rata siklusnya, lalu digabung dengan bobot `latestLoanWeight` (default 60% untuk pinjaman terakhir, sisa dibagi rata ke pinjaman sebelumnya). Contoh: pinjaman #1 skor 70 & #2 skor 100 → 88. Bobot editable di `/settings/ranking`.
+- feat(credit-scoring): **rincian skor per pinjaman** (nomor kontrak, status, skor, kategori, bobot, jumlah cicilan, daftar cicilan terlambat) + **Kelebihan/Kekurangan (Pros/Cons)** otomatis: menyebut **cicilan ke-berapa** yang terlambat, keterlambatan terparah, tren membaik/menurun, dan rekomendasi plafon.
 - feat(credit-scoring): mesin skor performa baru 0-100 (rata-rata nilai per siklus, anti-bias tenor) + kategori A-E. Menambah kolom `Pinjaman.finalScore`/`categoryGrade` dan `JadwalAngsuran.dpd`/`cycleScore`.
 - feat(credit-scoring): plafon saran dinamis = plafon pinjaman terakhir × persentase kategori (informasional, tanpa guard transaksi, tanpa tier rounding).
 - feat(credit-scoring): konfigurasi terpusat `CREDIT_SCORING_CONFIG` (matriks DPD, threshold kategori, % plafon) editable di `/settings/ranking`.

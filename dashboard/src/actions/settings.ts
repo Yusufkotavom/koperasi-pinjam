@@ -198,6 +198,7 @@ const creditScoringSchema = z.object({
   limitC: z.coerce.number().min(-1).max(10),
   limitD: z.coerce.number().min(-1).max(10),
   limitE: z.coerce.number().min(-1).max(10),
+  latestLoanWeight: z.coerce.number().min(0).max(1),
 })
 
 export async function getCreditScoringConfig(): Promise<CreditScoringConfig> {

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ArrowLeft, Edit, Phone, MapPin, Briefcase, CreditCard, CalendarDays, Store, TrendingUp, Zap, Wallet, FileText, FilePlus, CircleDollarSign, History, PiggyBank } from "lucide-react"
-import { scoreFromInstallments, cycleScoreFromDpd, computeDpd, cycleScoreLabel, GRADE_DESCRIPTION, DPD_MATRIX_DESCRIPTION, computeFinalScore, gradeFromScore } from "@/lib/credit-score"
+import { scoreFromInstallments, computeWeightedScore, buildCreditInsights, cycleScoreFromDpd, computeDpd, cycleScoreLabel, GRADE_DESCRIPTION, DPD_MATRIX_DESCRIPTION, computeFinalScore, gradeFromScore, type LoanCycleInfo, type LoanCycleDetail, type CreditInsight } from "@/lib/credit-score"
 
 function docTitle(url: string) {
   const clean = url.split("?")[0]
@@ -69,7 +69,7 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
     let outstanding = 0
     let anomaliPembayaran = 0
     let anomaliNominal = 0
-    const creditInstallments: Parameters<typeof scoreFromInstallments>[0] = []
+    const loanInfos: LoanCycleInfo[] = []
 
     const pinjamanList = nasabah.pengajuan
       .map((p) => p.pinjaman)
@@ -93,19 +93,24 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
         }
       }
 
+      const cycles: LoanCycleDetail[] = []
       for (const jadwal of pinjaman.jadwalAngsuran) {
         const nominalTagihan = Number(jadwal.total)
         const bayarParsial = pembayaranTagMap.get(jadwal.id) ?? 0
         const bayarEfektif = jadwal.sudahDibayar ? nominalTagihan : Math.min(nominalTagihan, bayarParsial)
 
-        // Skor berjalan = rata-rata nilai performa cicilan yang SUDAH terealisasi (dibayar).
+        // Skor per siklus = hanya cicilan yang SUDAH terealisasi (dibayar).
         if (jadwal.sudahDibayar) {
-          creditInstallments.push({
-            sudahDibayar: jadwal.sudahDibayar,
+          const dpd = jadwal.tanggalBayar
+            ? computeDpd(jadwal.tanggalJatuhTempo, jadwal.tanggalBayar)
+            : jadwal.dpd
+          cycles.push({
+            angsuranKe: jadwal.angsuranKe,
             tanggalJatuhTempo: jadwal.tanggalJatuhTempo,
             tanggalBayar: jadwal.tanggalBayar,
-            cycleScore: jadwal.cycleScore,
-            dpd: jadwal.dpd,
+            sudahDibayar: jadwal.sudahDibayar,
+            dpd,
+            cycleScore: jadwal.cycleScore ?? cycleScoreFromDpd(dpd, creditScoringConfig),
           })
         }
 
@@ -127,10 +132,20 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
           telat += 1
         }
       }
+
+      loanInfos.push({
+        pinjamanId: pinjaman.id,
+        nomorKontrak: pinjaman.nomorKontrak,
+        status: pinjaman.status,
+        tanggalCair: pinjaman.tanggalCair,
+        pokok: Number(pinjaman.pokokPinjaman),
+        cycles,
+      })
     }
 
     const tunggakanNominal = Math.max(0, totalTagihanArrears - totalDibayarArrears)
-    const credit = scoreFromInstallments(creditInstallments, now, creditScoringConfig)
+    const credit = computeWeightedScore(loanInfos, creditScoringConfig)
+    const insights = buildCreditInsights(credit, creditScoringConfig)
 
     return {
       tunggakanNominal,
@@ -140,6 +155,8 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
       outstanding,
       creditScore: credit.finalScore,
       creditGrade: credit.grade,
+      loanScores: credit.loans,
+      insights,
       anomaliPembayaran,
       anomaliNominal,
     }
@@ -494,6 +511,85 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
           </p>
         </CardHeader>
         <CardContent className="p-0">
+          {/* Rincian skor per pinjaman (berbobot) */}
+          {indikator.loanScores.filter((l) => l.paidCycles > 0).length > 0 && (
+            <div className="border-b p-4">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">
+                Rincian Skor per Pinjaman (bobot: pinjaman terakhir dominan)
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="text-left px-3 py-2 font-medium">No. Kontrak</th>
+                      <th className="text-left px-3 py-2 font-medium">Cair</th>
+                      <th className="text-right px-3 py-2 font-medium">Plafon</th>
+                      <th className="text-right px-3 py-2 font-medium">Siklus</th>
+                      <th className="text-right px-3 py-2 font-medium">Skor</th>
+                      <th className="text-right px-3 py-2 font-medium">Bobot</th>
+                      <th className="text-left px-3 py-2 font-medium">Terlambat</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {indikator.loanScores
+                      .filter((l) => l.paidCycles > 0)
+                      .map((l) => (
+                        <tr key={l.pinjamanId} className="border-b">
+                          <td className="px-3 py-2 font-mono text-xs">{l.nomorKontrak}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {new Date(l.tanggalCair).toLocaleDateString("id-ID")}
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(l.pokok)}</td>
+                          <td className="px-3 py-2 text-right">{l.paidCycles}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{l.score}</td>
+                          <td className="px-3 py-2 text-right text-xs font-medium">{Math.round(l.weight * 100)}%</td>
+                          <td className="px-3 py-2 text-xs">
+                            {l.lateCycles.length === 0 ? (
+                              <span className="text-emerald-600">Tidak ada</span>
+                            ) : (
+                              <span className="text-orange-600">
+                                {l.lateCycles.map((c) => `ke-${c.angsuranKe} (+${c.dpd}h)`).join(", ")}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Kelebihan & Kekurangan */}
+          {(indikator.insights.pros.length > 0 || indikator.insights.cons.length > 0) && (
+            <div className="grid gap-4 border-b p-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold text-emerald-700 mb-2">✓ Kelebihan</p>
+                {indikator.insights.pros.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">—</p>
+                ) : (
+                  <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
+                    {indikator.insights.pros.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-rose-700 mb-2">✗ Kekurangan</p>
+                {indikator.insights.cons.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Tidak ada catatan negatif.</p>
+                ) : (
+                  <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
+                    {indikator.insights.cons.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
           {creditHistory.length === 0 ? (
             <p className="text-sm text-muted-foreground p-4">Belum ada pembayaran tercatat untuk dihitung skornya.</p>
           ) : (

@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { nasabahSchema, type NasabahInput } from "@/lib/validations/nasabah"
 import { computeRanking } from "@/lib/ranking"
-import { scoreFromInstallments, type CreditGrade } from "@/lib/credit-score"
+import { scoreFromInstallments, computeWeightedScore, computeDpd, cycleScoreFromDpd, type CreditGrade, type LoanCycleInfo, type LoanCycleDetail } from "@/lib/credit-score"
 import { getRankingConfig, getCreditScoringConfig } from "@/actions/settings"
 import { serializeData } from "@/lib/utils"
 import { Prisma, RoleType } from "@prisma/client"
@@ -105,10 +105,13 @@ export async function getNasabahList(params: {
                 id: true,
                 status: true,
                 nomorKontrak: true,
+                tanggalCair: true,
+                pokokPinjaman: true,
                 sisaPinjaman: true,
                 jadwalAngsuran: {
                   select: {
                     id: true,
+                    angsuranKe: true,
                     total: true,
                     sudahDibayar: true,
                     tanggalJatuhTempo: true,
@@ -148,7 +151,7 @@ export async function getNasabahList(params: {
     let overdueOldestDaysLate = 0
     let overdueMaxDaysLate = 0
     let aktifPinjaman = 0
-    const creditInstallments: Parameters<typeof scoreFromInstallments>[0] = []
+    const loanInfos: LoanCycleInfo[] = []
 
     const pinjamanList = nasabah.pengajuan
       .map((p) => p.pinjaman)
@@ -172,19 +175,24 @@ export async function getNasabahList(params: {
         }
       }
 
+      const cycles: LoanCycleDetail[] = []
       for (const jadwal of pinjaman.jadwalAngsuran) {
         const nominalTagihan = Number(jadwal.total)
         const bayarParsial = pembayaranTagMap.get(jadwal.id) ?? 0
         const bayarEfektif = jadwal.sudahDibayar ? nominalTagihan : Math.min(nominalTagihan, bayarParsial)
 
-        // Skor berjalan = rata-rata nilai performa cicilan yang SUDAH terealisasi (dibayar).
+        // Skor per siklus = hanya cicilan yang SUDAH terealisasi (dibayar).
         if (jadwal.sudahDibayar) {
-          creditInstallments.push({
-            sudahDibayar: jadwal.sudahDibayar,
+          const dpd = jadwal.tanggalBayar
+            ? computeDpd(jadwal.tanggalJatuhTempo, jadwal.tanggalBayar)
+            : jadwal.dpd
+          cycles.push({
+            angsuranKe: jadwal.angsuranKe,
             tanggalJatuhTempo: jadwal.tanggalJatuhTempo,
             tanggalBayar: jadwal.tanggalBayar,
-            cycleScore: jadwal.cycleScore,
-            dpd: jadwal.dpd,
+            sudahDibayar: jadwal.sudahDibayar,
+            dpd,
+            cycleScore: jadwal.cycleScore ?? cycleScoreFromDpd(dpd, creditScoringConfig),
           })
         }
 
@@ -217,6 +225,15 @@ export async function getNasabahList(params: {
           if (daysLate > overdueMaxDaysLate) overdueMaxDaysLate = daysLate
         }
       }
+
+      loanInfos.push({
+        pinjamanId: pinjaman.id,
+        nomorKontrak: pinjaman.nomorKontrak,
+        status: pinjaman.status,
+        tanggalCair: pinjaman.tanggalCair,
+        pokok: Number(pinjaman.pokokPinjaman),
+        cycles,
+      })
     }
 
     if (overdueOldestDueAt) {
@@ -229,8 +246,8 @@ export async function getNasabahList(params: {
     const tunggakanNominal = Math.max(0, totalTagihanArrears - totalDibayarArrears)
     const ranking = computeRanking({ telat, tunggakanNominal }, rankingConfig)
 
-    // Skor credit baru (0-100 + kategori A-E) dari seluruh cicilan.
-    const credit = scoreFromInstallments(creditInstallments, now, creditScoringConfig)
+    // Skor credit baru (0-100 + kategori A-E) berbobot per pinjaman (pinjaman terakhir dominan).
+    const credit = computeWeightedScore(loanInfos, creditScoringConfig)
 
     return {
       ...nasabah,

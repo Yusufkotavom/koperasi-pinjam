@@ -135,6 +135,32 @@ export function CreditScoringSettingsForm({ initial }: { initial: CreditScoringC
           </div>
         </div>
 
+        {/* Bobot skor per pinjaman */}
+        <div>
+          <h3 className="text-sm font-semibold mb-1">Bobot Skor per Pinjaman</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Skor agregat nasabah = gabungan skor tiap pinjaman. Pinjaman <strong>terakhir</strong> diberi bobot
+            dominan; sisanya dibagi rata ke pinjaman sebelumnya. Contoh (60%): pinjaman #1 skor 70 &amp; #2 skor 100 →
+            (40%×70)+(60%×100) = 88. Untuk 3 pinjaman: terakhir 60%, dua lainnya 20% masing-masing.
+          </p>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="latestLoanWeight">Bobot Pinjaman Terakhir (%)</Label>
+              <Input
+                id="latestLoanWeight"
+                type="number"
+                min={0}
+                max={100}
+                value={decToPct(form.latestLoanWeight)}
+                onChange={(e) => pct("latestLoanWeight", e.target.value)}
+              />
+            </div>
+            <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+              Bobot pinjaman sebelumnya = (100% − bobot di samping) ÷ jumlah pinjaman sebelumnya.
+            </div>
+          </div>
+        </div>
+
         <Button
           disabled={isPending}
           className="bg-emerald-600 hover:bg-emerald-700"

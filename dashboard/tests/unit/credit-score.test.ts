@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest"
 import {
   cycleScoreFromDpd,
   computeFinalScore,
+  computeWeightedScore,
+  buildCreditInsights,
   gradeFromScore,
   evaluateCredit,
   applyLimitMultiplier,
@@ -134,5 +136,121 @@ describe("default config consistency", () => {
     expect(cfg.limitC).toBe(0)
     expect(cfg.limitD).toBe(-0.2)
     expect(cfg.limitE).toBe(-1)
+    expect(cfg.latestLoanWeight).toBe(0.6)
+  })
+})
+
+describe("computeWeightedScore", () => {
+  function mkLoan(id: string, cair: string, scores: number[]) {
+    return {
+      pinjamanId: id,
+      nomorKontrak: `K-${id}`,
+      status: "LUNAS",
+      tanggalCair: new Date(cair),
+      pokok: 1_000_000,
+      cycles: scores.map((s, i) => ({
+        angsuranKe: i + 1,
+        tanggalJatuhTempo: new Date(cair),
+        tanggalBayar: new Date(cair),
+        sudahDibayar: true,
+        dpd: 0,
+        cycleScore: s,
+      })),
+    }
+  }
+
+  it("user example: pinjaman #1 skor 70 & #2 skor 100 → 88 (bobot 40/60)", () => {
+    const loans = [
+      mkLoan("a", "2026-01-01", [70, 70, 70, 70]),
+      mkLoan("b", "2026-06-01", [100, 100, 100, 100]),
+    ]
+    const r = computeWeightedScore(loans)
+    expect(r.loans[0].score).toBe(70)
+    expect(r.loans[1].score).toBe(100)
+    // urut termuda→terbaru; index terakhir = terbaru
+    expect(r.loans[0].weight).toBeCloseTo(0.4)
+    expect(r.loans[1].weight).toBeCloseTo(0.6)
+    expect(r.finalScore).toBe(88)
+    expect(r.grade).toBe("A")
+  })
+
+  it("3 pinjaman: terakhir 60%, sebelumnya 20% masing-masing", () => {
+    const loans = [
+      mkLoan("a", "2026-01-01", [100, 100]), // 100
+      mkLoan("b", "2026-03-01", [100, 100]), // 100
+      mkLoan("c", "2026-06-01", [0, 0]), // 0
+    ]
+    const r = computeWeightedScore(loans)
+    expect(r.loans[0].weight).toBeCloseTo(0.2)
+    expect(r.loans[1].weight).toBeCloseTo(0.2)
+    expect(r.loans[2].weight).toBeCloseTo(0.6)
+    expect(r.finalScore).toBeCloseTo(40)
+  })
+
+  it("satu pinjaman → bobot 1", () => {
+    const loans = [mkLoan("a", "2026-01-01", [80, 100])]
+    const r = computeWeightedScore(loans)
+    expect(r.loans[0].weight).toBe(1)
+    expect(r.finalScore).toBe(90)
+  })
+
+  it("pinjaman tanpa siklus diabaikan (weight 0, tidak ubah skor)", () => {
+    const loans = [
+      mkLoan("a", "2026-01-01", [100, 100]),
+      { ...mkLoan("b", "2026-06-01", []), status: "AKTIF" },
+    ]
+    const r = computeWeightedScore(loans)
+    const bRow = r.loans.find((l) => l.pinjamanId === "b")!
+    expect(bRow.weight).toBe(0)
+    expect(r.finalScore).toBe(100)
+  })
+
+  it("bobot bisa dikonfigurasi (0.5 → 50/50)", () => {
+    const loans = [mkLoan("a", "2026-01-01", [70, 70]), mkLoan("b", "2026-06-01", [100, 100])]
+    const r = computeWeightedScore(loans, { latestLoanWeight: 0.5 })
+    expect(r.finalScore).toBe(85)
+  })
+})
+
+describe("buildCreditInsights", () => {
+  function mkLoan(id: string, cair: string, scores: number[], late?: Array<{ ke: number; dpd: number }>) {
+    return {
+      pinjamanId: id,
+      nomorKontrak: `K-${id}`,
+      status: "LUNAS",
+      tanggalCair: new Date(cair),
+      pokok: 1_000_000,
+      cycles: scores.map((s, i) => ({
+        angsuranKe: i + 1,
+        tanggalJatuhTempo: new Date(cair),
+        tanggalBayar: new Date(cair),
+        sudahDibayar: true,
+        dpd: late?.find((l) => l.ke === i + 1)?.dpd ?? 0,
+        cycleScore: s,
+      })),
+    }
+  }
+
+  it("semua tepat waktu → ada pros tanpa cons keterlambatan", () => {
+    const loans = [mkLoan("a", "2026-01-01", [100, 100, 100, 100])]
+    const r = computeWeightedScore(loans)
+    const ins = buildCreditInsights(r)
+    expect(ins.pros.some((p) => p.includes("tepat waktu"))).toBe(true)
+    expect(ins.cons.some((c) => c.includes("keterlambatan"))).toBe(false)
+  })
+
+  it("ada keterlambatan → sebutkan cicilan ke-berapa", () => {
+    const loans = [mkLoan("a", "2026-01-01", [100, 70, 100], [{ ke: 2, dpd: 2 }])]
+    const r = computeWeightedScore(loans)
+    const ins = buildCreditInsights(r)
+    expect(ins.cons.some((c) => c.includes("terlambat di cicilan ke-2 +2h"))).toBe(true)
+    expect(ins.cons.some((c) => c.includes("Keterlambatan terparah"))).toBe(true)
+  })
+
+  it("tren membaik terdeteksi", () => {
+    const loans = [mkLoan("a", "2026-01-01", [40, 40]), mkLoan("b", "2026-06-01", [100, 100])]
+    const r = computeWeightedScore(loans)
+    const ins = buildCreditInsights(r)
+    expect(ins.pros.some((p) => p.includes("Tren membaik"))).toBe(true)
   })
 })

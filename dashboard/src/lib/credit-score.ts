@@ -43,6 +43,11 @@ export type CreditScoringConfig = {
   limitD: number
   /** Persentase penyesuaian plafon kategori E (desimal). Default -1.00. */
   limitE: number
+  /**
+   * Bobot skor pinjaman TERAKHIR dalam agregasi skor berbobot (desimal, 0–1). Default 0.60.
+   * Pinjaman terakhir menyumbang 60% skor; sisanya (40%) dibagi rata ke pinjaman sebelumnya.
+   */
+  latestLoanWeight: number
 }
 
 export const DEFAULT_CREDIT_SCORING_CONFIG: CreditScoringConfig = {
@@ -63,6 +68,7 @@ export const DEFAULT_CREDIT_SCORING_CONFIG: CreditScoringConfig = {
   limitC: 0,
   limitD: -0.2,
   limitE: -1,
+  latestLoanWeight: 0.6,
 }
 
 /**
@@ -242,3 +248,211 @@ export const DPD_MATRIX_DESCRIPTION = [
   { range: "DPD 8–14", score: "0", label: "Gagal bayar siklus berjalan" },
   { range: "DPD ≥ 15", score: "-50", label: "Penalti berat / potensi macet" },
 ]
+
+// ---------------------------------------------------------------------------
+// Skor berbobot per pinjaman (recency-weighted)
+// ---------------------------------------------------------------------------
+
+/** Detail satu siklus pembayaran pada sebuah pinjaman. */
+export type LoanCycleDetail = {
+  angsuranKe: number
+  tanggalJatuhTempo: Date
+  tanggalBayar: Date | null
+  sudahDibayar: boolean
+  dpd: number
+  cycleScore: number
+}
+
+/** Input satu pinjaman (dengan seluruh siklus pembayarannya). */
+export type LoanCycleInfo = {
+  pinjamanId: string
+  nomorKontrak: string
+  status: string
+  tanggalCair: Date
+  pokok: number
+  cycles: LoanCycleDetail[]
+}
+
+/** Hasil skor per pinjaman. */
+export type LoanScoreRow = {
+  pinjamanId: string
+  nomorKontrak: string
+  status: string
+  tanggalCair: Date
+  pokok: number
+  score: number
+  grade: CreditGrade
+  paidCycles: number
+  totalCycles: number
+  /** Bobot pinjaman ini dalam skor agregat (desimal). */
+  weight: number
+  lateCycles: LoanCycleDetail[]
+}
+
+/**
+ * Menghitung skor agregat berbobot dari beberapa pinjaman.
+ *
+ * Skema bobot ("recency-weighted"):
+ * - Pinjaman TERAKHIR (tanggal cair paling baru) mendapat bobot `latestLoanWeight` (default 0,6).
+ * - Pinjaman sebelumnya berbagi sisanya `(1 - latestLoanWeight)` secara merata (default 0,4).
+ * - Bila hanya ada satu pinjaman yang punya siklus, bobotnya 1.
+ *
+ * Contoh default (0,6): pinjaman #1 skor 70 & pinjaman #2 skor 100 →
+ * `0,4×70 + 0,6×100 = 88`. Untuk 3 pinjaman: #3 = 60%, #1 & #2 = 20% masing-masing.
+ *
+ * Pinjaman tanpa siklus terbayar (belum ada riwayat) diabaikan dari agregasi.
+ */
+export function computeWeightedScore(
+  loans: LoanCycleInfo[],
+  cfg: Partial<CreditScoringConfig> = {},
+): { loans: LoanScoreRow[]; finalScore: number; grade: CreditGrade; multiplier: number; eligibleCount: number } {
+  const config = { ...DEFAULT_CREDIT_SCORING_CONFIG, ...cfg }
+  const latestWeight = Math.max(0, Math.min(1, config.latestLoanWeight))
+
+  // Urutkan pinjaman dari paling lama → paling baru; hanya yang punya siklus.
+  const sorted = [...loans].sort((a, b) => a.tanggalCair.getTime() - b.tanggalCair.getTime())
+  const eligible = sorted.filter((l) => l.cycles.length > 0)
+
+  const n = eligible.length
+  const olderWeight = n > 1 ? (1 - latestWeight) / (n - 1) : 0
+
+  const rows: LoanScoreRow[] = sorted.map((l) => {
+    const cycleScores = l.cycles.map((c) => c.cycleScore)
+    const score = cycleScores.length > 0 ? computeFinalScore(cycleScores) : 0
+    const grade = gradeFromScore(score, config)
+    const eligibleIndex = eligible.findIndex((e) => e.pinjamanId === l.pinjamanId)
+    let weight = 0
+    if (eligibleIndex >= 0) {
+      weight = eligibleIndex === n - 1 ? (n === 1 ? 1 : latestWeight) : olderWeight
+    }
+    return {
+      pinjamanId: l.pinjamanId,
+      nomorKontrak: l.nomorKontrak,
+      status: l.status,
+      tanggalCair: l.tanggalCair,
+      pokok: l.pokok,
+      score,
+      grade,
+      paidCycles: l.cycles.length,
+      totalCycles: l.cycles.length,
+      weight,
+      lateCycles: l.cycles.filter((c) => c.dpd > 0),
+    }
+  })
+
+  const finalScoreRaw = rows.reduce((acc, r) => acc + r.score * r.weight, 0)
+  const finalScore = clamp(finalScoreRaw, 0, 100)
+  const grade = gradeFromScore(finalScore, config)
+  const multiplier = limitMultiplierForGrade(grade, config)
+
+  return { loans: rows, finalScore, grade, multiplier, eligibleCount: n }
+}
+
+/** Ringkasan sederhana: hanya skor akhir + kategori (untuk list/tabel). */
+export function scoreLoans(
+  loans: LoanCycleInfo[],
+  cfg: Partial<CreditScoringConfig> = {},
+): { finalScore: number; grade: CreditGrade } {
+  const res = computeWeightedScore(loans, cfg)
+  return { finalScore: res.finalScore, grade: res.grade }
+}
+
+// ---------------------------------------------------------------------------
+// Keterangan naratif: Kelebihan (Pros) & Kekurangan (Cons)
+// ---------------------------------------------------------------------------
+
+export type CreditInsight = { pros: string[]; cons: string[] }
+
+/**
+ * Membangun daftar kelebihan & kekurangan dari hasil skor berbobot.
+ * Dipakai untuk panel "Keterangan Skor" di halaman nasabah.
+ */
+export function buildCreditInsights(
+  result: ReturnType<typeof computeWeightedScore>,
+  cfg: Partial<CreditScoringConfig> = {},
+): CreditInsight {
+  const config = { ...DEFAULT_CREDIT_SCORING_CONFIG, ...cfg }
+  const { loans, finalScore, grade, eligibleCount } = result
+  const pros: string[] = []
+  const cons: string[] = []
+
+  const totalLate = loans.reduce((acc, l) => acc + l.lateCycles.length, 0)
+  const totalCycles = loans.reduce((acc, l) => acc + l.paidCycles, 0)
+  const worst = loans
+    .flatMap((l) => l.lateCycles.map((c) => ({ ...c, kontrak: l.nomorKontrak })))
+    .sort((a, b) => b.dpd - a.dpd)[0]
+  const defaultCount = loans
+    .flatMap((l) => l.lateCycles)
+    .filter((c) => c.cycleScore <= config.defaultScore).length
+
+  // ---- Ruang lingkup data ----
+  if (eligibleCount === 0) {
+    cons.push("Belum ada riwayat pembayaran yang bisa dinilai (tidak ada siklus terbayar).")
+    return { pros, cons }
+  }
+  if (eligibleCount === 1) {
+    pros.push("Baru 1 pinjaman dengan riwayat — skor masih awal, akan lebih stabil setelah beberapa siklus pinjaman.")
+  }
+
+  // ---- Skor & kategori keseluruhan ----
+  if (grade === "A") pros.push(`Skor kredit ${finalScore} (kategori A) — performa pembayaran sangat baik.`)
+  else if (grade === "B") pros.push(`Skor kredit ${finalScore} (kategori B) — performa pembayaran baik.`)
+  else if (grade === "C") pros.push(`Skor kredit ${finalScore} (kategori C) — performa cukup, ada ruang perbaikan.`)
+  else if (grade === "D") cons.push(`Skor kredit ${finalScore} (kategori D) — performa kurang baik.`)
+  else cons.push(`Skor kredit ${finalScore} (kategori E) — riwayat buruk/macet; pengajuan baru berisiko.`)
+
+  // ---- Ketepatan waktu keseluruhan ----
+  if (totalLate === 0) {
+    pros.push(`Seluruh ${totalCycles} cicilan dibayar tepat waktu (tanpa keterlambatan).`)
+  } else {
+    cons.push(`Terdapat keterlambatan di ${totalLate} dari ${totalCycles} cicilan.`)
+  }
+
+  // ---- Tren (pinjaman terakhir vs sebelumnya) ----
+  const eligibleSorted = loans.filter((l) => l.weight > 0).sort((a, b) => a.tanggalCair.getTime() - b.tanggalCair.getTime())
+  if (eligibleSorted.length >= 2) {
+    const last = eligibleSorted[eligibleSorted.length - 1]
+    const older = eligibleSorted.slice(0, -1)
+    const olderAvg = older.reduce((acc, l) => acc + l.score, 0) / older.length
+    if (last.score > olderAvg + 2) {
+      pros.push(`Tren membaik: skor pinjaman terakhir (${round1(last.score)}) lebih tinggi dari rata-rata sebelumnya (${round1(olderAvg)}).`)
+    } else if (last.score < olderAvg - 2) {
+      cons.push(`Tren menurun: skor pinjaman terakhir (${round1(last.score)}) lebih rendah dari rata-rata sebelumnya (${round1(olderAvg)}).`)
+    } else {
+      pros.push(`Performa stabil antara pinjaman terakhir dan sebelumnya.`)
+    }
+  }
+
+  // ---- Detail per pinjaman ----
+  for (const l of loans) {
+    if (l.paidCycles === 0) continue
+    if (l.lateCycles.length === 0) {
+      pros.push(`Pinjaman ${l.nomorKontrak}: ${l.paidCycles} cicilan, semua tepat waktu (skor ${round1(l.score)}).`)
+    } else {
+      const list = l.lateCycles
+        .map((c) => `ke-${c.angsuranKe} +${c.dpd}h`)
+        .join(", ")
+      cons.push(`Pinjaman ${l.nomorKontrak}: terlambat di cicilan ${list} (skor ${round1(l.score)}).`)
+    }
+  }
+
+  // ---- Keterlambatan terparah ----
+  if (worst && worst.dpd > 0) {
+    cons.push(`Keterlambatan terparah: ${worst.dpd} hari pada ${worst.kontrak} cicilan ke-${worst.angsuranKe}.`)
+  }
+  if (defaultCount > 0) {
+    cons.push(`${defaultCount} cicilan masuk kategori penalti berat (DPD ≥ ${config.late3MaxDpd + 1}).`)
+  }
+
+  // ---- Rekomendasi plafon ----
+  const pct = Math.round(limitMultiplierForGrade(grade, config) * 100)
+  if (pct > 0) pros.push(`Rekomendasi plafon berikutnya: +${pct}% dari plafon terakhir.`)
+  else if (pct < 0) cons.push(`Rekomendasi plafon berikutnya: ${pct}% dari plafon terakhir.`)
+  else pros.push(`Rekomendasi plafon berikutnya: tetap (0%).`)
+
+  return { pros, cons }
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10
+}

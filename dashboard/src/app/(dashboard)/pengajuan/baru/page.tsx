@@ -32,6 +32,16 @@ type SuggestedLimit = {
   suggestedLimit: number | null
   finalScore: number | null
   grade: string | null
+  breakdown: Array<{
+    nomorKontrak: string
+    status: string
+    score: number
+    grade: string
+    weight: number
+    paidCycles: number
+    lateCycles: Array<{ angsuranKe: number; dpd: number; cycleScore: number }>
+  }>
+  insights: { pros: string[]; cons: string[] }
 } | null
 
 function formatRupiah(n: number) {
@@ -372,6 +382,68 @@ export default function PengajuanBaruPage() {
                 {errors.tenor && <FieldError>{errors.tenor.message}</FieldError>}
               </Field>
 
+              {/* Plafon Saran (Informasi) — ditaruh tepat di atas input Plafon Diajukan agar langsung terbaca */}
+              {suggestedLimit && (
+                <Card className="bg-sky-50 border-sky-200">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2 text-sky-800">
+                      <CreditCard className="size-4" /> Plafon Saran (Informasi)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-xs">Skor Kredit</span>
+                      <span className="font-semibold">
+                        {suggestedLimit.finalScore ?? "-"} · {suggestedLimit.grade ?? "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-xs">Plafon Terakhir</span>
+                      <span className="font-medium">
+                        {suggestedLimit.baseLimit != null ? formatRupiah(suggestedLimit.baseLimit) : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-xs">Plafon Saran Berikutnya</span>
+                      <span className="font-bold text-sky-900">
+                        {suggestedLimit.suggestedLimit != null
+                          ? formatRupiah(suggestedLimit.suggestedLimit)
+                          : "-"}
+                      </span>
+                    </div>
+                    {(suggestedLimit.insights.pros.length > 0 || suggestedLimit.insights.cons.length > 0) && (
+                      <div className="mt-1 space-y-1 border-t border-sky-200 pt-2">
+                        {suggestedLimit.insights.pros.slice(0, 3).map((t, i) => (
+                          <p key={`p${i}`} className="text-[11px] text-emerald-700 leading-snug">✓ {t}</p>
+                        ))}
+                        {suggestedLimit.insights.cons.slice(0, 3).map((t, i) => (
+                          <p key={`c${i}`} className="text-[11px] text-rose-700 leading-snug">✗ {t}</p>
+                        ))}
+                      </div>
+                    )}
+                    {suggestedLimit.suggestedLimit != null && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-1 w-full border-sky-300 text-sky-800 hover:bg-sky-100"
+                        onClick={() =>
+                          setValue("plafonDiajukan", suggestedLimit.suggestedLimit ?? 0, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          })
+                        }
+                      >
+                        Terapkan plafon saran
+                      </Button>
+                    )}
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      Dihitung dari plafon pinjaman lunas terakhir × penyesuaian kategori skor (skor berbobot per pinjaman). Tidak membatasi pengajuan.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field>
                   <FieldLabel htmlFor="plafonDiajukan">Plafon Diajukan (Rp) <span className="text-red-500">*</span></FieldLabel>
@@ -487,41 +559,6 @@ export default function PengajuanBaruPage() {
         </div>
 
         <div className="lg:col-span-2 space-y-4">
-          {suggestedLimit && (
-            <Card className="bg-sky-50 border-sky-200">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2 text-sky-800">
-                  <CreditCard className="size-4" /> Plafon Saran (Informasi)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground text-xs">Skor Kredit</span>
-                  <span className="font-semibold">
-                    {suggestedLimit.finalScore ?? "-"} · {suggestedLimit.grade ?? "-"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground text-xs">Plafon Terakhir</span>
-                  <span className="font-medium">
-                    {suggestedLimit.baseLimit != null ? formatRupiah(suggestedLimit.baseLimit) : "-"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground text-xs">Plafon Saran Berikutnya</span>
-                  <span className="font-bold text-sky-900">
-                    {suggestedLimit.suggestedLimit != null
-                      ? formatRupiah(suggestedLimit.suggestedLimit)
-                      : "-"}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  Dihitung dari pinjaman lunas terakhir × penyesuaian kategori skor. Tidak membatasi pengajuan.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
           <KalkulatorAngsuran
             key={`${Number(plafon)}-${Number(tenor)}-${Number(bunga)}-${tipeTenor}`}
             plafon={Number(plafon)}

@@ -43,7 +43,9 @@ Alur inti kredit dari request sampai pembayaran cicilan.
 - [x] Pelunasan dipercepat dengan bunga proporsional (hitung per hari aktual per angsuran)
 - [x] Nominal negosiasi pelunasan (diskon bunga, pokok tetap lunas penuh)
 - [x] Credit scoring performa 0-100 + kategori A-E (matriks DPD, anti-bias tenor)
-- [x] Plafon saran dinamis per kategori (informasional) di form pengajuan
+- [x] Skor agregat per-pinjaman berbobot recency (pinjaman terakhir 60%, sisanya dibagi rata; bobot editable)
+- [x] Rincian skor per pinjaman + Kelebihan/Kekurangan (sebut cicilan ke-berapa terlambat, keterlambatan terparah, tren)
+- [x] Plafon saran dinamis per kategori (informasional) di form pengajuan — dipindah di atas input "Plafon Diajukan" + tombol Terapkan
 - [x] Riwayat skor kredit per pembayaran + panel Aksi Cepat di detail nasabah
 - [ ] Batch posting pembayaran (multi kontrak)
 - [ ] Reminder otomatis untuk angsuran jatuh tempo
