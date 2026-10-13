@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   allowedDevOrigins: ["168.110.210.101", "api.devk.my.id", "pc.piiblog.net", ".piiblog.net", "*"],
   turbopack: {
     root: projectRoot,

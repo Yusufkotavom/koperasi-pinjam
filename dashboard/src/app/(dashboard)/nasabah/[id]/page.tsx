@@ -1,14 +1,14 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getNasabahById } from "@/actions/nasabah"
-import { getRankingConfig } from "@/actions/settings"
+import { getCreditScoringConfig } from "@/actions/settings"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { ArrowLeft, Edit, Phone, MapPin, Briefcase, CreditCard, CalendarDays, Store } from "lucide-react"
-import { computeRanking, explainRanking } from "@/lib/ranking"
+import { ArrowLeft, Edit, Phone, MapPin, Briefcase, CreditCard, CalendarDays, Store, TrendingUp, Zap, Wallet, FileText, FilePlus, CircleDollarSign, History, PiggyBank } from "lucide-react"
+import { scoreFromInstallments, cycleScoreFromDpd, computeDpd, cycleScoreLabel, GRADE_DESCRIPTION, DPD_MATRIX_DESCRIPTION, computeFinalScore, gradeFromScore } from "@/lib/credit-score"
 
 function docTitle(url: string) {
   const clean = url.split("?")[0]
@@ -36,11 +36,20 @@ function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
 }
 
-function rankingBadge(rank: string) {
-  if (rank === "A") return <Badge className="bg-emerald-100 text-emerald-700">A - Sangat Lancar</Badge>
-  if (rank === "B") return <Badge className="bg-blue-100 text-blue-700">B - Lancar</Badge>
-  if (rank === "C") return <Badge className="bg-amber-100 text-amber-700">C - Perlu Pantau</Badge>
-  return <Badge className="bg-red-100 text-red-700">D - Risiko</Badge>
+function creditGradeBadge(grade: string, score: number) {
+  const map: Record<string, { cls: string; label: string }> = {
+    A: { cls: "bg-emerald-100 text-emerald-700", label: "Sangat Baik" },
+    B: { cls: "bg-blue-100 text-blue-700", label: "Baik" },
+    C: { cls: "bg-amber-100 text-amber-700", label: "Cukup" },
+    D: { cls: "bg-rose-100 text-rose-700", label: "Kurang Baik" },
+    E: { cls: "bg-slate-200 text-slate-700", label: "Buruk" },
+  }
+  const m = map[grade] ?? map.C
+  return (
+    <Badge className={m.cls}>
+      {grade} · {m.label} ({score})
+    </Badge>
+  )
 }
 
 export default async function NasabahDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -48,9 +57,9 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
   const nasabah = await getNasabahById(id)
   if (!nasabah) notFound()
   const now = new Date()
-  const rankingConfig = await getRankingConfig()
+  const creditScoringConfig = await getCreditScoringConfig()
 
-  // Indikator konsistensi dan ranking (mengikuti logika laporan).
+  // Indikator konsistensi dan credit score (mengikuti logika laporan).
   const indikator = (() => {
     let totalTagihanArrears = 0
     let totalDibayarArrears = 0
@@ -60,6 +69,7 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
     let outstanding = 0
     let anomaliPembayaran = 0
     let anomaliNominal = 0
+    const creditInstallments: Parameters<typeof scoreFromInstallments>[0] = []
 
     const pinjamanList = nasabah.pengajuan
       .map((p) => p.pinjaman)
@@ -88,6 +98,17 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
         const bayarParsial = pembayaranTagMap.get(jadwal.id) ?? 0
         const bayarEfektif = jadwal.sudahDibayar ? nominalTagihan : Math.min(nominalTagihan, bayarParsial)
 
+        // Skor berjalan = rata-rata nilai performa cicilan yang SUDAH terealisasi (dibayar).
+        if (jadwal.sudahDibayar) {
+          creditInstallments.push({
+            sudahDibayar: jadwal.sudahDibayar,
+            tanggalJatuhTempo: jadwal.tanggalJatuhTempo,
+            tanggalBayar: jadwal.tanggalBayar,
+            cycleScore: jadwal.cycleScore,
+            dpd: jadwal.dpd,
+          })
+        }
+
         // Hanya hitung tagihan yang SUDAH JATUH TEMPO (atau sudah dibayar) ke tunggakan
         if (jadwal.sudahDibayar || jadwal.tanggalJatuhTempo <= now || bayarEfektif > 0) {
           totalTagihanArrears += nominalTagihan
@@ -109,7 +130,7 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
     }
 
     const tunggakanNominal = Math.max(0, totalTagihanArrears - totalDibayarArrears)
-    const ranking = computeRanking({ telat, tunggakanNominal }, rankingConfig)
+    const credit = scoreFromInstallments(creditInstallments, now, creditScoringConfig)
 
     return {
       tunggakanNominal,
@@ -117,15 +138,56 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
       belumJatuhTempo,
       belumBayar,
       outstanding,
-      ranking,
+      creditScore: credit.finalScore,
+      creditGrade: credit.grade,
       anomaliPembayaran,
       anomaliNominal,
     }
   })()
-  const rankingExplain = explainRanking(
-    { telat: indikator.telat, tunggakanNominal: indikator.tunggakanNominal },
-    rankingConfig
-  )
+
+  // Riwayat skor per pembayaran: skor berjalan (running) rata-rata setelah tiap pembayaran.
+  const creditHistory = (() => {
+    const rows: {
+      tanggal: Date
+      kontrak: string
+      angsuranKe: number
+      dpd: number
+      cycleScore: number
+      runningScore: number
+      grade: string
+    }[] = []
+
+    for (const p of nasabah.pengajuan) {
+      const pinjaman = p.pinjaman
+      if (!pinjaman) continue
+      // Urutkan angsuran sesuai jatuh tempo.
+      const jadwal = [...pinjaman.jadwalAngsuran].sort(
+        (a, b) => a.tanggalJatuhTempo.getTime() - b.tanggalJatuhTempo.getTime(),
+      )
+      const scoresSoFar: number[] = []
+      for (const j of jadwal) {
+        // Hanya tampilkan siklus yang SUDAH dibayar (riwayat pembayaran).
+        if (!j.sudahDibayar || !j.tanggalBayar) continue
+        const dpd = j.dpd ?? computeDpd(j.tanggalJatuhTempo, j.tanggalBayar)
+        const cycleScore = j.cycleScore ?? cycleScoreFromDpd(dpd, creditScoringConfig)
+        scoresSoFar.push(cycleScore)
+        // Skor rata-rata = rata-rata skor siklus yang sudah dibayar s/d titik ini.
+        const runningScore = computeFinalScore(scoresSoFar)
+        const grade = gradeFromScore(runningScore, creditScoringConfig)
+        rows.push({
+          tanggal: j.tanggalBayar,
+          kontrak: pinjaman.nomorKontrak,
+          angsuranKe: j.angsuranKe,
+          dpd,
+          cycleScore,
+          runningScore,
+          grade,
+        })
+      }
+    }
+
+    return rows.sort((a, b) => b.tanggal.getTime() - a.tanggal.getTime())
+  })()
 
   const transaksiTerjadi = nasabah.pengajuan
     .flatMap((p) =>
@@ -169,6 +231,14 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
     { icon: CreditCard, label: "NIK", value: nasabah.nik },
   ]
 
+  // Pinjaman aktif (belum lunas) untuk aksi cepat bayar cicilan / kartu angsuran.
+  const pinjamanAktif = nasabah.pengajuan
+    .map((p) => p.pinjaman)
+    .find((p): p is NonNullable<typeof p> => Boolean(p) && p!.status !== "LUNAS")
+  const pengajuanSiapCair = nasabah.pengajuan.find(
+    (p) => p.status === "DISETUJUI" && !p.pinjaman,
+  )
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -188,9 +258,69 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
         </Button>
       </div>
 
+      {/* Aksi Cepat */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="size-4 text-primary" /> Aksi Cepat
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {pinjamanAktif ? (
+            <>
+              <Button asChild className="bg-emerald-600 text-white hover:bg-emerald-700">
+                <Link href={`/pembayaran?search=${encodeURIComponent(pinjamanAktif.nomorKontrak)}`}>
+                  <Wallet className="size-4" /> Bayar Cicilan
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/dokumen/kartu-angsuran/${pinjamanAktif.id}`} target="_blank">
+                  <FileText className="size-4" /> Kartu Angsuran
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <Button asChild className="bg-emerald-600 text-white hover:bg-emerald-700">
+              <Link href="/pembayaran">
+                <Wallet className="size-4" /> Bayar Cicilan
+              </Link>
+            </Button>
+          )}
+
+          <Button asChild variant="outline">
+            <Link href={`/pengajuan/baru?nasabahId=${nasabah.id}`}>
+              <FilePlus className="size-4" /> Ajukan Pinjaman
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline">
+            <Link href="/simpanan/baru">
+              <PiggyBank className="size-4" /> Buka Simpanan
+            </Link>
+          </Button>
+
+          {pengajuanSiapCair ? (
+            <Button asChild className="bg-blue-600 text-white hover:bg-blue-700">
+              <Link href={`/pencairan?id=${pengajuanSiapCair.id}`}>
+                <CircleDollarSign className="size-4" /> Cairkan Pinjaman
+              </Link>
+            </Button>
+          ) : null}
+
+          <Button asChild variant="outline">
+            <Link href={`/laporan/transaksi-per-user?search=${encodeURIComponent(nasabah.namaLengkap)}`}>
+              <History className="size-4" /> Riwayat Pembayaran
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" asChild>
           <a href="#informasi">Informasi</a>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <a href="#skor">Skor ({creditHistory.length})</a>
         </Button>
         <Button variant="outline" size="sm" asChild>
           <a href="#penjamin">Penjamin ({nasabah.penjamin.length})</a>
@@ -267,17 +397,21 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-xs">Ranking</span>
+              <span className="text-muted-foreground text-xs">Skor Kredit</span>
               <Tooltip>
-                <TooltipTrigger render={<span className="inline-flex">{rankingBadge(indikator.ranking)}</span>} />
+                <TooltipTrigger
+                  render={
+                    <span className="inline-flex">
+                      {creditGradeBadge(indikator.creditGrade, indikator.creditScore)}
+                    </span>
+                  }
+                />
                 <TooltipContent className="max-w-sm">
                   <div className="text-xs space-y-1">
-                    <div className="font-semibold">Alasan Ranking</div>
-                    <div>{rankingExplain.summary}</div>
-                    <div className="pt-1">
-                      {rankingExplain.rules.map((line) => (
-                        <div key={line}>{line}</div>
-                      ))}
+                    <div className="font-semibold">Skor Performa Pembayaran</div>
+                    <div>
+                      Rata-rata nilai performa cicilan (0–100), dihitung dari matriks DPD. Kategori menentukan
+                      penyesuaian plafon pinjaman berikutnya (informasi saja).
                     </div>
                   </div>
                 </TooltipContent>
@@ -335,6 +469,101 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
           </CardContent>
         </Card>
       </div>
+
+      {/* Riwayat Skor Kredit */}
+      <Card id="skor" className="scroll-mt-24">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="size-4 text-primary" />
+            <CardTitle className="text-base">Riwayat Skor Kredit</CardTitle>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 pt-2 text-xs">
+            <span className="text-muted-foreground">
+              Skor akhir saat ini:{" "}
+              <span className="font-bold text-foreground">
+                {indikator.creditScore} · {indikator.creditGrade}
+              </span>
+            </span>
+            <Badge className="border-0 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+              {GRADE_DESCRIPTION[indikator.creditGrade as keyof typeof GRADE_DESCRIPTION]?.label ?? "-"}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground pt-1">
+            {GRADE_DESCRIPTION[indikator.creditGrade as keyof typeof GRADE_DESCRIPTION]?.detail ??
+              "Skor performa pembayaran (0–100)."}
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          {creditHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">Belum ada pembayaran tercatat untuk dihitung skornya.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="text-left px-4 py-2.5 font-medium">Tanggal Bayar</th>
+                    <th className="text-left px-4 py-2.5 font-medium">No. Kontrak</th>
+                    <th className="text-right px-4 py-2.5 font-medium">Ke-</th>
+                    <th className="text-right px-4 py-2.5 font-medium">DPD</th>
+                    <th className="text-right px-4 py-2.5 font-medium">Skor Siklus</th>
+                    <th className="text-right px-4 py-2.5 font-medium">Skor Rata-rata</th>
+                    <th className="text-left px-4 py-2.5 font-medium">Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditHistory.map((row, idx) => (
+                    <tr key={`${row.kontrak}-${row.angsuranKe}-${idx}`} className="border-b hover:bg-muted/20">
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                        {new Date(row.tanggal).toLocaleDateString("id-ID")}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs">{row.kontrak}</td>
+                      <td className="px-4 py-2.5 text-right">{row.angsuranKe}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className={row.dpd > 0 ? "text-orange-600 font-medium" : "text-emerald-600"}>
+                          {row.dpd}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{row.cycleScore}</td>
+                      <td className="px-4 py-2.5 text-right font-bold">{row.runningScore}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge
+                          className={`border-0 ${
+                            row.cycleScore >= 100
+                              ? "bg-emerald-100 text-emerald-700"
+                              : row.cycleScore >= 70
+                                ? "bg-blue-100 text-blue-700"
+                                : row.cycleScore >= 40
+                                  ? "bg-amber-100 text-amber-700"
+                                  : row.cycleScore >= 0
+                                    ? "bg-orange-100 text-orange-700"
+                                    : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {cycleScoreLabel(row.cycleScore)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="border-t bg-muted/20 p-4">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">
+                  Matriks penilaian performa per siklus (DPD → Skor):
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-3 lg:grid-cols-5">
+                  {DPD_MATRIX_DESCRIPTION.map((m) => (
+                    <div key={m.range} className="rounded border bg-background px-2 py-1.5">
+                      <span className="font-mono font-semibold">{m.range}</span>
+                      <span className="text-muted-foreground"> → {m.score}</span>
+                      <p className="text-muted-foreground">{m.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card id="dokumen" className="scroll-mt-24">
         <CardHeader>

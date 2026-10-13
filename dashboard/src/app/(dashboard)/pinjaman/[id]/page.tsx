@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Separator } from "@/components/ui/separator"
 import { getPinjamanById } from "@/actions/pinjaman"
-import { ArrowLeft, User, Wallet, Calendar, TrendingUp } from "lucide-react"
+import { ArrowLeft, User, Wallet, Calendar, TrendingUp, Receipt } from "lucide-react"
 import { format } from "date-fns"
 import { id as localeId } from "date-fns/locale"
 
@@ -47,9 +47,17 @@ export default async function PinjamanDetailPage({ params }: { params: Promise<{
             <p className="text-muted-foreground">{nasabah.namaLengkap}</p>
           </div>
         </div>
-        <Badge variant={pinjaman.status === "AKTIF" ? "default" : "secondary"} className="text-lg px-4 py-2">
-          {pinjaman.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button asChild className="bg-emerald-600 text-white hover:bg-emerald-700">
+            <Link href={`/pembayaran?search=${encodeURIComponent(pinjaman.nomorKontrak)}`}>
+              <Receipt className="h-4 w-4" />
+              Bayar Angsuran
+            </Link>
+          </Button>
+          <Badge variant={pinjaman.status === "AKTIF" ? "default" : "secondary"} className="text-lg px-4 py-2">
+            {pinjaman.status}
+          </Badge>
+        </div>
       </div>
 
       {/* Summary Cards */}

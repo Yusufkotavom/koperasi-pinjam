@@ -5,7 +5,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { nasabahSchema, type NasabahInput } from "@/lib/validations/nasabah"
 import { computeRanking } from "@/lib/ranking"
-import { getRankingConfig } from "@/actions/settings"
+import { scoreFromInstallments, type CreditGrade } from "@/lib/credit-score"
+import { getRankingConfig, getCreditScoringConfig } from "@/actions/settings"
 import { serializeData } from "@/lib/utils"
 import { Prisma, RoleType } from "@prisma/client"
 import { requireRoles } from "@/lib/roles"
@@ -54,6 +55,7 @@ export async function getNasabahList(params: {
 
   const now = new Date()
   const rankingConfig = await getRankingConfig()
+  const creditScoringConfig = await getCreditScoringConfig()
 
   const page = params.page ?? 1
   const limit = params.limit ?? 20
@@ -111,6 +113,8 @@ export async function getNasabahList(params: {
                     sudahDibayar: true,
                     tanggalJatuhTempo: true,
                     tanggalBayar: true,
+                    dpd: true,
+                    cycleScore: true,
                   },
                 },
                 pembayaran: {
@@ -144,6 +148,7 @@ export async function getNasabahList(params: {
     let overdueOldestDaysLate = 0
     let overdueMaxDaysLate = 0
     let aktifPinjaman = 0
+    const creditInstallments: Parameters<typeof scoreFromInstallments>[0] = []
 
     const pinjamanList = nasabah.pengajuan
       .map((p) => p.pinjaman)
@@ -171,6 +176,17 @@ export async function getNasabahList(params: {
         const nominalTagihan = Number(jadwal.total)
         const bayarParsial = pembayaranTagMap.get(jadwal.id) ?? 0
         const bayarEfektif = jadwal.sudahDibayar ? nominalTagihan : Math.min(nominalTagihan, bayarParsial)
+
+        // Skor berjalan = rata-rata nilai performa cicilan yang SUDAH terealisasi (dibayar).
+        if (jadwal.sudahDibayar) {
+          creditInstallments.push({
+            sudahDibayar: jadwal.sudahDibayar,
+            tanggalJatuhTempo: jadwal.tanggalJatuhTempo,
+            tanggalBayar: jadwal.tanggalBayar,
+            cycleScore: jadwal.cycleScore,
+            dpd: jadwal.dpd,
+          })
+        }
 
         // Hanya hitung tagihan yang SUDAH JATUH TEMPO (atau sudah dibayar) ke tunggakan
         if (jadwal.sudahDibayar || jadwal.tanggalJatuhTempo <= now || bayarEfektif > 0) {
@@ -213,10 +229,15 @@ export async function getNasabahList(params: {
     const tunggakanNominal = Math.max(0, totalTagihanArrears - totalDibayarArrears)
     const ranking = computeRanking({ telat, tunggakanNominal }, rankingConfig)
 
+    // Skor credit baru (0-100 + kategori A-E) dari seluruh cicilan.
+    const credit = scoreFromInstallments(creditInstallments, now, creditScoringConfig)
+
     return {
       ...nasabah,
       indikator: {
         ranking,
+        creditScore: credit.finalScore,
+        creditGrade: credit.grade,
         telat,
         belumBayar,
         belumJatuhTempo,

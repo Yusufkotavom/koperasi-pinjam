@@ -3,6 +3,15 @@
 Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
+## 2026-10-13
+- feat(credit-scoring): mesin skor performa baru 0-100 (rata-rata nilai per siklus, anti-bias tenor) + kategori A-E. Menambah kolom `Pinjaman.finalScore`/`categoryGrade` dan `JadwalAngsuran.dpd`/`cycleScore`.
+- feat(credit-scoring): plafon saran dinamis = plafon pinjaman terakhir × persentase kategori (informasional, tanpa guard transaksi, tanpa tier rounding).
+- feat(credit-scoring): konfigurasi terpusat `CREDIT_SCORING_CONFIG` (matriks DPD, threshold kategori, % plafon) editable di `/settings/ranking`.
+- feat(nasabah): panel **Aksi Cepat** di detail nasabah — Bayar Cicilan, Kartu Angsuran, Ajukan Pinjaman, Buka Simpanan, Cairkan Pinjaman (muncul bila ada pengajuan DISETUJUI), Riwayat Pembayaran.
+- feat(nasabah): card **Riwayat Skor Kredit** (skor berjalan per pembayaran, DPD, skor rata-rata, keterangan, legend matriks penilaian) + anchor nav `#skor`.
+- feat(pinjaman): tombol **Bayar Angsuran** di halaman detail pinjaman → `/pembayaran?search=<nomorKontrak>`.
+- feat(settings): halaman `Ranking Risiko` → `Credit Scoring & Plafon`.
+
 ## 2026-06-19
 - fix(pembayaran): pelunasan dipercepat sekarang menghitung **bunga proporsional** berdasarkan hari aktual per angsuran (bukan menghapus semua bunga). Angsuran yang sudah lewat jatuh tempo = bunga penuh, yang belum = proporsional.
 - feat(pembayaran): **nominal negosiasi** pada pelunasan dipercepat — user bisa edit nominal bayar (misal kesepakatan diskon). Alokasi: denda → pokok → bunga, sehingga pokok selalu lunas penuh.

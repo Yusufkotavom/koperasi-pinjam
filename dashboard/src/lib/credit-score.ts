@@ -154,6 +154,58 @@ export function evaluateCredit(
   return { finalScore, grade, multiplier }
 }
 
+/**
+ * Input cicilan yang bisa diambil dari query prisma (tanpa prisma dependency).
+ * Dipakai untuk menghitung skor running di berbagai laporan/UI.
+ */
+export type CycleInstallmentInput = {
+  sudahDibayar: boolean
+  tanggalJatuhTempo: Date
+  tanggalBayar: Date | null
+  cycleScore: number | null
+  dpd: number
+}
+
+/**
+ * Ubah daftar cicilan menjadi cycle scores (0..-50 per siklus).
+ * - Dibayar & punya cycleScore → pakai yang dipersist.
+ * - Dibayar tanpa cycleScore → hitung dari tanggalBayar vs jatuh tempo.
+ * - Belum dibayar → DPD = now - jatuh tempo (opsi A).
+ */
+export function cycleScoresFromInstallments(
+  installments: CycleInstallmentInput[],
+  now: Date,
+  cfg: Partial<CreditScoringConfig> = {},
+): number[] {
+  const config = { ...DEFAULT_CREDIT_SCORING_CONFIG, ...cfg }
+  return installments.map((j) => {
+    if (j.sudahDibayar && j.cycleScore != null) return j.cycleScore
+    let dpd: number
+    if (j.sudahDibayar && j.tanggalBayar) {
+      dpd = computeDpd(j.tanggalJatuhTempo, j.tanggalBayar)
+    } else if (j.sudahDibayar) {
+      dpd = j.dpd
+    } else {
+      dpd = computeDpd(j.tanggalJatuhTempo, now)
+    }
+    return cycleScoreFromDpd(dpd, config)
+  })
+}
+
+/**
+ * Hitung skor + kategori dari daftar cicilan (running / final).
+ */
+export function scoreFromInstallments(
+  installments: CycleInstallmentInput[],
+  now: Date,
+  cfg: Partial<CreditScoringConfig> = {},
+): { finalScore: number; grade: CreditGrade; cycleScores: number[] } {
+  const cycleScores = cycleScoresFromInstallments(installments, now, cfg)
+  const finalScore = computeFinalScore(cycleScores)
+  const grade = gradeFromScore(finalScore, cfg)
+  return { finalScore, grade, cycleScores }
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
@@ -163,3 +215,30 @@ export function formatLimitMultiplier(multiplier: number): string {
   const pct = Math.round(multiplier * 100)
   return pct > 0 ? `+${pct}%` : `${pct}%`
 }
+
+/** Label performa per siklus berdasarkan nilai cycle score. */
+export function cycleScoreLabel(score: number): string {
+  if (score >= 100) return "Tepat Waktu"
+  if (score >= 70) return "Telat Ringan"
+  if (score >= 40) return "Telat 1 Siklus"
+  if (score >= 0) return "Gagal Bayar Siklus"
+  return "Default / Macet"
+}
+
+/** Deskripsi kategori skor akhir untuk keterangan UI. */
+export const GRADE_DESCRIPTION: Record<CreditGrade, { label: string; detail: string }> = {
+  A: { label: "Sangat Baik", detail: "Riwayat pembayaran sangat lancar. Plafon berikutnya +30%." },
+  B: { label: "Baik", detail: "Pembayaran baik dengan keterlambatan minor. Plafon berikutnya +15%." },
+  C: { label: "Cukup", detail: "Ada keterlambatan berulang. Plafon berikutnya tetap (0%)." },
+  D: { label: "Kurang Baik", detail: "Keterlambatan signifikan. Plafon berikutnya -20%." },
+  E: { label: "Buruk", detail: "Riwayat macet / penalti berat. Pengajuan baru ditolak secara informasi." },
+}
+
+/** Deskripsi matriks DPD (untuk keterangan tabel skor). */
+export const DPD_MATRIX_DESCRIPTION = [
+  { range: "DPD ≤ 0", score: "100", label: "Tepat waktu / lebih awal" },
+  { range: "DPD 1–3", score: "70", label: "Toleransi ringan" },
+  { range: "DPD 4–7", score: "40", label: "Melewati 1 siklus" },
+  { range: "DPD 8–14", score: "0", label: "Gagal bayar siklus berjalan" },
+  { range: "DPD ≥ 15", score: "-50", label: "Penalti berat / potensi macet" },
+]

@@ -1,0 +1,21 @@
+[Unit]
+Description=Orca runtime server
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+Environment=LIBGL_ALWAYS_SOFTWARE=1
+ExecStart=/opt/orca/orca.AppImage serve --port 6768 --pairing-address 100.83.229.16
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartPreventExitStatus=3
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

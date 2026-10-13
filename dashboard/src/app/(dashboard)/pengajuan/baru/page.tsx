@@ -6,7 +6,7 @@ import { useForm, useWatch, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { NumericFormat } from "react-number-format"
 import { pengajuanSchema, type PengajuanInput } from "@/lib/validations/pengajuan"
-import { createPengajuan, getNasabahPengajuanOptions } from "@/actions/pengajuan"
+import { createPengajuan, getNasabahPengajuanOptions, getSuggestedLimit } from "@/actions/pengajuan"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field, FieldLabel, FieldDescription, FieldError } from "@/components/ui/field"
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Calculator, Save, Upload, X } from "lucide-react"
+import { ArrowLeft, Calculator, CreditCard, Save, Upload, X } from "lucide-react"
 import Link from "next/link"
 
 type NasabahOption = {
@@ -26,6 +26,13 @@ type NasabahOption = {
   kelompok: { nama: string } | null
   kolektor: { name: string } | null
 }
+
+type SuggestedLimit = {
+  baseLimit: number | null
+  suggestedLimit: number | null
+  finalScore: number | null
+  grade: string | null
+} | null
 
 function formatRupiah(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -140,6 +147,7 @@ function KalkulatorAngsuran({
 export default function PengajuanBaruPage() {
   const [isPending, startTransition] = useTransition()
   const [nasabahOptions, setNasabahOptions] = useState<NasabahOption[]>([])
+  const [suggestedLimit, setSuggestedLimit] = useState<SuggestedLimit>(null)
   const [isUploadingDokumen, setIsUploadingDokumen] = useState(false)
   const [uploadedDokumen, setUploadedDokumen] = useState<string[]>([])
   const router = useRouter()
@@ -198,6 +206,22 @@ export default function PengajuanBaruPage() {
     () => nasabahOptions.find((n) => n.id === nasabahId),
     [nasabahId, nasabahOptions]
   )
+
+  useEffect(() => {
+    let cancelled = false
+    setSuggestedLimit(null)
+    if (!nasabahId) return
+    getSuggestedLimit(nasabahId)
+      .then((r) => {
+        if (!cancelled) setSuggestedLimit(r)
+      })
+      .catch(() => {
+        /* plafon saran bersifat opsional; abaikan bila gagal */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [nasabahId])
 
   const handleNasabahSelect = (value: string | null) => {
     const id = value ?? ""
@@ -463,6 +487,41 @@ export default function PengajuanBaruPage() {
         </div>
 
         <div className="lg:col-span-2 space-y-4">
+          {suggestedLimit && (
+            <Card className="bg-sky-50 border-sky-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2 text-sky-800">
+                  <CreditCard className="size-4" /> Plafon Saran (Informasi)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground text-xs">Skor Kredit</span>
+                  <span className="font-semibold">
+                    {suggestedLimit.finalScore ?? "-"} · {suggestedLimit.grade ?? "-"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground text-xs">Plafon Terakhir</span>
+                  <span className="font-medium">
+                    {suggestedLimit.baseLimit != null ? formatRupiah(suggestedLimit.baseLimit) : "-"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground text-xs">Plafon Saran Berikutnya</span>
+                  <span className="font-bold text-sky-900">
+                    {suggestedLimit.suggestedLimit != null
+                      ? formatRupiah(suggestedLimit.suggestedLimit)
+                      : "-"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Dihitung dari pinjaman lunas terakhir × penyesuaian kategori skor. Tidak membatasi pengajuan.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <KalkulatorAngsuran
             key={`${Number(plafon)}-${Number(tenor)}-${Number(bunga)}-${tipeTenor}`}
             plafon={Number(plafon)}

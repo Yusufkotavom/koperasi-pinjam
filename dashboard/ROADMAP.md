@@ -42,6 +42,9 @@ Alur inti kredit dari request sampai pembayaran cicilan.
 - [x] Auto-kembalikan saldo simpanan saat pinjaman lunas
 - [x] Pelunasan dipercepat dengan bunga proporsional (hitung per hari aktual per angsuran)
 - [x] Nominal negosiasi pelunasan (diskon bunga, pokok tetap lunas penuh)
+- [x] Credit scoring performa 0-100 + kategori A-E (matriks DPD, anti-bias tenor)
+- [x] Plafon saran dinamis per kategori (informasional) di form pengajuan
+- [x] Riwayat skor kredit per pembayaran + panel Aksi Cepat di detail nasabah
 - [ ] Batch posting pembayaran (multi kontrak)
 - [ ] Reminder otomatis untuk angsuran jatuh tempo
 

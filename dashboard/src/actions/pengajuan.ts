@@ -13,7 +13,8 @@ import { serializeData } from "@/lib/utils"
 import { ensureAccountingAccounts, getCashBalanceByJenis, postJournalEntry, postPencairanJournal, postPencairanJournalFromSimpanan } from "@/lib/accounting"
 import { requireCompanyId } from "@/lib/tenant"
 import { z } from "zod"
-import { getKolektorBonusConfig } from "./settings"
+import { getKolektorBonusConfig, getCreditScoringConfig } from "./settings"
+import { computeSuggestedLimit } from "@/lib/credit-finalize"
 
 function parseDateOnly(input: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
@@ -112,6 +113,19 @@ export async function getNasabahPengajuanOptions() {
     },
     orderBy: { namaLengkap: "asc" },
   })
+}
+
+/**
+ * Hitung plafon saran untuk nasabah (informasi saja, untuk ditampilkan di form pengajuan).
+ * Berdasarkan pinjaman lunas terakhir + skor kredit (kategori A–E).
+ */
+export async function getSuggestedLimit(nasabahId: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+
+  const config = await getCreditScoringConfig()
+  return computeSuggestedLimit(nasabahId, config)
 }
 
 export async function createPengajuan(input: unknown) {

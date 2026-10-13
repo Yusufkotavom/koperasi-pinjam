@@ -21,6 +21,15 @@ const rankBadge: Record<string, string> = {
   B: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   C: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   D: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
+  E: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+}
+
+const rankLabel: Record<string, string> = {
+  A: "Sangat Baik",
+  B: "Baik",
+  C: "Cukup",
+  D: "Kurang Baik",
+  E: "Buruk",
 }
 
 function fmt(n: number) {
@@ -192,10 +201,10 @@ export default async function NasabahPage({
                           <span className="font-semibold tracking-tight">{row.namaLengkap}</span>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5">
                             <Badge
-                              className={`${rankBadge[row.indikator.ranking] ?? "bg-slate-100 text-slate-600"} hover:${rankBadge[row.indikator.ranking] ?? "bg-slate-100 text-slate-600"} border-0 text-[10px] font-black h-5 uppercase tracking-wider`}
-                              title="Ranking risiko"
+                              className={`${rankBadge[row.indikator.creditGrade] ?? "bg-slate-100 text-slate-600"} border-0 text-[10px] font-black h-5 uppercase tracking-wider`}
+                              title={`Skor kredit ${row.indikator.creditScore} - ${rankLabel[row.indikator.creditGrade] ?? ""}`}
                             >
-                              Rank {row.indikator.ranking}
+                              Skor {row.indikator.creditScore} · {row.indikator.creditGrade}
                             </Badge>
                             {row.indikator.overdueCount > 0 && row.indikator.overdueOldestDueAt ? (
                               <Badge
