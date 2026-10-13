@@ -10,7 +10,9 @@ import { writeAuditLog } from "@/lib/audit"
 import { postJournalEntry, postPembayaranJournal } from "@/lib/accounting"
 import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { computeRanking } from "@/lib/ranking"
-import { getRankingConfig, getDendaConfig } from "@/actions/settings"
+import { getRankingConfig, getDendaConfig, getCreditScoringConfig } from "@/actions/settings"
+import { cycleScoreFromDpd, computeDpd } from "@/lib/credit-score"
+import { computeLoanCredit, persistLoanCredit } from "@/lib/credit-finalize"
 import { requireCompanyId } from "@/lib/tenant"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
@@ -489,6 +491,7 @@ export async function inputPembayaran(input: {
 
   const paid = await getPaidForJadwal(jadwal.pinjamanId, jadwal.id)
   const dendaConfig = await getDendaConfig()
+  const creditConfig = await getCreditScoringConfig()
 
   // Hitung bunga proporsional untuk pelunasan dipercepat
   let bungaLunasProporsional = 0
@@ -609,6 +612,19 @@ export async function inputPembayaran(input: {
           tanggalBayar,
         },
       })
+
+      // Set dpd + cycleScore untuk seluruh cicilan yang dilunasi sekaligus.
+      const allJadwalRows = await tx.jadwalAngsuran.findMany({
+        where: { companyId, pinjamanId: jadwal.pinjamanId },
+        select: { id: true, tanggalJatuhTempo: true },
+      })
+      for (const j of allJadwalRows) {
+        const dpd = computeDpd(j.tanggalJatuhTempo, tanggalBayar)
+        await tx.jadwalAngsuran.update({
+          where: { id: j.id },
+          data: { dpd, cycleScore: cycleScoreFromDpd(dpd, creditConfig) },
+        })
+      }
       sisaBaru = 0
     } else {
       const lunasAngsuran =
@@ -617,9 +633,15 @@ export async function inputPembayaran(input: {
         dendaSisa - alokasiDenda <= 0.0001
 
       if (lunasAngsuran) {
+        const dpd = computeDpd(jadwal.tanggalJatuhTempo, tanggalBayar)
         await tx.jadwalAngsuran.update({
           where: { id: jadwal.id },
-          data: { sudahDibayar: true, tanggalBayar },
+          data: {
+            sudahDibayar: true,
+            tanggalBayar,
+            dpd,
+            cycleScore: cycleScoreFromDpd(dpd, creditConfig),
+          },
         })
       }
     }
@@ -632,6 +654,12 @@ export async function inputPembayaran(input: {
         updatedAt: new Date(),
       },
     })
+
+    // Finalisasi credit scoring saat pinjaman lunas (informasi saja, tanpa guard).
+    if (sisaBaru <= 0) {
+      const credit = await computeLoanCredit(jadwal.pinjamanId, tanggalBayar, creditConfig, tx)
+      await persistLoanCredit(jadwal.pinjamanId, credit, tx)
+    }
 
     if (sisaBaru <= 0) {
       await tx.kolektorBonus.updateMany({
@@ -1391,6 +1419,8 @@ export async function approvePembatalanPembayaran(input: {
         data: {
           sudahDibayar: false,
           tanggalBayar: null,
+          dpd: 0,
+          cycleScore: null,
         },
       })
     }
@@ -1403,6 +1433,18 @@ export async function approvePembatalanPembayaran(input: {
         status: sisaBaru <= 0 ? "LUNAS" : "AKTIF",
       },
     })
+
+    // Recompute skor kredit: jika masih lunas (sisa 0) hitung ulang, jika tidak reset.
+    if (sisaBaru <= 0) {
+      const creditConfig = await getCreditScoringConfig()
+      const credit = await computeLoanCredit(pembayaran.pinjamanId, new Date(), creditConfig, tx)
+      await persistLoanCredit(pembayaran.pinjamanId, credit, tx)
+    } else {
+      await tx.pinjaman.update({
+        where: { id: pembayaran.pinjamanId },
+        data: { finalScore: null, categoryGrade: null },
+      })
+    }
 
     await tx.kasTransaksi.create({
       data: {

@@ -55,8 +55,8 @@ const settingSections = [
     roles: ["SUPER_ADMIN", "OWNER", "ADMIN"],
   },
   {
-    title: "Ranking Risiko",
-    description: "Ambang hari tunggakan untuk indikator kolektibilitas.",
+    title: "Credit Scoring & Plafon",
+    description: "Skor performa pembayaran, kategori A–E, dan penyesuaian plafon dinamis.",
     href: "/settings/ranking",
     icon: BarChart3,
   },

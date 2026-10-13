@@ -1,19 +1,19 @@
-import { getRankingConfig } from "@/actions/settings"
-import { RankingSettingsForm } from "../ranking-settings-form"
+import { getCreditScoringConfig } from "@/actions/settings"
+import { CreditScoringSettingsForm } from "../credit-scoring-settings-form"
 
 export default async function SettingsRankingPage() {
-  const rankingConfig = await getRankingConfig()
+  const creditConfig = await getCreditScoringConfig()
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ranking Risiko</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Credit Scoring & Plafon</h1>
         <p className="text-muted-foreground text-sm">
-          Atur indikator kolektibilitas berdasarkan keterlambatan angsuran.
+          Atur matriks skor performa pembayaran, kategori nasabah A–E, dan persentase
+          penyesuaian plafon pinjaman.
         </p>
       </div>
-      <RankingSettingsForm initial={rankingConfig} />
+      <CreditScoringSettingsForm initial={creditConfig} />
     </div>
   )
 }
-

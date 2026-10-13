@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth"
 import { requireRoles } from "@/lib/roles"
 import { RoleType } from "@prisma/client"
 import { DEFAULT_RANKING_CONFIG, type RankingConfig } from "@/lib/ranking"
+import { DEFAULT_CREDIT_SCORING_CONFIG, type CreditScoringConfig } from "@/lib/credit-score"
 import { DEFAULT_TIME_ZONE, normalizeTimeZone } from "@/lib/datetime"
 import { requireCompanyId } from "@/lib/tenant"
 import {
@@ -174,6 +175,71 @@ export async function updateAccountingMode(input: unknown) {
   })
 
   revalidatePath("/settings")
+  return { success: true }
+}
+
+const CREDIT_SCORING_KEY = "CREDIT_SCORING_CONFIG"
+
+const creditScoringSchema = z.object({
+  late1MaxDpd: z.coerce.number().int().min(0).max(365),
+  late2MaxDpd: z.coerce.number().int().min(0).max(365),
+  late3MaxDpd: z.coerce.number().int().min(0).max(365),
+  onTimeScore: z.coerce.number().min(-100).max(100),
+  late1Score: z.coerce.number().min(-100).max(100),
+  late2Score: z.coerce.number().min(-100).max(100),
+  late3Score: z.coerce.number().min(-100).max(100),
+  defaultScore: z.coerce.number().min(-100).max(100),
+  gradeAFloor: z.coerce.number().min(0).max(100),
+  gradeBFloor: z.coerce.number().min(0).max(100),
+  gradeCFloor: z.coerce.number().min(0).max(100),
+  gradeDFloor: z.coerce.number().min(0).max(100),
+  limitA: z.coerce.number().min(-1).max(10),
+  limitB: z.coerce.number().min(-1).max(10),
+  limitC: z.coerce.number().min(-1).max(10),
+  limitD: z.coerce.number().min(-1).max(10),
+  limitE: z.coerce.number().min(-1).max(10),
+})
+
+export async function getCreditScoringConfig(): Promise<CreditScoringConfig> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+
+  const row = await prisma.companySetting.findUnique({
+    where: { companyId_key: { companyId, key: CREDIT_SCORING_KEY } },
+  })
+  if (!row) return DEFAULT_CREDIT_SCORING_CONFIG
+
+  const parsed = creditScoringSchema.safeParse(row.value)
+  if (!parsed.success) return DEFAULT_CREDIT_SCORING_CONFIG
+
+  return { ...DEFAULT_CREDIT_SCORING_CONFIG, ...parsed.data }
+}
+
+export async function updateCreditScoringConfig(input: unknown) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
+
+  try {
+    requireRoles(session, [RoleType.ADMIN, RoleType.PIMPINAN])
+  } catch {
+    return { error: "Hanya admin/pimpinan yang dapat mengubah pengaturan credit scoring." }
+  }
+
+  const parsed = creditScoringSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+
+  await prisma.companySetting.upsert({
+    where: { companyId_key: { companyId, key: CREDIT_SCORING_KEY } },
+    create: { companyId, key: CREDIT_SCORING_KEY, value: parsed.data },
+    update: { value: parsed.data },
+  })
+
+  revalidatePath("/settings")
+  revalidatePath("/settings/ranking")
+  revalidatePath("/nasabah")
+  revalidatePath("/laporan/transaksi-per-user")
   return { success: true }
 }
 

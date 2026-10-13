@@ -218,6 +218,8 @@ model Pinjaman {
   updatedAt         DateTime              @updatedAt
   tenorType         TenorType             @default(BULANAN)
   companyId         String
+  finalScore        Decimal?              @db.Decimal(5, 2)
+  categoryGrade     String?
   
   // Sumber dana pencairan
   sumberDana        SumberDana            @default(KAS)
@@ -248,6 +250,8 @@ model JadwalAngsuran {
   sudahDibayar      Boolean   @default(false)
   tanggalBayar      DateTime?
   dendaHarian       Decimal   @default(0) @db.Decimal(15, 2)
+  dpd               Int       @default(0)
+  cycleScore        Int?
   companyId         String
   company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   pinjaman          Pinjaman  @relation(fields: [pinjamanId], references: [id], onDelete: Cascade)
