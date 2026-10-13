@@ -210,6 +210,19 @@ describe("computeWeightedScore", () => {
     const r = computeWeightedScore(loans, { latestLoanWeight: 0.5 })
     expect(r.finalScore).toBe(85)
   })
+
+  it("tanggalCair sama → urutan deterministik via createdAt/pinjamanId (hasil stabil apa pun urutan input)", () => {
+    const same = "2026-10-13T12:00:00Z"
+    const a = { ...mkLoan("aaa", same, [70, 70]), createdAt: new Date("2026-10-13T10:00:00Z") }
+    const b = { ...mkLoan("bbb", same, [100, 100]), createdAt: new Date("2026-10-13T11:00:00Z") }
+    const r1 = computeWeightedScore([a, b])
+    const r2 = computeWeightedScore([b, a])
+    // b (createdAt lebih baru) = pinjaman terakhir → bobot 0.6
+    expect(r1.loans[1].pinjamanId).toBe("bbb")
+    expect(r1.loans[1].weight).toBeCloseTo(0.6)
+    expect(r1.finalScore).toBe(r2.finalScore)
+    expect(r1.finalScore).toBe(88)
+  })
 })
 
 describe("buildCreditInsights", () => {

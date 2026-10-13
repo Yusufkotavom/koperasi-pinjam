@@ -106,6 +106,7 @@ export async function getNasabahList(params: {
                 status: true,
                 nomorKontrak: true,
                 tanggalCair: true,
+                createdAt: true,
                 pokokPinjaman: true,
                 sisaPinjaman: true,
                 jadwalAngsuran: {
@@ -231,6 +232,7 @@ export async function getNasabahList(params: {
         nomorKontrak: pinjaman.nomorKontrak,
         status: pinjaman.status,
         tanggalCair: pinjaman.tanggalCair,
+        createdAt: pinjaman.createdAt,
         pokok: Number(pinjaman.pokokPinjaman),
         cycles,
       })

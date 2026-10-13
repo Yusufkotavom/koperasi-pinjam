@@ -271,6 +271,8 @@ export type LoanCycleInfo = {
   tanggalCair: Date
   pokok: number
   cycles: LoanCycleDetail[]
+  /** Tiebreaker deterministik bila tanggalCair sama (mis. hasil backfill). */
+  createdAt?: Date | null
 }
 
 /** Hasil skor per pinjaman. */
@@ -310,7 +312,16 @@ export function computeWeightedScore(
   const latestWeight = Math.max(0, Math.min(1, config.latestLoanWeight))
 
   // Urutkan pinjaman dari paling lama → paling baru; hanya yang punya siklus.
-  const sorted = [...loans].sort((a, b) => a.tanggalCair.getTime() - b.tanggalCair.getTime())
+  // Tiebreaker createdAt + pinjamanId agar urutan (dan bobot) deterministik
+  // ketika tanggalCair sama (mis. hasil backfill massal).
+  const sorted = [...loans].sort((a, b) => {
+    const d = a.tanggalCair.getTime() - b.tanggalCair.getTime()
+    if (d !== 0) return d
+    const ca = a.createdAt ? a.createdAt.getTime() : 0
+    const cb = b.createdAt ? b.createdAt.getTime() : 0
+    if (ca !== cb) return ca - cb
+    return a.pinjamanId < b.pinjamanId ? -1 : a.pinjamanId > b.pinjamanId ? 1 : 0
+  })
   const eligible = sorted.filter((l) => l.cycles.length > 0)
 
   const n = eligible.length

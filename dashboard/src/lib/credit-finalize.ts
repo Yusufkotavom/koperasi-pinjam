@@ -152,6 +152,7 @@ export async function computeSuggestedLimit(
       nomorKontrak: true,
       status: true,
       tanggalCair: true,
+      createdAt: true,
       pokokPinjaman: true,
       finalScore: true,
       categoryGrade: true,
@@ -192,6 +193,7 @@ export async function computeSuggestedLimit(
       nomorKontrak: p.nomorKontrak,
       status: p.status,
       tanggalCair: p.tanggalCair,
+      createdAt: p.createdAt,
       pokok: Number(p.pokokPinjaman),
       cycles,
     }

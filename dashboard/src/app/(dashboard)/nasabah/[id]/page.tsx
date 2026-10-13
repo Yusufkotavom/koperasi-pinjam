@@ -138,6 +138,7 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
         nomorKontrak: pinjaman.nomorKontrak,
         status: pinjaman.status,
         tanggalCair: pinjaman.tanggalCair,
+        createdAt: pinjaman.createdAt,
         pokok: Number(pinjaman.pokokPinjaman),
         cycles,
       })
