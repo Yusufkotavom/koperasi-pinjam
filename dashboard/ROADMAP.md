@@ -47,6 +47,8 @@ Alur inti kredit dari request sampai pembayaran cicilan.
 - [x] Rincian skor per pinjaman + Kelebihan/Kekurangan (sebut cicilan ke-berapa terlambat, keterlambatan terparah, tren)
 - [x] Plafon saran dinamis per kategori (informasional) di form pengajuan — dipindah di atas input "Plafon Diajukan" + tombol Terapkan
 - [x] Riwayat skor kredit per pembayaran + panel Aksi Cepat di detail nasabah
+- [x] Pembulatan cicilan ke ribuan bulat (skenario 2: pokok dibulatkan ke atas, sisa di cicilan terakhir; Σ pokok = plafon tepat, tanpa koma/residu)
+- [x] Bunga editable saat approval (selain plafon) — tersimpan ke pengajuan & dipakai saat pencairan
 - [ ] Batch posting pembayaran (multi kontrak)
 - [ ] Reminder otomatis untuk angsuran jatuh tempo
 

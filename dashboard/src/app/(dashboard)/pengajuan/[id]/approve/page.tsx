@@ -30,6 +30,7 @@ export default async function ApprovePengajuanPage({
   }
 
   const plafon = Number(pengajuan.plafonDiajukan)
+  const bungaPct = Number(pengajuan.bungaPerBulan) * 100
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -85,7 +86,7 @@ export default async function ApprovePengajuanPage({
           </CardContent>
         </Card>
 
-        <ApprovalForm pengajuanId={id} plafonDiajukan={plafon} />
+        <ApprovalForm pengajuanId={id} plafonDiajukan={plafon} bungaDiajukanPct={bungaPct} />
       </div>
     </div>
   )

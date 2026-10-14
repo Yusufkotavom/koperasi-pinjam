@@ -20,6 +20,8 @@ export const approvalSchema = z.object({
   pengajuanId: z.string(),
   aksi: z.enum(["SETUJU", "TOLAK"]),
   plafonDisetujui: z.coerce.number().optional(),
+  // Bunga flat per bulan dalam PERSEN (mis. 1.5 = 1,5%/bulan). Opsional saat approval.
+  bungaDisetujui: z.coerce.number().min(0, "Bunga tidak boleh negatif").max(100, "Bunga maksimal 100%").optional(),
   catatanApproval: z.string().optional(),
 })
 

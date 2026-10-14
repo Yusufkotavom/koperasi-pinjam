@@ -11,9 +11,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { CheckCircle, XCircle } from "lucide-react"
 
-export function ApprovalForm({ pengajuanId, plafonDiajukan }: { pengajuanId: string; plafonDiajukan: number }) {
+export function ApprovalForm({
+  pengajuanId,
+  plafonDiajukan,
+  bungaDiajukanPct,
+}: {
+  pengajuanId: string
+  plafonDiajukan: number
+  bungaDiajukanPct: number
+}) {
   const [isPending, startTransition] = useTransition()
   const [plafonDisetujui, setPlafonDisetujui] = useState(plafonDiajukan)
+  const [bungaDisetujui, setBungaDisetujui] = useState(bungaDiajukanPct)
   const [catatan, setCatatan] = useState("")
   const router = useRouter()
 
@@ -27,7 +36,13 @@ export function ApprovalForm({ pengajuanId, plafonDiajukan }: { pengajuanId: str
       return
     }
     startTransition(async () => {
-      const result = await approvePengajuan({ pengajuanId, aksi, plafonDisetujui, catatanApproval: catatan })
+      const result = await approvePengajuan({
+        pengajuanId,
+        aksi,
+        plafonDisetujui,
+        bungaDisetujui: aksi === "SETUJU" ? bungaDisetujui : undefined,
+        catatanApproval: catatan,
+      })
       if (result.error) {
         toast.error(typeof result.error === "string" ? result.error : "Gagal memproses approval")
         return
@@ -52,6 +67,18 @@ export function ApprovalForm({ pengajuanId, plafonDiajukan }: { pengajuanId: str
             className="bg-white"
           />
           <p className="text-xs text-blue-700">{fmt(plafonDisetujui)}</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Bunga Flat (% / bulan)</Label>
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            value={bungaDisetujui}
+            onChange={(e) => setBungaDisetujui(Number(e.target.value))}
+            className="bg-white"
+          />
+          <p className="text-xs text-blue-700">Bunga saat ini: {bungaDisetujui}% / bulan</p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Catatan (opsional)</Label>

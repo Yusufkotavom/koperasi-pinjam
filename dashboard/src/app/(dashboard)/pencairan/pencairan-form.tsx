@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
 import { Banknote, Wallet } from "lucide-react"
+import { buildRencanaAngsuran } from "@/lib/angsuran"
 
 interface Props {
   pengajuan: {
@@ -57,9 +58,10 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
   const bunga = Number(pengajuan.bungaPerBulan)
   const tenor = pengajuan.tenor
 
-  const angsuranPokok = plafon / tenor
-  const angsuranBunga = plafon * bunga
-  const totalAngsuran = angsuranPokok + angsuranBunga
+  const rencana = buildRencanaAngsuran(plafon, tenor, bunga)
+  const angsuranPokok = rencana.angsuranPokok
+  const angsuranBunga = rencana.angsuranBunga
+  const totalAngsuran = rencana.totalAngsuran
   const nilaiCair = plafon - potonganAdmin - potonganProvisi
 
   // Load simpanan available saat pilih SIMPANAN
@@ -130,6 +132,7 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
               { label: "Angsuran Pokok/bln", value: fmt(angsuranPokok) },
               { label: "Angsuran Bunga/bln", value: fmt(angsuranBunga) },
               { label: "Total Angsuran/bln", value: fmt(totalAngsuran), bold: true },
+              { label: "Cicilan Terakhir", value: fmt(rencana.totalTerakhir) },
               { label: "Total Beban Bunga", value: fmt(angsuranBunga * tenor) },
             ].map((r) => (
               <div key={r.label} className="flex justify-between">

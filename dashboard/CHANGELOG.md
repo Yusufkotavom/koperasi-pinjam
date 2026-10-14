@@ -3,6 +3,12 @@
 Semua perubahan penting pada aplikasi didokumentasikan di file ini.
 Fokus changelog ini: fitur operasional user dashboard (bukan super admin).
 
+## 2026-10-14
+- feat(pinjaman): **pembulatan cicilan ke ribuan bulat** (skenario 2). Pokok per cicilan dibulatkan **ke atas** ke ribuan; **cicilan terakhir menampung seluruh sisa** (sehingga Σ pokok = plafon TEPAT). Bunga flat per cicilan dibulatkan ke ribuan terdekat dan tetap sama tiap periode. Jaminan "tidak miss": Σ pokok = plafon, Σ bunga = bunga flat × tenor, grand total = plafon + Σ bunga. Contoh 1jt/12bln/1,5%: 84.000 ×11 + 76.000 (terakhir), bunga 15.000 → total 1.180.000. Logika di `src/lib/angsuran.ts` (`buildRencanaAngsuran`), dipakai oleh pencairan, form pengajuan, simulasi, dan seed demo.
+- fix(pinjaman): pinjaman yang dibayar penuh kini **pasti tertutup** (status LUNAS, sisa 0) — sebelumnya pembagian tanpa pembulatan meninggalkan residu (mis. sisa Rp 0,04) sehingga pinjaman tidak pernah lunas dan skor final tak tersimpan.
+- feat(pengajuan): **bunga juga bisa diubah saat approval** (selain plafon) di form approval `Form Approval` → tersimpan ke `pengajuan.bungaPerBulan` dan dipakai saat pencairan. Tambah `bungaDisetujui` (persen) di `approvalSchema` + `approvePengajuan`.
+- feat(pengajuan): estimasi angsuran di detail pengajuan & form pencairan kini menampilkan **Total Angsuran/bln** dan **Cicilan Terakhir** (angka bulat) memakai rumus yang sama.
+
 ## 2026-10-13
 - fix(credit-scoring): urutan pinjaman kini **deterministik** saat `tanggalCair` sama (tiebreaker `createdAt` → `pinjamanId`); sebelumnya bobot recency bisa tak stabil dan menampilkan skor berbeda (mis. 97 vs 98) antar halaman.
 - feat(credit-scoring): **skor agregat per-pinjaman berbobot recency** — skor tiap pinjaman dihitung dari rata-rata siklusnya, lalu digabung dengan bobot `latestLoanWeight` (default 60% untuk pinjaman terakhir, sisa dibagi rata ke pinjaman sebelumnya). Contoh: pinjaman #1 skor 70 & #2 skor 100 → 88. Bobot editable di `/settings/ranking`.

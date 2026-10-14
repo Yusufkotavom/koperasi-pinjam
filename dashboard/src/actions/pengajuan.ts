@@ -15,6 +15,7 @@ import { requireCompanyId } from "@/lib/tenant"
 import { z } from "zod"
 import { getKolektorBonusConfig, getCreditScoringConfig } from "./settings"
 import { computeSuggestedLimit } from "@/lib/credit-finalize"
+import { buildRencanaAngsuran } from "@/lib/angsuran"
 
 function parseDateOnly(input: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
@@ -184,7 +185,7 @@ export async function approvePengajuan(input: unknown) {
   const parsed = approvalSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { pengajuanId, aksi, plafonDisetujui, catatanApproval } = parsed.data
+  const { pengajuanId, aksi, plafonDisetujui, bungaDisetujui, catatanApproval } = parsed.data
 
   let updated;
   try {
@@ -195,6 +196,9 @@ export async function approvePengajuan(input: unknown) {
         approverId: userId,
         tanggalApproval: new Date(),
         plafonDisetujui: plafonDisetujui ? new Prisma.Decimal(plafonDisetujui) : undefined,
+        // Bunga diubah dalam PERSEN (1.5 = 1,5%/bulan) → simpan sebagai desimal.
+        bungaPerBulan:
+          bungaDisetujui != null ? new Prisma.Decimal(bungaDisetujui / 100) : undefined,
         catatanApproval: catatanApproval,
       },
     })
@@ -266,9 +270,10 @@ export async function cairkanPinjaman(input: unknown) {
   const tenor = pengajuan.tenor
   const tenorType = pengajuan.tenorType
 
-  const angsuranPokok = plafon / tenor
-  const angsuranBunga = plafon * bunga
-  const totalAngsuran = angsuranPokok + angsuranBunga
+  const rencana = buildRencanaAngsuran(plafon, tenor, bunga)
+  const angsuranPokok = rencana.angsuranPokok
+  const angsuranBunga = rencana.angsuranBunga
+  const totalAngsuran = rencana.totalAngsuran
   const nilaiCair = plafon - potonganAdmin - potonganProvisi
 
   const tglCair = parseDateOnly(tanggalCair)
@@ -351,7 +356,8 @@ export async function cairkanPinjaman(input: unknown) {
       },
     })
 
-    // Generate jadwal angsuran
+    // Generate jadwal angsuran (Skenario 2: pokok dibulatkan ke atas,
+    // sisa ditumpuk di cicilan terakhir; semua nominal bulat ribuan).
     const jadwals = Array.from({ length: tenor }, (_, i) => {
       const tanggalJatuhTempo = tenorType === "MINGGUAN" ? addWeeks(tglCair, i + 1) : addMonths(tglCair, i + 1)
       return {
@@ -359,9 +365,9 @@ export async function cairkanPinjaman(input: unknown) {
         pinjamanId: pin.id,
         angsuranKe: i + 1,
         tanggalJatuhTempo,
-        pokok: new Prisma.Decimal(angsuranPokok),
-        bunga: new Prisma.Decimal(angsuranBunga),
-        total: new Prisma.Decimal(totalAngsuran),
+        pokok: new Prisma.Decimal(rencana.pokok[i]),
+        bunga: new Prisma.Decimal(rencana.bunga[i]),
+        total: new Prisma.Decimal(rencana.total[i]),
       }
     })
 

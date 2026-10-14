@@ -16,6 +16,7 @@ import {
 import { prisma } from "@/lib/prisma"
 import { requireRoles } from "@/lib/roles"
 import { requireCompanyRoles } from "@/lib/tenant"
+import { buildRencanaAngsuran } from "@/lib/angsuran"
 
 type CleanupScope = "NOTIFIKASI" | "TRANSAKSI" | "MASTER" | "AKUNTANSI"
 
@@ -296,9 +297,13 @@ async function createDemoLoan(params: {
   if (existing) return
 
   const bungaPerBulan = 0.02
-  const angsuranPokok = Math.round(params.pokok / params.tenor)
-  const angsuranBunga = Math.round(params.pokok * bungaPerBulan)
-  const totalAngsuran = angsuranPokok + angsuranBunga
+  const rencana = buildRencanaAngsuran(params.pokok, params.tenor, bungaPerBulan)
+  const angsuranPokok = rencana.angsuranPokok
+  const angsuranBunga = rencana.angsuranBunga
+  const totalAngsuran = rencana.totalAngsuran
+  const pokokTerbayar = rencana.pokok
+    .slice(0, params.paidInstallments)
+    .reduce((a, b) => a + b, 0)
   const tanggalCair = addMonths(new Date(), -Math.max(1, Math.floor(params.tenor / 2)))
 
   await prisma.$transaction(async (tx) => {
@@ -341,7 +346,7 @@ async function createDemoLoan(params: {
         nilaiCair: new Prisma.Decimal(params.pokok - 75_000),
         tanggalCair,
         tanggalJatuhTempo: params.tenorType === "MINGGUAN" ? new Date(tanggalCair.getTime() + 7 * 24 * 60 * 60 * 1000) : addMonths(tanggalCair, 1),
-        sisaPinjaman: new Prisma.Decimal(Math.max(0, params.pokok - params.paidInstallments * angsuranPokok)),
+        sisaPinjaman: new Prisma.Decimal(Math.max(0, params.pokok - pokokTerbayar)),
         status: params.paidInstallments >= params.tenor ? "LUNAS" : params.paidInstallments >= 2 ? "AKTIF" : "MENUNGGAK",
       },
     })
@@ -352,15 +357,17 @@ async function createDemoLoan(params: {
           ? new Date(tanggalCair.getTime() + installment * 7 * 24 * 60 * 60 * 1000)
           : addMonths(tanggalCair, installment)
       const isPaid = installment <= params.paidInstallments
+      const pokokCicilan = rencana.pokok[installment - 1]
+      const totalCicilan = rencana.total[installment - 1]
       const jadwal = await tx.jadwalAngsuran.create({
         data: {
           companyId: params.companyId,
           pinjamanId: pinjaman.id,
           angsuranKe: installment,
           tanggalJatuhTempo: dueDate,
-          pokok: new Prisma.Decimal(angsuranPokok),
+          pokok: new Prisma.Decimal(pokokCicilan),
           bunga: new Prisma.Decimal(angsuranBunga),
-          total: new Prisma.Decimal(totalAngsuran),
+          total: new Prisma.Decimal(totalCicilan),
           sudahDibayar: isPaid,
           tanggalBayar: isPaid ? new Date(dueDate.getTime() + (installment % 3) * 24 * 60 * 60 * 1000) : null,
         },
@@ -373,10 +380,10 @@ async function createDemoLoan(params: {
             companyId: params.companyId,
             pinjamanId: pinjaman.id,
             tanggalBayar: jadwal.tanggalBayar ?? dueDate,
-            pokok: new Prisma.Decimal(angsuranPokok),
+            pokok: new Prisma.Decimal(pokokCicilan),
             bunga: new Prisma.Decimal(angsuranBunga),
             denda: new Prisma.Decimal(installment % 4 === 0 ? 5_000 : 0),
-            totalBayar: new Prisma.Decimal(totalAngsuran + (installment % 4 === 0 ? 5_000 : 0)),
+            totalBayar: new Prisma.Decimal(totalCicilan + (installment % 4 === 0 ? 5_000 : 0)),
             metode,
             catatan: `[JADWAL:${jadwal.id}] mode=FULL Demo pembayaran angsuran ${installment}`,
             inputOlehId: params.inputOlehId,
@@ -406,10 +413,10 @@ async function createDemoLoan(params: {
           pembayaranId: pembayaran.id,
           tanggalBayar: jadwal.tanggalBayar ?? dueDate,
           kasJenis: metode === "TRANSFER" ? "BANK" : "TUNAI",
-          pokok: angsuranPokok,
+          pokok: pokokCicilan,
           bunga: angsuranBunga,
           denda: installment % 4 === 0 ? 5_000 : 0,
-          totalBayar: totalAngsuran + (installment % 4 === 0 ? 5_000 : 0),
+          totalBayar: totalCicilan + (installment % 4 === 0 ? 5_000 : 0),
           description: `Demo pembayaran ${pembayaran.nomorTransaksi}`,
           postedById: params.inputOlehId,
         }, { ensureAccounts: false })

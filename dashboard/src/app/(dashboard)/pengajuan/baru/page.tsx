@@ -6,6 +6,7 @@ import { useForm, useWatch, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { NumericFormat } from "react-number-format"
 import { pengajuanSchema, type PengajuanInput } from "@/lib/validations/pengajuan"
+import { buildRencanaAngsuran } from "@/lib/angsuran"
 import { createPengajuan, getNasabahPengajuanOptions, getSuggestedLimit } from "@/actions/pengajuan"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -67,9 +68,10 @@ function KalkulatorAngsuran({
   onBungaPersenChange: (next: number) => void
 }) {
   const bungaDesimal = (bunga || 0) / 100
-  const pokok = plafon / tenor
-  const bungaPerPeriode = plafon * bungaDesimal
-  const total = pokok + bungaPerPeriode
+  const rencana = plafon && tenor ? buildRencanaAngsuran(plafon, tenor, bungaDesimal) : null
+  const pokok = rencana?.angsuranPokok ?? 0
+  const bungaPerPeriode = rencana?.angsuranBunga ?? 0
+  const total = rencana?.totalAngsuran ?? 0
   const unit = tenorType === "MINGGUAN" ? "minggu" : "bulan"
   const [draftPokokPerPeriode, setDraftPokokPerPeriode] = useState(pokok)
   const [draftBungaPerPeriode, setDraftBungaPerPeriode] = useState(bungaPerPeriode)

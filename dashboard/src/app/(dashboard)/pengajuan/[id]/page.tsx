@@ -10,6 +10,7 @@ import { ApprovalForm } from "./approval-form"
 import { BatalkanPencairanCard } from "./batalkan-pencairan-card"
 import { getCompanyInfo } from "@/actions/settings"
 import { formatDateId, normalizeTimeZone } from "@/lib/datetime"
+import { buildRencanaAngsuran } from "@/lib/angsuran"
 
 const statusMap: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "Draft", cls: "bg-gray-100 text-gray-600" },
@@ -39,7 +40,8 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
   const badge = statusMap[pengajuan.status] ?? { label: pengajuan.status, cls: "" }
   const plafon = Number(pengajuan.plafonDiajukan)
   const bungaPct = Number(pengajuan.bungaPerBulan) * 100
-  const angsuranPerBulan = (plafon / pengajuan.tenor) + (plafon * Number(pengajuan.bungaPerBulan))
+  const rencana = buildRencanaAngsuran(plafon, pengajuan.tenor, Number(pengajuan.bungaPerBulan))
+  const angsuranPerBulan = rencana.totalAngsuran
 
   const timeline = [
     { status: "DIAJUKAN", label: "Diajukan", date: pengajuan.tanggalPengajuan, done: true },
@@ -100,8 +102,9 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
                 { label: "Plafon Diajukan", value: fmt(plafon) },
                 { label: "Plafon Disetujui", value: pengajuan.plafonDisetujui ? fmt(Number(pengajuan.plafonDisetujui)) : "—" },
                 { label: "Tenor", value: `${pengajuan.tenor} bulan` },
-                { label: "Bunga Flat", value: `${bungaPct.toFixed(1)}% / bulan` },
+                { label: "Bunga Flat", value: `${bungaPct.toFixed(2)}% / bulan` },
                 { label: "Est. Angsuran/bln", value: fmt(angsuranPerBulan) },
+                { label: "Est. Cicilan Terakhir", value: fmt(rencana.totalTerakhir) },
                 { label: "Tujuan Pinjaman", value: pengajuan.tujuanPinjaman ?? "—" },
                 { label: "Agunan", value: pengajuan.agunan ?? "—" },
               ].map(({ label, value }) => (
@@ -159,7 +162,7 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
         {/* Action Panel */}
         <div className="space-y-4">
           {pengajuan.status === "DIAJUKAN" && (
-            <ApprovalForm pengajuanId={id} plafonDiajukan={plafon} />
+            <ApprovalForm pengajuanId={id} plafonDiajukan={plafon} bungaDiajukanPct={bungaPct} />
           )}
           {pengajuan.status === "DISETUJUI" && (
             <Card className="bg-teal-50 border-teal-200">
