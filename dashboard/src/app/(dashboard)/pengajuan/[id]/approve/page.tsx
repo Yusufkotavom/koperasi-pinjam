@@ -5,6 +5,7 @@ import { getPengajuanById } from "@/actions/pengajuan"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ApprovalForm } from "../approval-form"
+import { periodeLabel } from "@/lib/angsuran"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -31,6 +32,7 @@ export default async function ApprovePengajuanPage({
 
   const plafon = Number(pengajuan.plafonDiajukan)
   const bungaPct = Number(pengajuan.bungaPerBulan) * 100
+  const pl = periodeLabel(pengajuan.tenorType)
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -71,11 +73,11 @@ export default async function ApprovePengajuanPage({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Tenor</p>
-                <p className="font-medium">{pengajuan.tenor} bulan</p>
+                <p className="font-medium">{pengajuan.tenor} {pl.unit}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Bunga</p>
-                <p className="font-medium">{(Number(pengajuan.bungaPerBulan) * 100).toFixed(2)}% / bulan</p>
+                <p className="font-medium">{(Number(pengajuan.bungaPerBulan) * 100).toFixed(2)}% {pl.per}</p>
               </div>
             </div>
 

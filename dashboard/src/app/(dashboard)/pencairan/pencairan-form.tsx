@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
 import { Banknote, Wallet } from "lucide-react"
-import { buildRencanaAngsuran } from "@/lib/angsuran"
+import { buildRencanaAngsuran, periodeLabel } from "@/lib/angsuran"
 
 interface Props {
   pengajuan: {
@@ -23,6 +23,7 @@ interface Props {
     plafonDisetujui: unknown
     tenor: number
     bungaPerBulan: unknown
+    tenorType?: "BULANAN" | "MINGGUAN"
   }
   defaultBonusNominal: number
 }
@@ -59,6 +60,7 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
   const tenor = pengajuan.tenor
 
   const rencana = buildRencanaAngsuran(plafon, tenor, bunga)
+  const pl = periodeLabel(pengajuan.tenorType)
   const angsuranPokok = rencana.angsuranPokok
   const angsuranBunga = rencana.angsuranBunga
   const totalAngsuran = rencana.totalAngsuran
@@ -127,13 +129,13 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
             <p className="font-medium text-muted-foreground text-xs">Rincian Pinjaman</p>
             {[
               { label: "Plafon Disetujui", value: fmt(plafon) },
-              { label: "Tenor", value: `${tenor} bulan` },
-              { label: "Bunga Flat/bln", value: `${(bunga * 100).toFixed(1)}%` },
-              { label: "Angsuran Pokok/bln", value: fmt(angsuranPokok) },
-              { label: "Angsuran Bunga/bln", value: fmt(angsuranBunga) },
-              { label: "Total Angsuran/bln", value: fmt(totalAngsuran), bold: true },
+              { label: "Tenor", value: `${tenor} ${pl.unit}` },
+              { label: `Bunga Flat/${pl.unit}`, value: `${(bunga * 100).toFixed(1)}%` },
+              { label: `Angsuran Pokok/${pl.unit}`, value: fmt(angsuranPokok) },
+              { label: `Angsuran Bunga/${pl.unit}`, value: fmt(angsuranBunga) },
+              { label: `Total Angsuran/${pl.unit}`, value: fmt(totalAngsuran), bold: true },
               { label: "Cicilan Terakhir", value: fmt(rencana.totalTerakhir) },
-              { label: "Total Beban Bunga", value: fmt(angsuranBunga * tenor) },
+              { label: "Total Beban Bunga", value: fmt(rencana.totalBunga) },
             ].map((r) => (
               <div key={r.label} className="flex justify-between">
                 <span className="text-muted-foreground">{r.label}</span>

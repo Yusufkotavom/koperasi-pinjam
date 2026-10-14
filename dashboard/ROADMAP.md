@@ -48,6 +48,9 @@ Alur inti kredit dari request sampai pembayaran cicilan.
 - [x] Plafon saran dinamis per kategori (informasional) di form pengajuan — dipindah di atas input "Plafon Diajukan" + tombol Terapkan
 - [x] Riwayat skor kredit per pembayaran + panel Aksi Cepat di detail nasabah
 - [x] Pembulatan cicilan ke ribuan bulat (skenario 2: pokok dibulatkan ke atas, sisa di cicilan terakhir; Σ pokok = plafon tepat, tanpa koma/residu)
+- [x] Pembulatan bunga ke ribuan bulat (Σ bunga = round(plafon × rate × tenor) tepat; sisa bunga diserap ke cicilan terakhir → total bayar tidak "miss", mis. 500rb/1,875%/8mg = total 575.000)
+- [x] Label satuan bunga/angsuran otomatis mengikuti tipe tenor (per Minggu / per Bulan) via `periodeLabel`
+- [x] Regenerasi jadwal angsuran seluruh pinjaman ke skema bulat ribuan (semua baris ribuan; Σ pokok = pokokPinjaman 0 drift; lunas residu → LUNAS sisa 0)
 - [x] Bunga editable saat approval (selain plafon) — tersimpan ke pengajuan & dipakai saat pencairan
 - [ ] Batch posting pembayaran (multi kontrak)
 - [ ] Reminder otomatis untuk angsuran jatuh tempo

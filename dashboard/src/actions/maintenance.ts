@@ -358,6 +358,7 @@ async function createDemoLoan(params: {
           : addMonths(tanggalCair, installment)
       const isPaid = installment <= params.paidInstallments
       const pokokCicilan = rencana.pokok[installment - 1]
+      const bungaCicilan = rencana.bunga[installment - 1]
       const totalCicilan = rencana.total[installment - 1]
       const jadwal = await tx.jadwalAngsuran.create({
         data: {
@@ -366,7 +367,7 @@ async function createDemoLoan(params: {
           angsuranKe: installment,
           tanggalJatuhTempo: dueDate,
           pokok: new Prisma.Decimal(pokokCicilan),
-          bunga: new Prisma.Decimal(angsuranBunga),
+          bunga: new Prisma.Decimal(bungaCicilan),
           total: new Prisma.Decimal(totalCicilan),
           sudahDibayar: isPaid,
           tanggalBayar: isPaid ? new Date(dueDate.getTime() + (installment % 3) * 24 * 60 * 60 * 1000) : null,
@@ -381,7 +382,7 @@ async function createDemoLoan(params: {
             pinjamanId: pinjaman.id,
             tanggalBayar: jadwal.tanggalBayar ?? dueDate,
             pokok: new Prisma.Decimal(pokokCicilan),
-            bunga: new Prisma.Decimal(angsuranBunga),
+            bunga: new Prisma.Decimal(bungaCicilan),
             denda: new Prisma.Decimal(installment % 4 === 0 ? 5_000 : 0),
             totalBayar: new Prisma.Decimal(totalCicilan + (installment % 4 === 0 ? 5_000 : 0)),
             metode,
@@ -414,7 +415,7 @@ async function createDemoLoan(params: {
           tanggalBayar: jadwal.tanggalBayar ?? dueDate,
           kasJenis: metode === "TRANSFER" ? "BANK" : "TUNAI",
           pokok: pokokCicilan,
-          bunga: angsuranBunga,
+          bunga: bungaCicilan,
           denda: installment % 4 === 0 ? 5_000 : 0,
           totalBayar: totalCicilan + (installment % 4 === 0 ? 5_000 : 0),
           description: `Demo pembayaran ${pembayaran.nomorTransaksi}`,

@@ -68,4 +68,44 @@ describe("buildRencanaAngsuran — pembulatan ribuan (skenario 2)", () => {
     expect(r.totalBayar).toBe(1_000_000)
     expect(r.pokok.reduce((a, b) => a + b, 0)).toBe(1_000_000)
   })
+
+  it("BUG BUNGA: 500.000 / 8 minggu / 1,875% → Σ bunga 75.000 (bukan 72.000)", () => {
+    const r = buildRencanaAngsuran(500_000, 8, 0.01875)
+    // Bunga flat per periode = round(9.375) = 9.000; cicilan terakhir menampung sisa.
+    expect(r.angsuranBunga).toBe(9_000)
+    expect(r.angsuranBungaTerakhir).toBe(12_000)
+    // Σ bunga tepat 75.000 → total bayar 575.000 (dulu 572.000, bocor 3.000).
+    expect(r.totalBunga).toBe(75_000)
+    expect(r.totalBayar).toBe(575_000)
+    // Pokok tetap tepat.
+    expect(r.pokok.reduce((a, b) => a + b, 0)).toBe(500_000)
+    expect(r.angsuranPokok).toBe(63_000)
+    expect(r.angsuranPokokTerakhir).toBe(59_000)
+    // Semua nominal bulat ribuan.
+    for (let i = 0; i < 8; i++) {
+      expect(r.total[i] % 1000).toBe(0)
+      expect(r.bunga[i] % 1000).toBe(0)
+    }
+  })
+
+  it("Σ bunga selalu = round(plafon × rate × tenor); semua bulat ribuan", () => {
+    const kasus = [
+      { plafon: 1_000_000, tenor: 12, bunga: 0.015 },
+      { plafon: 500_000, tenor: 8, bunga: 0.01875 },
+      { plafon: 333_000, tenor: 7, bunga: 0.013 },
+      { plafon: 999_000, tenor: 13, bunga: 0.0175 },
+      { plafon: 12_345_000, tenor: 24, bunga: 0.0083 },
+    ]
+    for (const k of kasus) {
+      const r = buildRencanaAngsuran(k.plafon, k.tenor, k.bunga)
+      expect(r.pokok.reduce((a, b) => a + b, 0)).toBe(k.plafon)
+      expect(r.totalBunga).toBe(Math.round((k.plafon * k.bunga * k.tenor) / 1000) * 1000)
+      expect(r.totalBayar).toBe(k.plafon + r.totalBunga)
+      for (let i = 0; i < k.tenor; i++) {
+        expect(r.pokok[i] % 1000).toBe(0)
+        expect(r.bunga[i] % 1000).toBe(0)
+        expect(r.total[i] % 1000).toBe(0)
+      }
+    }
+  })
 })

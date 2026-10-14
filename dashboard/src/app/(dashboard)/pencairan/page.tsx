@@ -60,7 +60,7 @@ export default async function PencairanPage({
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Tenor</span>
-                      <span>{p.tenor} bulan</span>
+                      <span>{p.tenor} {p.tenorType === "MINGGUAN" ? "minggu" : "bulan"}</span>
                     </div>
                     {p.kelompok && (
                       <p className="text-xs text-muted-foreground">{p.kelompok.nama}</p>

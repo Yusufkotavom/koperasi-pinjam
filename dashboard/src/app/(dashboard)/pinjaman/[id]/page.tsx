@@ -9,6 +9,7 @@ import { getPinjamanById } from "@/actions/pinjaman"
 import { ArrowLeft, User, Wallet, Calendar, TrendingUp, Receipt } from "lucide-react"
 import { format } from "date-fns"
 import { id as localeId } from "date-fns/locale"
+import { periodeLabel } from "@/lib/angsuran"
 
 export default async function PinjamanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -27,6 +28,7 @@ export default async function PinjamanDetailPage({ params }: { params: Promise<{
   const angsuranPokok = Number(pinjaman.angsuranPokok)
   const angsuranBunga = Number(pinjaman.angsuranBunga)
   const bunga = Number(pinjaman.bungaPerBulan)
+  const pl = periodeLabel(pinjaman.tenorType)
   const progress = ((pokokPinjaman - sisaPinjaman) / pokokPinjaman) * 100
 
   const totalDibayar = pokokPinjaman - sisaPinjaman
@@ -83,7 +85,7 @@ export default async function PinjamanDetailPage({ params }: { params: Promise<{
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Angsuran/Bulan</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Angsuran/{pl.Unit}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">Rp {totalAngsuran.toLocaleString("id-ID")}</div>
@@ -163,15 +165,15 @@ export default async function PinjamanDetailPage({ params }: { params: Promise<{
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Bunga per Bulan</p>
+            <p className="text-sm text-muted-foreground">Bunga Flat {pl.perCap}</p>
             <p className="font-medium">{(bunga * 100).toFixed(2)}%</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Angsuran Pokok</p>
+            <p className="text-sm text-muted-foreground">Angsuran Pokok/{pl.unit}</p>
             <p className="font-medium">Rp {angsuranPokok.toLocaleString("id-ID")}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Angsuran Bunga</p>
+            <p className="text-sm text-muted-foreground">Angsuran Bunga/{pl.unit}</p>
             <p className="font-medium">Rp {angsuranBunga.toLocaleString("id-ID")}</p>
           </div>
           <div>

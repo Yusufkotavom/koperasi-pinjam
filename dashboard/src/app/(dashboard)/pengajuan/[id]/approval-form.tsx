@@ -15,16 +15,19 @@ export function ApprovalForm({
   pengajuanId,
   plafonDiajukan,
   bungaDiajukanPct,
+  tipeTenor,
 }: {
   pengajuanId: string
   plafonDiajukan: number
   bungaDiajukanPct: number
+  tipeTenor?: "BULANAN" | "MINGGUAN"
 }) {
   const [isPending, startTransition] = useTransition()
   const [plafonDisetujui, setPlafonDisetujui] = useState(plafonDiajukan)
   const [bungaDisetujui, setBungaDisetujui] = useState(bungaDiajukanPct)
   const [catatan, setCatatan] = useState("")
   const router = useRouter()
+  const unit = tipeTenor === "MINGGUAN" ? "minggu" : "bulan"
 
   function fmt(n: number) {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -69,7 +72,7 @@ export function ApprovalForm({
           <p className="text-xs text-blue-700">{fmt(plafonDisetujui)}</p>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Bunga Flat (% / bulan)</Label>
+          <Label className="text-xs">Bunga Flat (% / {unit})</Label>
           <Input
             type="number"
             step="0.1"
@@ -78,7 +81,7 @@ export function ApprovalForm({
             onChange={(e) => setBungaDisetujui(Number(e.target.value))}
             className="bg-white"
           />
-          <p className="text-xs text-blue-700">Bunga saat ini: {bungaDisetujui}% / bulan</p>
+          <p className="text-xs text-blue-700">Bunga saat ini: {bungaDisetujui}% / {unit}</p>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Catatan (opsional)</Label>

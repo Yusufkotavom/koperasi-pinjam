@@ -10,7 +10,7 @@ import { ApprovalForm } from "./approval-form"
 import { BatalkanPencairanCard } from "./batalkan-pencairan-card"
 import { getCompanyInfo } from "@/actions/settings"
 import { formatDateId, normalizeTimeZone } from "@/lib/datetime"
-import { buildRencanaAngsuran } from "@/lib/angsuran"
+import { buildRencanaAngsuran, periodeLabel } from "@/lib/angsuran"
 
 const statusMap: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "Draft", cls: "bg-gray-100 text-gray-600" },
@@ -42,6 +42,7 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
   const bungaPct = Number(pengajuan.bungaPerBulan) * 100
   const rencana = buildRencanaAngsuran(plafon, pengajuan.tenor, Number(pengajuan.bungaPerBulan))
   const angsuranPerBulan = rencana.totalAngsuran
+  const pl = periodeLabel(pengajuan.tenorType)
 
   const timeline = [
     { status: "DIAJUKAN", label: "Diajukan", date: pengajuan.tanggalPengajuan, done: true },
@@ -101,9 +102,9 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
                 { label: "Jenis Pinjaman", value: pengajuan.jenisPinjaman },
                 { label: "Plafon Diajukan", value: fmt(plafon) },
                 { label: "Plafon Disetujui", value: pengajuan.plafonDisetujui ? fmt(Number(pengajuan.plafonDisetujui)) : "—" },
-                { label: "Tenor", value: `${pengajuan.tenor} bulan` },
-                { label: "Bunga Flat", value: `${bungaPct.toFixed(2)}% / bulan` },
-                { label: "Est. Angsuran/bln", value: fmt(angsuranPerBulan) },
+                { label: "Tenor", value: `${pengajuan.tenor} ${pl.unit}` },
+                { label: "Bunga Flat", value: `${bungaPct.toFixed(2)}% ${pl.per}` },
+                { label: "Est. Angsuran", value: fmt(angsuranPerBulan) },
                 { label: "Est. Cicilan Terakhir", value: fmt(rencana.totalTerakhir) },
                 { label: "Tujuan Pinjaman", value: pengajuan.tujuanPinjaman ?? "—" },
                 { label: "Agunan", value: pengajuan.agunan ?? "—" },
@@ -162,7 +163,7 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
         {/* Action Panel */}
         <div className="space-y-4">
           {pengajuan.status === "DIAJUKAN" && (
-            <ApprovalForm pengajuanId={id} plafonDiajukan={plafon} bungaDiajukanPct={bungaPct} />
+            <ApprovalForm pengajuanId={id} plafonDiajukan={plafon} bungaDiajukanPct={bungaPct} tipeTenor={pengajuan.tenorType} />
           )}
           {pengajuan.status === "DISETUJUI" && (
             <Card className="bg-teal-50 border-teal-200">
