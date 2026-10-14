@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { pengajuanSchema, approvalSchema, pencairanSchema } from "@/lib/validations/pengajuan"
+import { pengajuanSchema, approvalSchema, pencairanSchema, bayarDpSchema } from "@/lib/validations/pengajuan"
 import { addMonths, addWeeks } from "date-fns"
 import { ApprovalStatus, Prisma, RoleType } from "@prisma/client"
 import { requireRoles } from "@/lib/roles"
@@ -138,7 +138,7 @@ export async function createPengajuan(input: unknown) {
   const parsed = pengajuanSchema.safeParse(input)
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
 
-  const { bungaPerBulan, plafonDiajukan, dokumenPendukungUrls, ...rest } = parsed.data
+  const { bungaPerBulan, plafonDiajukan, dokumenPendukungUrls, hargaBarang, uangMuka, namaBarang, vendorBarang, ...rest } = parsed.data
 
   const nasabah = await prisma.nasabah.findUnique({
     where: { id: parsed.data.nasabahId },
@@ -147,6 +147,8 @@ export async function createPengajuan(input: unknown) {
   if (!nasabah) {
     return { error: { nasabahId: ["Nasabah tidak ditemukan."] } }
   }
+
+  const isBarang = rest.jenisPinjaman === "BARANG"
 
   const pengajuan = await prisma.pengajuan.create({
     data: {
@@ -157,6 +159,12 @@ export async function createPengajuan(input: unknown) {
       bungaPerBulan: new Prisma.Decimal(bungaPerBulan / 100),
       dokumenPendukungUrls: dokumenPendukungUrls ?? [],
       status: "DIAJUKAN",
+      // Bidang khusus kredit barang
+      namaBarang: isBarang ? (namaBarang ?? null) : null,
+      hargaBarang: isBarang && hargaBarang != null ? new Prisma.Decimal(hargaBarang) : null,
+      uangMuka: isBarang && uangMuka != null ? new Prisma.Decimal(uangMuka) : null,
+      vendorBarang: isBarang ? (vendorBarang ?? null) : null,
+      dpTerbayar: false,
     },
   })
 
@@ -228,6 +236,146 @@ export async function approvePengajuan(input: unknown) {
 }
 
 // ========================
+// CATAT PEMBAYARAN DP (KREDIT BARANG - OPSI A)
+// ========================
+
+export async function catatBayarDp(input: unknown) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { companyId } = requireCompanyId(
+    session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null,
+  )
+  let userId: string
+  try {
+    const required = requireRoles(session, [
+      RoleType.ADMIN,
+      RoleType.MANAGER,
+      RoleType.PIMPINAN,
+      RoleType.TELLER,
+    ])
+    userId = required.userId
+  } catch {
+    return { error: "Tidak memiliki hak akses untuk mencatat penerimaan uang muka (DP)." }
+  }
+
+  const parsed = bayarDpSchema.safeParse(input)
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors }
+
+  const { pengajuanId, kasJenis, keterangan, buktiDpUrl } = parsed.data
+
+  const pengajuan = await prisma.pengajuan.findFirst({
+    where: { id: pengajuanId, companyId },
+    include: {
+      nasabah: {
+        select: { id: true, namaLengkap: true, nomorAnggota: true },
+      },
+    },
+  })
+
+  if (!pengajuan) return { error: "Pengajuan tidak ditemukan." }
+  if (pengajuan.jenisPinjaman !== "BARANG") {
+    return { error: "Pengajuan ini bukan jenis kredit barang." }
+  }
+  if (pengajuan.dpTerbayar) {
+    return { error: "Uang muka (DP) untuk pengajuan ini sudah dicatat terbayar." }
+  }
+  if (pengajuan.status === "DITOLAK" || pengajuan.status === "SELESAI" || pengajuan.status === "DICAIRKAN") {
+    return { error: `Tidak dapat menerima DP pada pengajuan dengan status ${pengajuan.status}.` }
+  }
+
+  const nominalDp = Number(pengajuan.uangMuka || 0)
+  if (nominalDp <= 0) {
+    return { error: "Nominal uang muka (DP) pada pengajuan ini adalah Rp 0 atau belum ditentukan." }
+  }
+
+  const ensured = await ensureKasKategori({ jenis: "MASUK", kategori: "DP_KREDIT_BARANG" })
+  if ("error" in ensured) return { error: ensured.error }
+
+  await ensureAccountingAccounts(companyId)
+
+  const now = new Date()
+  const deskripsiKas =
+    keterangan?.trim() ||
+    `Penerimaan DP ${pengajuan.namaBarang || "Barang"} nasabah ${pengajuan.nasabah.namaLengkap} (${pengajuan.nasabah.nomorAnggota})`
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Buat transaksi kas masuk operasional
+      const kas = await tx.kasTransaksi.create({
+        data: {
+          companyId,
+          jenis: "MASUK",
+          kategoriId: ensured.kategoriId,
+          kategoriKey: ensured.key,
+          deskripsi: deskripsiKas,
+          jumlah: new Prisma.Decimal(nominalDp),
+          kasJenis,
+          inputOlehId: userId,
+          tanggal: now,
+          referensiId: pengajuan.id,
+          buktiUrl: buktiDpUrl || null,
+          isApproved: true,
+        },
+      })
+
+      // 2. Jurnal akuntansi Opsi A: Kas bertambah (Debit), Utang Titipan DP bertambah (Kredit)
+      // Netral 100% terhadap laba rugi.
+      const kasAccount = kasJenis === "BANK" ? "CASH_BANK" : "CASH_TUNAI"
+      await postJournalEntry(
+        tx,
+        {
+          companyId,
+          sourceType: "KAS",
+          sourceId: kas.id,
+          entryDate: now,
+          description: deskripsiKas,
+          postedById: userId,
+          lines: [
+            { accountCode: kasAccount, debit: nominalDp, memo: "Penerimaan DP tunai/bank dari nasabah" },
+            {
+              accountCode: "UTANG_TITIPAN_DP",
+              credit: nominalDp,
+              memo: "Pengakuan kewajiban titipan uang muka kredit barang",
+            },
+          ],
+        },
+        { ensureAccounts: false },
+      )
+
+      // 3. Tandai pengajuan DP terbayar
+      const updated = await tx.pengajuan.update({
+        where: { id: pengajuanId },
+        data: {
+          dpTerbayar: true,
+          tanggalBayarDp: now,
+          buktiDpUrl: buktiDpUrl || null,
+          kasDpId: kas.id,
+        },
+      })
+
+      return { pengajuan: updated, kas }
+    })
+
+    revalidatePath("/pengajuan")
+    revalidatePath(`/pengajuan/${pengajuanId}`)
+    revalidatePath("/kas")
+
+    await writeAuditLog({
+      actorId: userId,
+      entityType: "PENGAJUAN",
+      entityId: pengajuan.id,
+      action: "UPDATE",
+      afterData: { dpTerbayar: true, nominalDp, kasId: result.kas.id },
+    })
+
+    return { success: true, data: result }
+  } catch (err: any) {
+    console.error("[catatBayarDp][error]", err)
+    return { error: err?.message || "Gagal mencatat pembayaran DP." }
+  }
+}
+
+// ========================
 // PENCAIRAN
 // ========================
 
@@ -265,16 +413,27 @@ export async function cairkanPinjaman(input: unknown) {
   })
   if (!pengajuan) return { error: "Pengajuan tidak ditemukan atau belum disetujui." }
 
+  if (pengajuan.jenisPinjaman === "BARANG" && !pengajuan.dpTerbayar) {
+    return {
+      error: "Uang muka (DP) belum dibayarkan nasabah. Catat penerimaan DP terlebih dahulu sebelum pencairan.",
+    }
+  }
+
   const plafon = Number(pengajuan.plafonDisetujui ?? pengajuan.plafonDiajukan)
   const bunga = Number(pengajuan.bungaPerBulan)
   const tenor = pengajuan.tenor
   const tenorType = pengajuan.tenorType
+
+  const isBarang = pengajuan.jenisPinjaman === "BARANG"
+  const nominalDp = isBarang ? Math.max(0, Number(pengajuan.uangMuka || 0)) : 0
 
   const rencana = buildRencanaAngsuran(plafon, tenor, bunga)
   const angsuranPokok = rencana.angsuranPokok
   const angsuranBunga = rencana.angsuranBunga
   const totalAngsuran = rencana.totalAngsuran
   const nilaiCair = plafon - potonganAdmin - potonganProvisi
+  // Pada kredit barang Opsi A, kas keluar ke vendor adalah talangan nilaiCair + DP yang dititipkan nasabah
+  const totalKeluarKas = isBarang ? nilaiCair + nominalDp : nilaiCair
 
   const tglCair = parseDateOnly(tanggalCair)
   if (!tglCair) return { error: "Tanggal pencairan tidak valid." }
@@ -289,7 +448,7 @@ export async function cairkanPinjaman(input: unknown) {
   if (sumberDana === "KAS") {
     if (!kasJenis) return { error: "Pilih jenis kas (TUNAI/BANK)" }
     const saldoKas = await getCashBalanceByJenis(companyId, kasJenis, tglCairEndOfDay)
-    if (saldoKas < nilaiCair) {
+    if (saldoKas < totalKeluarKas) {
       const pendingMasuk = await prisma.kasTransaksi.aggregate({
         where: {
           companyId,
@@ -304,7 +463,7 @@ export async function cairkanPinjaman(input: unknown) {
       const pendingAmount = Number(pendingMasuk._sum.jumlah ?? 0)
 
       return {
-        error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${nilaiCair.toLocaleString("id-ID")}.${pendingCount > 0 ? ` Ada ${pendingCount} transaksi kas masuk pending (Rp ${pendingAmount.toLocaleString("id-ID")}) yang belum dihitung ke saldo.` : ""} Setor modal/simpanan dan pastikan approval kas selesai sebelum pencairan.`,
+        error: `Saldo ${kasJenis === "BANK" ? "Kas Bank" : "Kas Tunai"} tidak cukup. Tersedia Rp ${saldoKas.toLocaleString("id-ID")}, perlu Rp ${totalKeluarKas.toLocaleString("id-ID")}${isBarang ? ` (pelunasan vendor: talangan pinjaman Rp ${nilaiCair.toLocaleString("id-ID")} + DP Rp ${nominalDp.toLocaleString("id-ID")})` : ""}.${pendingCount > 0 ? ` Ada ${pendingCount} transaksi kas masuk pending (Rp ${pendingAmount.toLocaleString("id-ID")}) yang belum dihitung ke saldo.` : ""} Setor modal/simpanan dan pastikan approval kas selesai sebelum pencairan.`,
       }
     }
   } else if (sumberDana === "SIMPANAN") {
@@ -353,6 +512,11 @@ export async function cairkanPinjaman(input: unknown) {
         sumberDana,
         simpananId: sumberDana === "SIMPANAN" ? simpananId : null,
         kasJenis: sumberDana === "KAS" ? kasJenis : null,
+        // Data kredit barang (jika ada)
+        namaBarang: pengajuan.namaBarang,
+        hargaBarang: pengajuan.hargaBarang,
+        uangMuka: pengajuan.uangMuka,
+        vendorBarang: pengajuan.vendorBarang,
       },
     })
 
@@ -400,8 +564,10 @@ export async function cairkanPinjaman(input: unknown) {
           jenis: "KELUAR",
           kategoriId: ensured.kategoriId,
           kategoriKey: ensured.key,
-          deskripsi: `Pencairan pinjaman ${nomorKontrak}`,
-          jumlah: new Prisma.Decimal(nilaiCair),
+          deskripsi: isBarang
+            ? `Pelunasan vendor ${pengajuan.vendorBarang ? `(${pengajuan.vendorBarang}) ` : ""}untuk ${pengajuan.namaBarang || "kredit barang"} (${nomorKontrak})`
+            : `Pencairan pinjaman ${nomorKontrak}`,
+          jumlah: new Prisma.Decimal(totalKeluarKas),
           kasJenis: kasJenis!,
           inputOlehId: userId,
           tanggal: tglCair,
@@ -409,18 +575,25 @@ export async function cairkanPinjaman(input: unknown) {
         },
       })
 
-      await postPencairanJournal(tx, {
-        companyId,
-        pinjamanId: pin.id,
-        tanggalCair: tglCair,
-        kasJenis: kasJenis!,
-        pokokPinjaman: plafon,
-        nilaiCair,
-        potonganAdmin,
-        potonganProvisi,
-        description: `Pencairan pinjaman ${nomorKontrak}`,
-        postedById: userId,
-      }, { ensureAccounts: false })
+      await postPencairanJournal(
+        tx,
+        {
+          companyId,
+          pinjamanId: pin.id,
+          tanggalCair: tglCair,
+          kasJenis: kasJenis!,
+          pokokPinjaman: plafon,
+          nilaiCair,
+          potonganAdmin,
+          potonganProvisi,
+          description: isBarang
+            ? `Pencairan kredit barang ${pengajuan.namaBarang || ""} (${nomorKontrak})`
+            : `Pencairan pinjaman ${nomorKontrak}`,
+          postedById: userId,
+          uangMuka: nominalDp,
+        },
+        { ensureAccounts: false },
+      )
     }
 
     // Jika dari SIMPANAN: update saldo dan buat tracking

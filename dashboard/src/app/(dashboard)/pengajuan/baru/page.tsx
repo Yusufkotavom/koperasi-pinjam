@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { ArrowLeft, Calculator, CreditCard, Save, Upload, X } from "lucide-react"
+import { ArrowLeft, Calculator, CreditCard, Package, Save, Upload, X } from "lucide-react"
 import Link from "next/link"
 
 type NasabahOption = {
@@ -184,12 +184,23 @@ export default function PengajuanBaruPage() {
     },
   })
 
-  const [nasabahId, plafon, tenor, bunga, tenorType] = useWatch({
+  const [nasabahId, plafon, tenor, bunga, tenorType, jenisPinjaman, hargaBarang, uangMuka] = useWatch({
     control,
-    name: ["nasabahId", "plafonDiajukan", "tenor", "bungaPerBulan", "tenorType"],
+    name: ["nasabahId", "plafonDiajukan", "tenor", "bungaPerBulan", "tenorType", "jenisPinjaman", "hargaBarang", "uangMuka"],
   })
 
   const tipeTenor = (tenorType ?? "BULANAN") as "BULANAN" | "MINGGUAN"
+  const isKreditBarang = jenisPinjaman === "BARANG"
+
+  // Sinkronisasi otomatis plafon = harga barang - DP (kredit barang Opsi A)
+  useEffect(() => {
+    if (isKreditBarang) {
+      const harga = Math.max(0, Number(hargaBarang || 0))
+      const dp = Math.max(0, Number(uangMuka || 0))
+      const netto = Math.max(0, harga - dp)
+      setValue("plafonDiajukan", netto, { shouldValidate: true, shouldDirty: true })
+    }
+  }, [isKreditBarang, hargaBarang, uangMuka, setValue])
 
   useEffect(() => {
     let cancelled = false
@@ -340,6 +351,7 @@ export default function PengajuanBaruPage() {
                       <SelectItem value="REGULAR">Regular</SelectItem>
                       <SelectItem value="MIKRO">Mikro</SelectItem>
                       <SelectItem value="USAHA">Usaha</SelectItem>
+                      <SelectItem value="BARANG">Kredit Barang</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -384,8 +396,96 @@ export default function PengajuanBaruPage() {
                 {errors.tenor && <FieldError>{errors.tenor.message}</FieldError>}
               </Field>
 
+              {/* Input khusus Kredit Barang */}
+              {isKreditBarang && (
+                <Card className="bg-amber-50/60 border-amber-300">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2 text-amber-900">
+                      <Package className="size-4 text-amber-700" /> Rincian Kredit Barang & Uang Muka (DP)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <Field>
+                        <FieldLabel htmlFor="namaBarang">
+                          Nama / Tipe Barang <span className="text-red-500">*</span>
+                        </FieldLabel>
+                        <Input
+                          id="namaBarang"
+                          placeholder="contoh: Laptop Asus Vivobook 14"
+                          {...register("namaBarang")}
+                        />
+                        {errors.namaBarang && <FieldError>{errors.namaBarang.message}</FieldError>}
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="vendorBarang">Nama Toko / Vendor Rekanan</FieldLabel>
+                        <Input
+                          id="vendorBarang"
+                          placeholder="contoh: Sentra Komputer Toko"
+                          {...register("vendorBarang")}
+                        />
+                        {errors.vendorBarang && <FieldError>{errors.vendorBarang.message}</FieldError>}
+                      </Field>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <Field>
+                        <FieldLabel htmlFor="hargaBarang">
+                          Harga Barang OTR (Rp) <span className="text-red-500">*</span>
+                        </FieldLabel>
+                        <Controller
+                          control={control}
+                          name="hargaBarang"
+                          render={({ field: { onChange, value } }) => (
+                            <NumericFormat
+                              id="hargaBarang"
+                              customInput={Input}
+                              thousandSeparator="."
+                              decimalSeparator=","
+                              value={value || ""}
+                              onValueChange={(values) => onChange(values.floatValue || 0)}
+                              placeholder="contoh: 2.000.000"
+                            />
+                          )}
+                        />
+                        {errors.hargaBarang && <FieldError>{errors.hargaBarang.message}</FieldError>}
+                      </Field>
+
+                      <Field>
+                        <FieldLabel htmlFor="uangMuka">
+                          Uang Muka / DP Nasabah (Rp) <span className="text-red-500">*</span>
+                        </FieldLabel>
+                        <Controller
+                          control={control}
+                          name="uangMuka"
+                          render={({ field: { onChange, value } }) => (
+                            <NumericFormat
+                              id="uangMuka"
+                              customInput={Input}
+                              thousandSeparator="."
+                              decimalSeparator=","
+                              value={value || ""}
+                              onValueChange={(values) => onChange(values.floatValue || 0)}
+                              placeholder="contoh: 500.000"
+                            />
+                          )}
+                        />
+                        {errors.uangMuka && <FieldError>{errors.uangMuka.message}</FieldError>}
+                      </Field>
+                    </div>
+
+                    <div className="rounded-md bg-amber-100/80 p-2 text-xs text-amber-900 flex justify-between items-center">
+                      <span>Pokok Talangan Koperasi (Harga − DP):</span>
+                      <span className="font-bold">
+                        {formatRupiah(Math.max(0, Number(hargaBarang || 0) - Number(uangMuka || 0)))}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Plafon Saran (Informasi) — ditaruh tepat di atas input Plafon Diajukan agar langsung terbaca */}
-              {suggestedLimit && (
+              {suggestedLimit && !isKreditBarang && (
                 <Card className="bg-sky-50 border-sky-200">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2 text-sky-800">
@@ -448,7 +548,10 @@ export default function PengajuanBaruPage() {
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <Field>
-                  <FieldLabel htmlFor="plafonDiajukan">Plafon Diajukan (Rp) <span className="text-red-500">*</span></FieldLabel>
+                  <FieldLabel htmlFor="plafonDiajukan">
+                    {isKreditBarang ? "Pokok Pinjaman Diajukan (Harga − DP)" : "Plafon Diajukan (Rp)"}{" "}
+                    <span className="text-red-500">*</span>
+                  </FieldLabel>
                   <Controller
                     control={control}
                     name="plafonDiajukan"
@@ -459,13 +562,20 @@ export default function PengajuanBaruPage() {
                         thousandSeparator="."
                         decimalSeparator=","
                         value={value || ""}
+                        disabled={isKreditBarang}
                         onValueChange={(values) => {
                           onChange(values.floatValue || 0)
                         }}
                         placeholder="10.000.000"
+                        className={isKreditBarang ? "bg-muted cursor-not-allowed" : ""}
                       />
                     )}
                   />
+                  {isKreditBarang && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Otomatis dihitung: Harga Barang − Uang Muka (DP). Bunga hanya dihitung dari pokok ini.
+                    </p>
+                  )}
                   {errors.plafonDiajukan && <FieldError>{errors.plafonDiajukan.message}</FieldError>}
                 </Field>
                 <Field>

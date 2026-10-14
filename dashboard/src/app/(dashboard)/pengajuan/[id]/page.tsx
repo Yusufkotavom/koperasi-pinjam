@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Clock, Package } from "lucide-react"
 import { ApprovalForm } from "./approval-form"
 import { BatalkanPencairanCard } from "./batalkan-pencairan-card"
+import { CatatDpDialog } from "./catat-dp-dialog"
 import { getCompanyInfo } from "@/actions/settings"
 import { formatDateId, normalizeTimeZone } from "@/lib/datetime"
 import { buildRencanaAngsuran, periodeLabel } from "@/lib/angsuran"
@@ -99,8 +100,8 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
               {[
                 { label: "Nasabah", value: pengajuan.nasabah.namaLengkap },
                 { label: "Kelompok", value: pengajuan.kelompok?.nama ?? "—" },
-                { label: "Jenis Pinjaman", value: pengajuan.jenisPinjaman },
-                { label: "Plafon Diajukan", value: fmt(plafon) },
+                { label: "Jenis Pinjaman", value: pengajuan.jenisPinjaman === "BARANG" ? "Kredit Barang" : pengajuan.jenisPinjaman },
+                { label: pengajuan.jenisPinjaman === "BARANG" ? "Pokok Talangan Diajukan" : "Plafon Diajukan", value: fmt(plafon) },
                 { label: "Plafon Disetujui", value: pengajuan.plafonDisetujui ? fmt(Number(pengajuan.plafonDisetujui)) : "—" },
                 { label: "Tenor", value: `${pengajuan.tenor} ${pl.unit}` },
                 { label: "Bunga Flat", value: `${bungaPct.toFixed(2)}% ${pl.per}` },
@@ -115,6 +116,61 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
                 </div>
               ))}
             </div>
+
+            {/* Rincian Khusus Kredit Barang (Opsi A) */}
+            {pengajuan.jenisPinjaman === "BARANG" && (
+              <>
+                <Separator />
+                <div className="bg-amber-50/70 border border-amber-300 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="size-4 text-amber-800" />
+                      <h3 className="text-sm font-semibold text-amber-900">Rincian Kredit Barang &amp; DP</h3>
+                    </div>
+                    {pengajuan.dpTerbayar ? (
+                      <Badge className="bg-emerald-600 text-white flex items-center gap-1 text-xs">
+                        <CheckCircle2 className="size-3" /> DP Terbayar
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-amber-500 text-amber-800 bg-amber-100 flex items-center gap-1 text-xs">
+                        <Clock className="size-3" /> Menunggu DP
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Nama Barang</p>
+                      <p className="font-semibold text-foreground text-sm">{pengajuan.namaBarang ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Toko / Vendor Rekanan</p>
+                      <p className="font-medium text-foreground">{pengajuan.vendorBarang ?? "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Harga Barang OTR</p>
+                      <p className="font-semibold text-foreground">{pengajuan.hargaBarang ? fmt(Number(pengajuan.hargaBarang)) : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Uang Muka (DP) Nasabah</p>
+                      <p className="font-semibold text-amber-800">{pengajuan.uangMuka ? fmt(Number(pengajuan.uangMuka)) : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Pokok Talangan Koperasi</p>
+                      <p className="font-bold text-foreground">{fmt(plafon)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Status DP di Kasir</p>
+                      <p className="font-medium text-foreground">
+                        {pengajuan.dpTerbayar
+                          ? `Diterima ${pengajuan.tanggalBayarDp ? formatDateId(pengajuan.tanggalBayarDp, { timeZone }) : ""}`
+                          : "Belum Diterima"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             {(pengajuan.catatanPengajuan || pengajuan.dokumenPendukungUrls.length > 0) && (
               <>
@@ -162,17 +218,49 @@ export default async function PengajuanDetailPage({ params }: { params: Promise<
 
         {/* Action Panel */}
         <div className="space-y-4">
+          {/* Panel Penerimaan DP Kredit Barang jika belum terbayar */}
+          {pengajuan.jenisPinjaman === "BARANG" && !pengajuan.dpTerbayar && pengajuan.status !== "DITOLAK" && pengajuan.status !== "SELESAI" && (
+            <Card className="border-amber-300 bg-amber-50/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+                  <Package className="size-4 text-amber-700" /> Uang Muka (DP) Belum Diterima
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                <p className="text-amber-800 leading-relaxed">
+                  Nasabah wajib menyetorkan uang muka sebesar{" "}
+                  <strong>{fmt(Number(pengajuan.uangMuka || 0))}</strong> ke kas koperasi sebelum pinjaman dapat dicairkan.
+                </p>
+                <CatatDpDialog
+                  pengajuanId={pengajuan.id}
+                  nominalDp={Number(pengajuan.uangMuka || 0)}
+                  namaBarang={pengajuan.namaBarang}
+                  namaNasabah={pengajuan.nasabah.namaLengkap}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           {pengajuan.status === "DIAJUKAN" && (
             <ApprovalForm pengajuanId={id} plafonDiajukan={plafon} bungaDiajukanPct={bungaPct} tipeTenor={pengajuan.tenorType} />
           )}
+
           {pengajuan.status === "DISETUJUI" && (
             <Card className="bg-teal-50 border-teal-200">
               <CardContent className="p-4 text-center space-y-3">
                 <p className="text-sm font-medium text-teal-800">Pengajuan Disetujui!</p>
-                <p className="text-xs text-teal-700">Lanjutkan ke proses pencairan pinjaman.</p>
-                <Button asChild className="w-full bg-teal-600 hover:bg-teal-700">
-                  <Link href={`/pencairan?id=${id}`}>Proses Pencairan</Link>
-                </Button>
+                {pengajuan.jenisPinjaman === "BARANG" && !pengajuan.dpTerbayar ? (
+                  <p className="text-xs text-amber-800 bg-amber-100 p-2 rounded">
+                    ⚠️ DP nasabah belum diterima di kasir. Silakan catat penerimaan DP di atas sebelum melanjutkan ke pencairan.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-teal-700">Lanjutkan ke proses pencairan pinjaman.</p>
+                    <Button asChild className="w-full bg-teal-600 hover:bg-teal-700">
+                      <Link href={`/pencairan?id=${id}`}>Proses Pencairan</Link>
+                    </Button>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}

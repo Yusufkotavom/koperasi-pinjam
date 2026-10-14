@@ -185,6 +185,17 @@ model Pengajuan {
   tenorType            TenorType       @default(BULANAN)
   catatanPengajuan     String?
   dokumenPendukungUrls String[]        @default([])
+
+  // Bidang khusus Kredit Barang (Opsi A)
+  namaBarang           String?
+  hargaBarang          Decimal?        @db.Decimal(15, 2)
+  uangMuka             Decimal?        @db.Decimal(15, 2)
+  vendorBarang         String?
+  dpTerbayar           Boolean         @default(false)
+  tanggalBayarDp       DateTime?
+  buktiDpUrl           String?
+  kasDpId              String?
+
   companyId            String
   approver             User?           @relation("ApproverPengajuan", fields: [approverId], references: [id])
   company              Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -221,6 +232,12 @@ model Pinjaman {
   finalScore        Decimal?              @db.Decimal(5, 2)
   categoryGrade     String?
   
+  // Data barang jika pinjaman berasal dari kredit barang
+  namaBarang        String?
+  hargaBarang       Decimal?              @db.Decimal(15, 2)
+  uangMuka          Decimal?              @db.Decimal(15, 2)
+  vendorBarang      String?
+
   // Sumber dana pencairan
   sumberDana        SumberDana            @default(KAS)
   simpananId        String?
@@ -663,6 +680,7 @@ enum JenisPinjaman {
   REGULAR
   MIKRO
   USAHA
+  BARANG
 }
 
 enum TenorType {

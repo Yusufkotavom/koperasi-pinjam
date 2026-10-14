@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Separator } from "@/components/ui/separator"
 import { getPinjamanById } from "@/actions/pinjaman"
-import { ArrowLeft, User, Wallet, Calendar, TrendingUp, Receipt } from "lucide-react"
+import { ArrowLeft, User, Wallet, Calendar, TrendingUp, Receipt, Package } from "lucide-react"
 import { format } from "date-fns"
 import { id as localeId } from "date-fns/locale"
 import { periodeLabel } from "@/lib/angsuran"
@@ -138,6 +138,40 @@ export default async function PinjamanDetailPage({ params }: { params: Promise<{
           )}
         </CardContent>
       </Card>
+
+      {/* Info Kredit Barang jika ada */}
+      {pinjaman.namaBarang && (
+        <Card className="border-amber-300 bg-amber-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-900">
+              <Package className="h-5 w-5 text-amber-700" />
+              Rincian Pengadaan Barang
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-4 text-sm">
+            <div>
+              <p className="text-muted-foreground text-xs">Nama / Tipe Barang</p>
+              <p className="font-semibold">{pinjaman.namaBarang}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Toko / Vendor Rekanan</p>
+              <p className="font-medium">{pinjaman.vendorBarang || "—"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Harga OTR Barang</p>
+              <p className="font-semibold">
+                {pinjaman.hargaBarang ? `Rp ${Number(pinjaman.hargaBarang).toLocaleString("id-ID")}` : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Uang Muka (DP) Nasabah</p>
+              <p className="font-semibold text-emerald-700">
+                {pinjaman.uangMuka ? `Rp ${Number(pinjaman.uangMuka).toLocaleString("id-ID")}` : "—"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Info Pinjaman */}
       <Card>

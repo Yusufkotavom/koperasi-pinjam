@@ -9,6 +9,7 @@ export const DEFAULT_ACCOUNTING_ACCOUNTS: Array<{ code: string; name: string; ty
   { code: "PIUTANG_PINJAMAN", name: "Piutang Pinjaman", type: "ASSET" },
   { code: "SIMPANAN_ANGGOTA", name: "Simpanan Anggota", type: "LIABILITY" },
   { code: "UTANG_USAHA", name: "Utang Usaha", type: "LIABILITY" },
+  { code: "UTANG_TITIPAN_DP", name: "Utang Titipan Uang Muka Barang", type: "LIABILITY" },
   { code: "MODAL_ANGGOTA", name: "Modal Anggota", type: "EQUITY" },
   { code: "SHU_DITAHAN", name: "SHU Ditahan", type: "EQUITY" },
   { code: "PENDAPATAN_BUNGA", name: "Pendapatan Bunga Pinjaman", type: "REVENUE" },
@@ -56,6 +57,7 @@ function cashAccountCode(kasJenis?: string | null) {
 function fallbackAccountForKas(jenis: "MASUK" | "KELUAR", kategori: string) {
   const key = kategori.toUpperCase()
   if (jenis === "MASUK") {
+    if (key.includes("DP") || key.includes("UANG_MUKA") || key.includes("TITIPAN")) return "UTANG_TITIPAN_DP"
     if (key.includes("MODAL")) return "MODAL_ANGGOTA"
     if (key.includes("DENDA")) return "PENDAPATAN_DENDA"
     if (key.includes("ADMIN") || key.includes("PROVISI")) return "PENDAPATAN_ADMIN"
@@ -211,9 +213,44 @@ export async function postPencairanJournal(
     potonganProvisi: number
     description: string
     postedById?: string | null
+    uangMuka?: number
   },
   options?: JournalOptions,
 ) {
+  const uangMuka = Math.max(0, Number(input.uangMuka || 0))
+  const lines: JournalLineInput[] = [
+    { accountCode: "PIUTANG_PINJAMAN", debit: input.pokokPinjaman, memo: "Pengakuan piutang" },
+  ]
+
+  if (uangMuka > 0) {
+    // Kredit barang Opsi A: debit balik titipan uang muka anggota (kewajiban lunas)
+    // dan kas keluar ke vendor adalah nilaiCair + uangMuka (= hargaBarang - potonganAdmin)
+    lines.push({
+      accountCode: "UTANG_TITIPAN_DP",
+      debit: uangMuka,
+      memo: "Penutupan titipan uang muka untuk pelunasan vendor",
+    })
+    lines.push({
+      accountCode: cashAccountCode(input.kasJenis),
+      credit: input.nilaiCair + uangMuka,
+      memo: "Kas dibayarkan ke vendor (pokok talangan + DP)",
+    })
+  } else {
+    lines.push({
+      accountCode: cashAccountCode(input.kasJenis),
+      credit: input.nilaiCair,
+      memo: "Kas dicairkan",
+    })
+  }
+
+  if (input.potonganAdmin + input.potonganProvisi > 0) {
+    lines.push({
+      accountCode: "PENDAPATAN_ADMIN",
+      credit: input.potonganAdmin + input.potonganProvisi,
+      memo: "Biaya admin/provisi",
+    })
+  }
+
   return postJournalEntry(db, {
     companyId: input.companyId,
     sourceType: "PENCAIRAN",
@@ -221,11 +258,7 @@ export async function postPencairanJournal(
     entryDate: input.tanggalCair,
     description: input.description,
     postedById: input.postedById,
-    lines: [
-      { accountCode: "PIUTANG_PINJAMAN", debit: input.pokokPinjaman, memo: "Pengakuan piutang" },
-      { accountCode: cashAccountCode(input.kasJenis), credit: input.nilaiCair, memo: "Kas dicairkan" },
-      { accountCode: "PENDAPATAN_ADMIN", credit: input.potonganAdmin + input.potonganProvisi, memo: "Biaya admin/provisi" },
-    ],
+    lines,
   }, options)
 }
 

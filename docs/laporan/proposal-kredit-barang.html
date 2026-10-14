@@ -1,0 +1,322 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8">
+<title>Dokumen Desain Sistem — Kredit Barang & Down Payment (DP)</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',Roboto,-apple-system,Arial,sans-serif;color:#1e293b;margin:0;font-size:11.5px;line-height:1.55}
+.cover{height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;padding:60px 70px;background:linear-gradient(135deg,#0f2b46 0%,#153e63 55%,#1f6feb 100%);color:#fff;position:relative}
+.cover .badge{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);padding:6px 14px;border-radius:20px;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:700;margin-bottom:20px}
+.cover h1{font-size:38px;font-weight:800;line-height:1.2;margin:0 0 16px;max-width:680px}
+.cover .subtitle{font-size:16px;color:#cbd5e1;max-width:600px;line-height:1.5;margin-bottom:40px}
+.cover .meta{border-top:1px solid rgba(255,255,255,0.2);padding-top:20px;font-size:11px;color:#94a3b8;width:100%;display:flex;justify-content:space-between}
+section{padding:30px 50px}
+.pb{page-break-before:always}
+h2.sec{font-size:18px;color:#0f2b46;border-bottom:3px solid #1f6feb;padding-bottom:6px;margin:0 0 14px;page-break-after:avoid}
+h3{font-size:13px;color:#0f2b46;margin:14px 0 6px}
+p{margin:6px 0 10px}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:11px;page-break-inside:avoid}
+th{background:#0f2b46;color:#fff;text-align:left;padding:7px 10px;font-weight:600}
+td{padding:6px 10px;border-bottom:1px solid #e2e8f0}
+tr:nth-child(even) td{background:#f8fafc}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.kpi{display:flex;gap:12px;margin:12px 0}
+.kpi .box{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #1f6feb;border-radius:6px;padding:10px 14px}
+.kpi .box b{display:block;font-size:20px;color:#0f2b46;margin-bottom:2px}
+.kpi .box span{font-size:10px;color:#64748b}
+.note{background:#fffbeb;border:1px solid #fef3c7;border-left:4px solid #f59e0b;border-radius:6px;padding:10px 14px;margin:10px 0;color:#92400e}
+.ok{background:#f0fdf4;border:1px solid #bbf7d0;border-left:4px solid #16a34a;border-radius:6px;padding:10px 14px;margin:10px 0;color:#166534}
+.danger{background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px;padding:10px 14px;margin:10px 0;color:#991b1b}
+.box-schema{background:#0f172a;color:#f1f5f9;padding:12px 16px;border-radius:6px;font-family:monospace;font-size:10px;line-height:1.6;margin:10px 0;white-space:pre-wrap}
+ul,ol{margin:6px 0 10px;padding-left:20px}
+li{margin-bottom:4px}
+.flow-step{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:6px;padding:10px 14px;margin-bottom:8px}
+.flow-step b{color:#0f2b46}
+.tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:9.5px;font-weight:700}
+.tag-a{background:#dbeafe;color:#1e40af}
+.tag-b{background:#fef3c7;color:#92400e}
+.tag-ok{background:#dcfce7;color:#166534}
+footer.doc-foot{font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:6px;margin-top:20px;display:flex;justify-content:space-between}
+</style></head><body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="badge">Arsitektur & Spesifikasi Bisnis Koperasi</div>
+  <h1>SISTEM KREDIT BARANG & UANG MUKA (DP)</h1>
+  <div class="subtitle">Desain alur operasional, perlakuan akuntansi, dan formula perhitungan angsuran agar Down Payment (DP) tercatat resmi tanpa mendistorsi laba/bunga koperasi.</div>
+  <div class="meta">
+    <div><strong>Target Pembaca:</strong> Pengurus Koperasi, Komite Kredit, Tim Keuangan & Tim Pengembang</div>
+    <div><strong>Platform:</strong> Koperasi Simpan Pinjam Multi-Tenant (Dashboard Web)</div>
+    <div><strong>Versi:</strong> 1.0 (Oktober 2026)</div>
+  </div>
+</div>
+
+<!-- HALAMAN 1: EKSEKUTIF & MASALAH BISNIS -->
+<section class="pb">
+  <h2 class="sec">1. Ringkasan Eksekutif & Latar Belakang Masalah</h2>
+  <p>
+    Koperasi berencana memperluas layanan pembiayaan dengan produk <strong>Kredit Barang</strong> (misal elektronik, kendaraan, inventaris usaha, dsb.). Pada skema ini, anggota membayar <strong>Uang Muka (Down Payment / DP)</strong> secara tunai di muka, dan koperasi menalangi sisa harga barang sebagai <strong>Pokok Pinjaman</strong> yang dicicil bertahap.
+  </p>
+
+  <div class="kpi">
+    <div class="box">
+      <b>Rp 2.000.000</b>
+      <span>Harga Barang (Nilai Riil)</span>
+    </div>
+    <div class="box">
+      <b>Rp 500.000</b>
+      <span>Down Payment (DP Anggota)</span>
+    </div>
+    <div class="box">
+      <b>Rp 1.500.000</b>
+      <span>Pokok Pinjaman Koperasi</span>
+    </div>
+    <div class="box">
+      <b>Netral P&amp;L</b>
+      <span>Efek DP terhadap Laba</span>
+    </div>
+  </div>
+
+  <h3>Tantangan Teknis Utama yang Harus Dicegah:</h3>
+  <div class="danger">
+    <b>Pitfall 1 — DP Diakui Sebagai Pendapatan (Laba Semu):</b><br/>
+    Jika DP anggota masuk via kas biasa tanpa akun lawan khusus, sistem akuntansi standar otomatis mengklasifikasikannya ke <code>PENDAPATAN_LAINNYA</code> (REVENUE). Akibatnya, pada hari pertama koperasi seolah-olah "untung Rp 500.000", padahal uang tersebut adalah hak vendor/toko untuk menebus barang anggota. Laporan Laba/Rugi (P&amp;L) menjadi semu.
+  </div>
+
+  <div class="danger">
+    <b>Pitfall 2 — Bunga Dihitung dari Harga Barang Penuh (Overcharging Anggota):</b><br/>
+    Jika pokok pinjaman diset Rp 2.000.000 lalu DP hanya dicatat sebagai cicilan pertama, bunga flat 1,5%/bulan akan ditarik dari Rp 2.000.000 (Rp 30.000/bln). Padahal dana riil yang dipinjamkan koperasi hanya Rp 1.500.000 (bunga adil Rp 22.500/bln). Dalam 12 bulan anggota <strong>dirugikan Rp 90.000</strong> dan melanggar prinsip keadilan koperasi.
+  </div>
+
+  <div class="ok">
+    <b>Tujuan Desain:</b>
+    (1) DP masuk kas resmi koperasi; (2) DP <strong>TIDAK mempengaruhi bunga/laba</strong>; (3) Pokok kredit = <code>Harga Barang − DP</code>; (4) Riwayat dan bukti DP tersimpan permanen di kartu anggota, invoice, dan audit log.
+  </div>
+</section>
+
+<!-- HALAMAN 2: DUA OPSI ARSITEKTUR -->
+<section class="pb">
+  <h2 class="sec">2. Pilihan Pendekatan Arsitektur (Opsi A vs Opsi B)</h2>
+  <p>Kami menyusun 2 pendekatan implementasi yang dapat disesuaikan dengan SOP operasional koperasi:</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:28%">Aspek</th>
+        <th style="width:36%"><span class="tag tag-a">OPSI A (Rekomendasi)</span><br/>Koperasi Menalangi Penuh ke Vendor</th>
+        <th style="width:36%"><span class="tag tag-b">OPSI B (Sederhana)</span><br/>Anggota Bayar DP Langsung ke Toko</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Alur Dana Riil</strong></td>
+        <td>Anggota bayar DP Rp 500rb ke koperasi.<br/>Koperasi setor Rp 2jt penuh ke vendor barang.</td>
+        <td>Anggota bayar DP Rp 500rb langsung ke toko.<br/>Koperasi hanya cairkan Rp 1,5jt ke toko.</td>
+      </tr>
+      <tr>
+        <td><strong>Pencatatan Kas DP</strong></td>
+        <td>Masuk Kas Koperasi (Debit Kas, Kredit Utang Titipan DP).</td>
+        <td>Kas Koperasi TIDAK disentuh. DP hanya jadi data referensi di formulir.</td>
+      </tr>
+      <tr>
+        <td><strong>Kategori Akun Lawan</strong></td>
+        <td><strong>LIABILITY (Kewajiban)</strong> — kode <code>UANG_MUKA_BARANG</code>. Bukan REVENUE, bukan Laba.</td>
+        <td>Tanpa jurnal DP. Jurnal pencairan normal: Debit Piutang Rp 1,5jt, Kredit Kas Rp 1,5jt.</td>
+      </tr>
+      <tr>
+        <td><strong>Dampak ke Laba (P&amp;L)</strong></td>
+        <td><span class="tag tag-ok">NOL (Netral 100%)</span></td>
+        <td><span class="tag tag-ok">NOL (Netral 100%)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Kekuatan Kontrol</strong></td>
+        <td>Sangat kuat. Bukti kuitansi DP atas nama koperasi; invoice vendor utuh atas nama koperasi/anggota.</td>
+        <td>Cepat &amp; sederhana. Koperasi butuh melampirkan foto kuitansi toko fisik.</td>
+      </tr>
+      <tr>
+        <td><strong>Cocok Untuk</strong></td>
+        <td>Koperasi yang bermitra resmi dengan toko rekanan / pengadaan terpusat.</td>
+        <td>Kredit barang bebas di mana anggota belanja di toko manapun sendiri.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Jurnal Akuntansi Opsi A (Koperasi Menalangi ke Vendor):</h3>
+  <div class="box-schema">
+1. Saat Anggota Bayar DP (Tunai Rp 500.000):
+   (D) CASH_TUNAI                Rp 500.000
+   (K) UTANG_TITIPAN_DP (LIABILITY)         Rp 500.000
+   --> Efek Laba: Rp 0 | Kas bertambah Rp 500.000 | Utang titipan bertambah Rp 500.000
+
+2. Saat Koperasi Bayar Barang ke Vendor (Rp 2.000.000) &amp; Terbitkan Kredit:
+   (D) PIUTANG_PINJAMAN (Pokok)  Rp 1.500.000
+   (D) UTANG_TITIPAN_DP          Rp   500.000   (Menutup titipan DP anggota)
+   (K) CASH_TUNAI / BANK                    Rp 2.000.000 (Keluar ke vendor)
+   --> Balance! Piutang bersih Rp 1,5jt | Titipan DP bersih Rp 0 | Kas keluar neto Rp 1,5jt
+  </div>
+</section>
+
+<!-- HALAMAN 3: PERHITUNGAN ANGSURAN & SKENARIO 2 -->
+<section class="pb">
+  <h2 class="sec">3. Formula Angsuran &amp; Pembulatan Skenario 2</h2>
+  <p>
+    Sistem menggunakan <strong>Skenario 2 yang telah distandarkan di mesin <code>src/lib/angsuran.ts</code></strong>:
+    pokok dibulatkan ke atas ke ribuan terdekat, bunga flat dibulatkan ke ribuan, dan seluruh sisa residu diserap di <strong>cicilan terakhir</strong>. Tidak ada desimal (sen), tidak ada ratusan, dan total tidak pernah "miss".
+  </p>
+
+  <h3>Simulasi Riil: Harga Rp 2.000.000, DP Rp 500.000, Tenor 12 Bulan, Bunga 1,5%/bulan</h3>
+  <div class="note">
+    <b>Basis Pokok Pinjaman:</b> Rp 2.000.000 − Rp 500.000 = <strong>Rp 1.500.000</strong>.<br/>
+    Bunga bulanan flat: 1,5% × Rp 1.500.000 = <strong>Rp 22.500/bulan</strong> (dibulatkan ke ribuan terdekat = Rp 23.000).<br/>
+    Bunga total 12 bulan tepat: 12 × Rp 22.500 = <strong>Rp 270.000</strong>.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:12%">Cicilan</th>
+        <th style="width:22%" class="num">Angsuran Pokok</th>
+        <th style="width:22%" class="num">Angsuran Bunga</th>
+        <th style="width:22%" class="num">Total Tagihan</th>
+        <th style="width:22%">Keterangan</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Bulan 1</strong></td>
+        <td class="num">Rp 125.000</td>
+        <td class="num">Rp 23.000</td>
+        <td class="num"><strong>Rp 148.000</strong></td>
+        <td>Pokok flat + bunga bulat</td>
+      </tr>
+      <tr>
+        <td>Bulan 2 - 11</td>
+        <td class="num">Rp 125.000 × 10</td>
+        <td class="num">Rp 23.000 × 10</td>
+        <td class="num"><strong>Rp 148.000 / bln</strong></td>
+        <td>10 cicilan reguler sama persis</td>
+      </tr>
+      <tr style="background:#fef3c7;font-weight:600">
+        <td><strong>Bulan 12 (Akhir)</strong></td>
+        <td class="num">Rp 125.000</td>
+        <td class="num">Rp 17.000</td>
+        <td class="num"><strong>Rp 142.000</strong></td>
+        <td>Menyerap residu bunga (Rp 270rb − 11×23rb)</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr style="background:#0f2b46;color:#fff;font-weight:700">
+        <td>TOTAL AKHIR</td>
+        <td class="num">Rp 1.500.000</td>
+        <td class="num">Rp 270.000</td>
+        <td class="num">Rp 1.770.000</td>
+        <td>Pokok lunas pas, bunga pas 270.000</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <h3>Perbandingan Keadilan Bagi Anggota:</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Parameter</th>
+        <th>Sistem Salah (Bunga dari Harga Rp 2jt)</th>
+        <th>Sistem Koperasi Kita (Bunga dari Pokok Rp 1,5jt)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Dasar Hitung Bunga</td>
+        <td>Rp 2.000.000 (Harga kotor)</td>
+        <td><strong>Rp 1.500.000 (Harga bersih setelah DP)</strong></td>
+      </tr>
+      <tr>
+        <td>Total Bunga (12 bln)</td>
+        <td>Rp 360.000</td>
+        <td><strong>Rp 270.000</strong> (Hemat Rp 90.000)</td>
+      </tr>
+      <tr>
+        <td>Kepatuhan Syariah / Koperasi</td>
+        <td><span class="danger" style="display:inline-block;padding:2px 6px">Zalim (menarik bunga atas uang nasabah sendiri)</span></td>
+        <td><span class="ok" style="display:inline-block;padding:2px 6px">Adil &amp; Transparan</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- HALAMAN 4: WORKFLOW USER & PERUBAHAN SISTEM -->
+<section class="pb">
+  <h2 class="sec">4. Alur Kerja Operasional (Workflow) di Aplikasi</h2>
+  <p>Tahapan yang akan dilalui admin dan anggota di dashboard koperasi:</p>
+
+  <div class="flow-step">
+    <b>Langkah 1 — Pengajuan Kredit Barang (Form Pengajuan Baru)</b><br/>
+    Pilih jenis pinjaman: <span class="tag tag-a">BARANG</span>. Input:
+    <ul>
+      <li><strong>Nama Barang &amp; Spesifikasi:</strong> misal "Kulkas Sharp 2 Pintu SJ-236"</li>
+      <li><strong>Harga Barang:</strong> Rp 2.000.000</li>
+      <li><strong>Uang Muka (DP):</strong> Rp 500.000</li>
+      <li><strong>Pokok Pinjaman (Otomatis Terkunci):</strong> Rp 1.500.000 (dihitung real-time)</li>
+      <li><strong>Tenor &amp; Bunga:</strong> misal 12 Bulan, 1,5% flat/bulan</li>
+      <li>Upload bukti invoice / proforma toko dari supplier.</li>
+    </ul>
+  </div>
+
+  <div class="flow-step">
+    <b>Langkah 2 — Pembayaran &amp; Validasi DP</b><br/>
+    Nasabah menyetorkan DP Rp 500.000. Kasir menerima uang kas/transfer:
+    <ul>
+      <li>Sistem mencetak <strong>Kuitansi Resmi Tanda Terima DP</strong> lengkap dengan nomor pengajuan.</li>
+      <li>Jurnal otomatis mencatat penerimaan ke <code>UTANG_TITIPAN_DP</code> (bukan laba).</li>
+      <li>Status pengajuan otomatis naik ke <strong>DP_TERBAYAR (Siap Survey/Approval)</strong>.</li>
+    </ul>
+  </div>
+
+  <div class="flow-step">
+    <b>Langkah 3 — Approval Komite Kredit</b><br/>
+    Komite melihat histori credit score nasabah, plafon saran, spesifikasi barang, serta status DP. Plafon dan bunga tetap dapat disesuaikan pada modal approval sebelum disetujui.
+  </div>
+
+  <div class="flow-step">
+    <b>Langkah 4 — Pencairan / Pelunasan ke Toko</b><br/>
+    Koperasi mentransfer Rp 2.000.000 ke toko rekanan (kombinasi Rp 500rb DP + Rp 1,5jt dana koperasi), barang diserahkan ke nasabah, dan jadwal cicilan 12 bulan (Rp 148rb/bln) mulai aktif berjalan.
+  </div>
+
+  <h3>Perubahan Database &amp; Antarmuka yang Diperlukan:</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30%">Komponen</th>
+        <th style="width:35%">Perubahan Teknis</th>
+        <th style="width:35%">Output untuk Pengguna</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Prisma Schema</strong></td>
+        <td>Tambah kolom di <code>Pengajuan</code>:<br/>• <code>hargaBarang Decimal?</code><br/>• <code>uangMuka Decimal?</code><br/>• <code>namaBarang String?</code><br/>• <code>vendorBarang String?</code></td>
+        <td>Data barang dan histori DP tersimpan rapi selamanya, tidak hilang saat pinjaman lunas.</td>
+      </tr>
+      <tr>
+        <td><strong>Daftar Akun Standar</strong></td>
+        <td>Tambah akun sistem di <code>accounting.ts</code>:<br/><code>UTANG_TITIPAN_DP</code> (LIABILITY)</td>
+        <td>Laporan laba rugi (P&amp;L) 100% akurat; akuntan/auditor tidak akan menemukan laba fiktif.</td>
+      </tr>
+      <tr>
+        <td><strong>Form Pengajuan</strong></td>
+        <td>Mode dinamis jika jenis = BARANG:<br/>Muncul field Harga, DP, Vendor, Barang</td>
+        <td>Admin cukup isi Harga &amp; DP, pokok dan estimasi cicilan terhitung otomatis.</td>
+      </tr>
+      <tr>
+        <td><strong>Dokumen Cetak</strong></td>
+        <td>Template Kuitansi DP + Klausul Barang pada Perjanjian Kredit Pinjaman</td>
+        <td>Dokumen hukum lengkap memuat nomor seri barang, jaminan agunan, dan hak kepemilikan.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <footer class="doc-foot">
+    <div>Dokumen Desain Sistem — Modul Kredit Barang Koperasi Simpan Pinjam</div>
+    <div>Diproduksi: 14 Oktober 2026 | Engine: Koperasi Platform v2.0</div>
+  </footer>
+</section>
+
+</body></html>

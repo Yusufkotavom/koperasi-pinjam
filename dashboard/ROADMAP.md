@@ -32,6 +32,7 @@ Monitoring kualitas portofolio pinjaman dan ritme penagihan.
 ## Pengajuan, Pencairan, Pembayaran
 Alur inti kredit dari request sampai pembayaran cicilan.
 - [x] Pengajuan pinjaman (baru, daftar, detail, approval)
+- [x] Kredit barang & DP Opsi A netral laba (uang muka via kas, titipan neraca, talangan vendor)
 - [x] Simulasi angsuran editable (bunga/desimal lebih fleksibel)
 - [x] Pencairan pinjaman dengan validasi saldo kas
 - [x] Pencairan dari simpanan (pilih sumber dana: KAS atau SIMPANAN)

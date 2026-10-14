@@ -114,6 +114,11 @@ export default async function PengajuanListPage({
                         <div className="flex flex-col">
                           <span className="font-semibold tracking-tight">{row.nasabah.namaLengkap}</span>
                           <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">{row.nasabah.nomorAnggota}</span>
+                          {row.jenisPinjaman === "BARANG" && (
+                            <span className="text-[10px] text-amber-700 font-medium">
+                              📦 {row.namaBarang || "Barang"} {!row.dpTerbayar ? "· (Menunggu DP)" : "· (DP Terbayar)"}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">

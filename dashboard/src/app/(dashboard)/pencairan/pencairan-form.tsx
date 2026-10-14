@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "sonner"
-import { Banknote, Wallet } from "lucide-react"
+import { Banknote, Package, Wallet } from "lucide-react"
 import { buildRencanaAngsuran, periodeLabel } from "@/lib/angsuran"
 
 interface Props {
@@ -24,6 +24,12 @@ interface Props {
     tenor: number
     bungaPerBulan: unknown
     tenorType?: "BULANAN" | "MINGGUAN"
+    jenisPinjaman?: string
+    namaBarang?: string | null
+    hargaBarang?: unknown
+    uangMuka?: unknown
+    vendorBarang?: string | null
+    dpTerbayar?: boolean
   }
   defaultBonusNominal: number
 }
@@ -59,12 +65,18 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
   const bunga = Number(pengajuan.bungaPerBulan)
   const tenor = pengajuan.tenor
 
+  const isBarang = pengajuan.jenisPinjaman === "BARANG"
+  const nominalDp = isBarang ? Number(pengajuan.uangMuka || 0) : 0
+  const hargaBarang = isBarang ? Number(pengajuan.hargaBarang || 0) : 0
+
   const rencana = buildRencanaAngsuran(plafon, tenor, bunga)
   const pl = periodeLabel(pengajuan.tenorType)
   const angsuranPokok = rencana.angsuranPokok
   const angsuranBunga = rencana.angsuranBunga
   const totalAngsuran = rencana.totalAngsuran
   const nilaiCair = plafon - potonganAdmin - potonganProvisi
+  // Total kas keluar riil ke vendor: talangan koperasi + DP titipan nasabah
+  const totalKeluarVendor = isBarang ? nilaiCair + nominalDp : nilaiCair
 
   // Load simpanan available saat pilih SIMPANAN
   useEffect(() => {
@@ -125,10 +137,38 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Card Rincian Kredit Barang jika tipe BARANG */}
+          {isBarang && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50/70 p-4 space-y-2 text-sm">
+              <div className="flex items-center gap-2 text-amber-900 font-semibold text-xs">
+                <Package className="size-4 text-amber-700" />
+                <span>Rincian Pengadaan Barang (Opsi A)</span>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-2 text-xs pt-1">
+                <div>
+                  <span className="text-muted-foreground">Barang:</span>{" "}
+                  <span className="font-semibold">{pengajuan.namaBarang || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Vendor:</span>{" "}
+                  <span className="font-medium">{pengajuan.vendorBarang || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Harga Barang OTR:</span>{" "}
+                  <span className="font-semibold">{fmt(hargaBarang)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Uang Muka (DP):</span>{" "}
+                  <span className="font-semibold text-emerald-700">{fmt(nominalDp)} (Sudah Diterima)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
-            <p className="font-medium text-muted-foreground text-xs">Rincian Pinjaman</p>
+            <p className="font-medium text-muted-foreground text-xs">Rincian Pinjaman &amp; Angsuran</p>
             {[
-              { label: "Plafon Disetujui", value: fmt(plafon) },
+              { label: isBarang ? "Pokok Talangan (Harga − DP)" : "Plafon Disetujui", value: fmt(plafon) },
               { label: "Tenor", value: `${tenor} ${pl.unit}` },
               { label: `Bunga Flat/${pl.unit}`, value: `${(bunga * 100).toFixed(1)}%` },
               { label: `Angsuran Pokok/${pl.unit}`, value: fmt(angsuranPokok) },
@@ -269,13 +309,19 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
             </div>
           )}
 
-          <div className="rounded-lg bg-teal-50 border border-teal-200 p-4 text-sm">
+          <div className="rounded-lg bg-teal-50 border border-teal-200 p-4 text-sm space-y-1">
             <div className="flex justify-between font-bold text-teal-900">
-              <span>Nilai Bersih Diterima</span>
+              <span>{isBarang ? "Nilai Talangan Pokok Koperasi" : "Nilai Bersih Diterima"}</span>
               <span className="text-xl">{fmt(nilaiCair)}</span>
             </div>
+            {isBarang && (
+              <div className="flex justify-between text-xs text-teal-800 pt-1 border-t border-teal-200">
+                <span>Total Pelunasan Kas ke Vendor (+ DP Nasabah):</span>
+                <span className="font-bold">{fmt(totalKeluarVendor)}</span>
+              </div>
+            )}
             {(potonganAdmin + potonganProvisi) > 0 && (
-              <p className="text-xs text-teal-700 mt-1">Dipotong Rp {fmt(potonganAdmin + potonganProvisi)}</p>
+              <p className="text-xs text-teal-700 mt-1">Dipotong biaya admin/provisi Rp {fmt(potonganAdmin + potonganProvisi)}</p>
             )}
           </div>
 
@@ -285,7 +331,7 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
             className="w-full bg-teal-600 hover:bg-teal-700"
           >
             <Banknote className="size-4" />
-            {isPending ? "Memproses..." : `Cairkan ${fmt(nilaiCair)}`}
+            {isPending ? "Memproses..." : isBarang ? `Cairkan & Lunasi Vendor ${fmt(totalKeluarVendor)}` : `Cairkan ${fmt(nilaiCair)}`}
           </Button>
         </form>
       </CardContent>
