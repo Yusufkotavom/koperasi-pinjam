@@ -17,6 +17,7 @@ import { getKolektorBonusConfig, getCreditScoringConfig } from "./settings"
 import { computeSuggestedLimit } from "@/lib/credit-finalize"
 import { buildRencanaAngsuran } from "@/lib/angsuran"
 import { withActionDelay } from "@/lib/action-delay"
+import { generateNomorDokumen } from "@/lib/nomor-dokumen"
 
 function parseDateOnly(input: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
@@ -151,9 +152,12 @@ export async function createPengajuan(input: unknown) {
 
   const isBarang = rest.jenisPinjaman === "BARANG"
 
+  const nomorPengajuan = await generateNomorDokumen("AJU")
+
   const pengajuan = await prisma.pengajuan.create({
     data: {
       companyId,
+      nomorPengajuan,
       ...rest,
       kelompokId: rest.kelompokId || nasabah.kelompokId || null,
       plafonDiajukan: new Prisma.Decimal(plafonDiajukan),
@@ -444,7 +448,7 @@ export async function cairkanPinjaman(input: unknown) {
   const tglCairEndOfDay = new Date(tglCair)
   tglCairEndOfDay.setHours(23, 59, 59, 999)
   const tglJatuhTempo = tenorType === "MINGGUAN" ? addWeeks(tglCair, tenor) : addMonths(tglCair, tenor)
-  const nomorKontrak = `KNT-${Date.now().toString(36).toUpperCase()}`
+  const nomorKontrak = await generateNomorDokumen("KTR", tglCair)
 
   await ensureAccountingAccounts(companyId)
 

@@ -17,6 +17,7 @@ import { requireCompanyId } from "@/lib/tenant"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
 import { withActionDelay } from "@/lib/action-delay"
+import { generateNomorDokumen } from "@/lib/nomor-dokumen"
 
 type MetodePembayaran = "TUNAI" | "TRANSFER"
 type ModePembayaran = "FULL" | "PARSIAL" | "PELUNASAN"
@@ -584,9 +585,11 @@ export async function inputPembayaran(input: {
   if ("error" in ensured) return { error: ensured.error }
 
   const result = await prisma.$transaction(async (tx) => {
+    const nomorTransaksi = await generateNomorDokumen("BYR", tanggalBayar, tx)
     const pembayaran = await tx.pembayaran.create({
       data: {
         companyId,
+        nomorTransaksi,
         pinjamanId: jadwal.pinjamanId,
         tanggalBayar,
         pokok: new Prisma.Decimal(alokasiPokok),
