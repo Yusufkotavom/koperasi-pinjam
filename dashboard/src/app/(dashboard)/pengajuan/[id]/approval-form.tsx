@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { CheckCircle, XCircle } from "lucide-react"
 
+import { useGlobalLoader } from "@/lib/use-global-loader"
+
 export function ApprovalForm({
   pengajuanId,
   plafonDiajukan,
@@ -27,6 +29,7 @@ export function ApprovalForm({
   const [bungaDisetujui, setBungaDisetujui] = useState(bungaDiajukanPct)
   const [catatan, setCatatan] = useState("")
   const router = useRouter()
+  const { show: showGlobalLoader, hide: hideGlobalLoader } = useGlobalLoader()
   const unit = tipeTenor === "MINGGUAN" ? "minggu" : "bulan"
 
   function fmt(n: number) {
@@ -38,20 +41,28 @@ export function ApprovalForm({
       toast.error("Isi plafon yang disetujui")
       return
     }
+    showGlobalLoader(
+      aksi === "SETUJU" ? "Menyetujui Pengajuan..." : "Menolak Pengajuan...",
+      "Menyimpan keputusan approval dan memperbarui status berkas."
+    )
     startTransition(async () => {
-      const result = await approvePengajuan({
-        pengajuanId,
-        aksi,
-        plafonDisetujui,
-        bungaDisetujui: aksi === "SETUJU" ? bungaDisetujui : undefined,
-        catatanApproval: catatan,
-      })
-      if (result.error) {
-        toast.error(typeof result.error === "string" ? result.error : "Gagal memproses approval")
-        return
+      try {
+        const result = await approvePengajuan({
+          pengajuanId,
+          aksi,
+          plafonDisetujui,
+          bungaDisetujui: aksi === "SETUJU" ? bungaDisetujui : undefined,
+          catatanApproval: catatan,
+        })
+        if (result.error) {
+          toast.error(typeof result.error === "string" ? result.error : "Gagal memproses approval")
+          return
+        }
+        toast.success(aksi === "SETUJU" ? "Pengajuan berhasil disetujui!" : "Pengajuan ditolak.")
+        router.refresh()
+      } finally {
+        hideGlobalLoader()
       }
-      toast.success(aksi === "SETUJU" ? "Pengajuan berhasil disetujui!" : "Pengajuan ditolak.")
-      router.refresh()
     })
   }
 

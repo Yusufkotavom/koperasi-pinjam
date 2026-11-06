@@ -28,5 +28,5 @@ export default async function KasPage({
     })),
   }
 
-  return <KasClientPage initialData={normalized} initialKategori={kategori} />
+  return <KasClientPage initialData={normalized as any} initialKategori={kategori as any} />
 }

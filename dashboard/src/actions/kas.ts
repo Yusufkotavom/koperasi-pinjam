@@ -11,6 +11,7 @@ import { ensureAccountingAccounts, getCashBalanceByJenis, postKasTransactionJour
 import { resolveReportPeriod, type ReportPeriodInput } from "@/lib/report-period"
 import { serializeData } from "@/lib/utils"
 import { requireCompanyId } from "@/lib/tenant"
+import { withActionDelay } from "@/lib/action-delay"
 
 function normalizeKasCategoryKey(raw: string) {
   return raw.trim().toUpperCase().replace(/\s+/g, "_")
@@ -450,6 +451,7 @@ export async function getArusKasReport(params?: {
 }
 
 export async function inputKas(input: unknown) {
+  return withActionDelay(async () => {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { companyId } = requireCompanyId(session as unknown as { user?: { id?: string; companyId?: string | null; roles?: string[] } } | null)
@@ -484,7 +486,7 @@ export async function inputKas(input: unknown) {
   }
   await ensureAccountingAccounts(companyId)
 
-  let kas: { id: string; isApproved: boolean; jenis: "MASUK" | "KELUAR"; kategoriKey: string; jumlah: Prisma.Decimal }
+  let kas: { id: string; isApproved: boolean; jenis: any; kategoriKey: string; jumlah: Prisma.Decimal }
   try {
     kas = await prisma.$transaction(async (tx) => {
       const row = await tx.kasTransaksi.create({
@@ -537,6 +539,7 @@ export async function inputKas(input: unknown) {
     afterData: { jenis: kas.jenis, kategoriKey: kas.kategoriKey, jumlah: kas.jumlah.toString() },
   })
   return { success: true, data: { id: kas.id, isApproved: kas.isApproved } }
+  })
 }
 
 export async function updateKas(id: string, input: unknown) {

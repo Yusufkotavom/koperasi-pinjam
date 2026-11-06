@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useGlobalLoader } from "@/lib/use-global-loader"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -20,7 +21,7 @@ type KasData = {
   transaksi: {
     id: string
     tanggal: Date
-    jenis: "MASUK" | "KELUAR"
+    jenis: "MASUK" | "KELUAR" | "TRANSFER"
     kategori: string
     deskripsi: string
     jumlah: number
@@ -41,7 +42,7 @@ type KasKategori = {
   id: string
   nama: string
   key: string
-  jenis: "MASUK" | "KELUAR"
+  jenis: "MASUK" | "KELUAR" | "TRANSFER"
 }
 
 function fmt(n: number) {
@@ -58,6 +59,7 @@ function getLocalDateInputValue(date: Date) {
 export function KasClientPage({ initialData, initialKategori }: { initialData: KasData; initialKategori: KasKategori[] }) {
   const router = useRouter()
   const [isPending, startLoadTransition] = useTransition()
+  const { show: showGlobalLoader, hide: hideGlobalLoader } = useGlobalLoader()
   const [tab, setTab] = useState<"histori" | "input" | "kategori" | "approval">("histori")
   const [jenis, setJenis] = useState<"MASUK" | "KELUAR">("MASUK")
   const [kategori, setKategori] = useState<string>("")
@@ -155,7 +157,9 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
       return
     }
 
+    showGlobalLoader("Menyimpan Transaksi Kas...", "Memvalidasi kategori kas, mencatat transaksi & posting jurnal.")
     startLoadTransition(async () => {
+      try {
       const result = await inputKas({
         jenis,
         kategori,
@@ -203,6 +207,9 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
       
       router.refresh()
       setTab("histori")
+      } finally {
+        hideGlobalLoader()
+      }
     })
   }
 
@@ -241,7 +248,9 @@ export function KasClientPage({ initialData, initialKategori }: { initialData: K
   const handleEditKategori = (k: KasKategori) => {
     setEditingKategoriId(k.id)
     setKategoriNama(k.nama)
-    setKategoriJenis(k.jenis)
+    if (k.jenis === "MASUK" || k.jenis === "KELUAR") {
+      setKategoriJenis(k.jenis)
+    }
     // Scroll to form if needed
   }
 

@@ -16,7 +16,7 @@ import { NumericFormat } from "react-number-format"
 type KasData = {
   id: string
   tanggal: Date
-  jenis: "MASUK" | "KELUAR"
+  jenis: "MASUK" | "KELUAR" | "TRANSFER"
   kategori: string
   deskripsi: string
   jumlah: number
@@ -27,7 +27,7 @@ type KasKategori = {
   id: string
   nama: string
   key: string
-  jenis: "MASUK" | "KELUAR"
+  jenis: "MASUK" | "KELUAR" | "TRANSFER"
 }
 
 function getLocalDateInputValue(date: Date) {

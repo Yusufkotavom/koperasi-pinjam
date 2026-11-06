@@ -18,7 +18,7 @@ type KategoriRow = {
   id: string
   nama: string
   key: string
-  jenis: "MASUK" | "KELUAR"
+  jenis: "MASUK" | "KELUAR" | "TRANSFER"
   accountId: string | null
   account: AccountRow | null
 }

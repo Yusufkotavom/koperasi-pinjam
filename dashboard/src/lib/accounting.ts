@@ -54,7 +54,7 @@ function cashAccountCode(kasJenis?: string | null) {
   return kasJenis === "BANK" ? "CASH_BANK" : "CASH_TUNAI"
 }
 
-function fallbackAccountForKas(jenis: "MASUK" | "KELUAR", kategori: string) {
+function fallbackAccountForKas(jenis: "MASUK" | "KELUAR" | "TRANSFER", kategori: string) {
   const key = kategori.toUpperCase()
   if (jenis === "MASUK") {
     if (key.includes("DP") || key.includes("UANG_MUKA") || key.includes("TITIPAN")) return "UTANG_TITIPAN_DP"

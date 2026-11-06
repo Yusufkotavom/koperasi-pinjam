@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { NavigationIndicatorProvider } from "@/components/navigation-indicator"
 import { PageViewTransition } from "@/components/page-view-transition"
 import { SessionProvider } from "@/components/session-provider"
+import { GlobalLoadingModal } from "@/components/global-loading-modal"
 
 export const metadata: Metadata = {
   title: {
@@ -34,6 +35,7 @@ export default function RootLayout({
           >
             <NavigationIndicatorProvider>
               <PageViewTransition>{children}</PageViewTransition>
+              <GlobalLoadingModal />
               <Toaster richColors position="top-right" />
             </NavigationIndicatorProvider>
           </ThemeProvider>

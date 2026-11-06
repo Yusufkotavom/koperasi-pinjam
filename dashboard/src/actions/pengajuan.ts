@@ -16,6 +16,7 @@ import { z } from "zod"
 import { getKolektorBonusConfig, getCreditScoringConfig } from "./settings"
 import { computeSuggestedLimit } from "@/lib/credit-finalize"
 import { buildRencanaAngsuran } from "@/lib/angsuran"
+import { withActionDelay } from "@/lib/action-delay"
 
 function parseDateOnly(input: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
@@ -180,6 +181,7 @@ export async function createPengajuan(input: unknown) {
 }
 
 export async function approvePengajuan(input: unknown) {
+  return withActionDelay(async () => {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   let userId: string
@@ -233,6 +235,7 @@ export async function approvePengajuan(input: unknown) {
     afterData: { status: updated.status, plafonDisetujui: updated.plafonDisetujui?.toString() },
   })
   return { success: true }
+  })
 }
 
 // ========================
@@ -380,6 +383,7 @@ export async function catatBayarDp(input: unknown) {
 // ========================
 
 export async function cairkanPinjaman(input: unknown) {
+  return withActionDelay(async () => {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { companyId } = requireCompanyId(
@@ -648,6 +652,7 @@ export async function cairkanPinjaman(input: unknown) {
     metadata: { pengajuanId, nomorKontrak: pinjaman.nomorKontrak, nilaiCair },
   })
   return { success: true, data: pinjaman }
+  })
 }
 
 export async function getPengajuanSiapCair() {

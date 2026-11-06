@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useGlobalLoader } from "@/lib/use-global-loader"
 import { toast } from "sonner"
 import { Wallet, Upload, X } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -36,6 +37,7 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
   const [isOpen, setIsOpen] = useState(false)
   const [isSuccessOpen, setIsSuccessOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const { show: showGlobalLoader, hide: hideGlobalLoader } = useGlobalLoader()
   const [isUploading, setIsUploading] = useState(false)
   const router = useRouter()
 
@@ -86,6 +88,7 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
       return
     }
 
+    showGlobalLoader("Menyimpan Pembayaran...", "Memvalidasi denda, update jadwal angsuran, dan memposting jurnal keuangan.")
     startTransition(async () => {
       try {
         const result = await inputPembayaran({
@@ -111,6 +114,8 @@ export function BayarButton({ jadwalId, total }: { jadwalId: string; total: numb
         setIsSuccessOpen(true)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Gagal memproses pembayaran.")
+      } finally {
+        hideGlobalLoader()
       }
     })
   }

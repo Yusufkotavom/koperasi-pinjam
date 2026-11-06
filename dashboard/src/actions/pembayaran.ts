@@ -16,6 +16,7 @@ import { computeLoanCredit, persistLoanCredit } from "@/lib/credit-finalize"
 import { requireCompanyId } from "@/lib/tenant"
 import { ensureKasKategori } from "./kas"
 import { serializeData } from "@/lib/utils"
+import { withActionDelay } from "@/lib/action-delay"
 
 type MetodePembayaran = "TUNAI" | "TRANSFER"
 type ModePembayaran = "FULL" | "PARSIAL" | "PELUNASAN"
@@ -452,6 +453,7 @@ export async function inputPembayaran(input: {
   catatan?: string
   tanggalBayar?: Date | string
 }) {
+  return withActionDelay(async () => {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { companyId } = requireCompanyId(
@@ -775,6 +777,7 @@ export async function inputPembayaran(input: {
       error: error instanceof Error ? error.message : "Gagal memproses pembayaran.",
     }
   }
+  })
 }
 
 export async function getRiwayatPembayaran(pinjamanId: string) {

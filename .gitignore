@@ -38,3 +38,4 @@ next-env.d.ts
 stitch_koperasi_dashboard.zip
 stitch_koperasi_dashboard/
 backups/
+.commandcode/

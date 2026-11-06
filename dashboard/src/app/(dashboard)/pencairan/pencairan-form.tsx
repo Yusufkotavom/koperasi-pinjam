@@ -34,6 +34,8 @@ interface Props {
   defaultBonusNominal: number
 }
 
+import { useGlobalLoader } from "@/lib/use-global-loader"
+
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
 }
@@ -60,6 +62,7 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
   const [simpananList, setSimpananList] = useState<any[]>([])
   const [loadingSimpanan, setLoadingSimpanan] = useState(false)
   const router = useRouter()
+  const { show: showGlobalLoader, hide: hideGlobalLoader } = useGlobalLoader()
 
   const plafon = Number(pengajuan.plafonDisetujui ?? pengajuan.plafonDiajukan)
   const bunga = Number(pengajuan.bungaPerBulan)
@@ -98,6 +101,7 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
     e.preventDefault()
     if (isPending || submitLockRef.current) return
     submitLockRef.current = true
+    showGlobalLoader("Memproses Pencairan Dana...", "Menghubungi database, mencatat jurnal kas & jadwal angsuran.")
     const toastId = toast.loading("Memproses pencairan...")
     startTransition(async () => {
       try {
@@ -119,6 +123,7 @@ export function PencairanForm({ pengajuan, defaultBonusNominal }: Props) {
         router.push(`/dokumen/pencairan/${pengajuan.id}`)
       } finally {
         submitLockRef.current = false
+        hideGlobalLoader()
       }
     })
   }
