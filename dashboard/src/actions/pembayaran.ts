@@ -1247,7 +1247,7 @@ export async function getPembayaranById(id: string) {
         include: {
           pengajuan: {
             include: {
-              nasabah: { select: { namaLengkap: true, nomorAnggota: true } },
+              nasabah: { select: { id: true, namaLengkap: true, nomorAnggota: true, nik: true, noHp: true } },
               kelompok: { select: { nama: true } },
             },
           },
