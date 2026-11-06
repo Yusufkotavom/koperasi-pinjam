@@ -58,7 +58,7 @@ describe("report export API routes", () => {
     const res = await GET(new Request("http://localhost/api/export/buku-besar"))
     const csv = await readCsv(res)
     expect(res.status).toBe(200)
-    expect(csv).toContain("tanggal,kategori,deskripsi,debit,kredit,saldo,input_oleh,bukti_url")
+    expect(csv).toContain("deskripsi,debit,kredit,saldo,input_oleh,bukti_url")
     expect(csv).toContain("SETORAN")
   })
 

@@ -276,7 +276,7 @@ export type ActiveLoanBorrowerOption = {
   nasabahId: string
   namaLengkap: string
   nomorAnggota: string
-  nik: string
+  nik: string | null
   kelompok: string
   activeLoanCount: number
   contractNumbers: string[]
@@ -354,7 +354,7 @@ export async function getActiveLoanBorrowers(params?: { search?: string }) {
   for (const pinj of pinjaman) {
     const nasabahId = pinj.pengajuan.nasabahId
     const nasabah = pinj.pengajuan.nasabah
-    const existing = byNasabah.get(nasabahId) ?? {
+    const existing: ActiveLoanBorrowerOption = byNasabah.get(nasabahId) ?? {
       nasabahId,
       namaLengkap: nasabah.namaLengkap,
       nomorAnggota: nasabah.nomorAnggota,

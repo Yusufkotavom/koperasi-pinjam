@@ -215,8 +215,10 @@ export default function NasabahBaruPage() {
                 {errors.namaLengkap && <p className="text-xs text-red-500">{errors.namaLengkap.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="nik">NIK (16 digit) <span className="text-red-500">*</span></Label>
-                <Input id="nik" {...register("nik")} placeholder="Nomor KTP" maxLength={16} />
+                <Label htmlFor="nik">
+                  NIK (16 digit) <span className="text-xs font-normal text-muted-foreground">(Opsional / bisa diisi belakangan)</span>
+                </Label>
+                <Input id="nik" {...register("nik")} placeholder="Nomor KTP (opsional)" maxLength={16} />
                 {errors.nik && <p className="text-xs text-red-500">{errors.nik.message}</p>}
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
@@ -257,8 +259,10 @@ export default function NasabahBaruPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="noHp">No. HP Aktif <span className="text-red-500">*</span></Label>
-                <Input id="noHp" {...register("noHp")} placeholder="08xxxxxxxxxx" />
+                <Label htmlFor="noHp">
+                  No. HP / WhatsApp <span className="text-xs font-normal text-muted-foreground">(Opsional / bisa diisi belakangan)</span>
+                </Label>
+                <Input id="noHp" {...register("noHp")} placeholder="08xxxxxxxxxx (opsional)" />
                 {errors.noHp && <p className="text-xs text-red-500">{errors.noHp.message}</p>}
               </div>
               <div className="space-y-2">

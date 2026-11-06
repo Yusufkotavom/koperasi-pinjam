@@ -74,7 +74,7 @@ type Props = {
     }
   }[]
   sumberOptions: {
-    nasabah: { id: string; namaLengkap: string; noHp: string }[]
+    nasabah: { id: string; namaLengkap: string; noHp: string | null }[]
     kelompok: { id: string; kode: string; nama: string; ketua: string | null }[]
   }
   roleTable: {

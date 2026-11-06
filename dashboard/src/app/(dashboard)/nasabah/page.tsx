@@ -240,10 +240,10 @@ export default async function NasabahPage({
                               </Badge>
                             ) : null}
                           </div>
-                          <span className="text-[10px] text-muted-foreground md:hidden">{row.nik}</span>
+                          <span className="text-[10px] text-muted-foreground md:hidden">{row.nik || "—"}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell font-mono text-[11px] text-slate-500 tracking-tight">{row.nik}</TableCell>
+                      <TableCell className="hidden md:table-cell font-mono text-[11px] text-slate-500 tracking-tight">{row.nik || "—"}</TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{row.kelompok?.nama ?? "—"}</span>
                       </TableCell>

@@ -44,8 +44,8 @@ export async function GET(request: Request) {
   const rows = data.map((row) => ({
     nomor_anggota: row.nomorAnggota,
     nama_lengkap: row.namaLengkap,
-    nik: row.nik,
-    no_hp: row.noHp,
+    nik: row.nik ?? "",
+    no_hp: row.noHp ?? "",
     alamat: row.alamat,
     kelompok: row.kelompok?.nama ?? "",
     kolektor: row.kolektor?.name ?? "",

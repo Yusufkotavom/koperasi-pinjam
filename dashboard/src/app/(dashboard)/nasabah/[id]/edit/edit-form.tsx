@@ -24,14 +24,14 @@ function docTitle(url: string) {
 type FormNasabah = {
   id: string
   namaLengkap: string
-  nik: string
+  nik: string | null
   tempatLahir: string | null
   tanggalLahir: Date | null
   alamat: string
   kelurahan: string | null
   kecamatan: string | null
   kotaKab: string | null
-  noHp: string
+  noHp: string | null
   pekerjaan: string | null
   namaUsaha: string | null
   dokumenUrls: string[]
@@ -59,14 +59,14 @@ export function EditNasabahForm({
     resolver: zodResolver(nasabahSchema) as never,
     defaultValues: {
       namaLengkap: nasabah.namaLengkap,
-      nik: nasabah.nik,
+      nik: nasabah.nik ?? "",
       tempatLahir: nasabah.tempatLahir ?? "",
       tanggalLahir: nasabah.tanggalLahir ? new Date(nasabah.tanggalLahir).toISOString().slice(0, 10) : "",
       alamat: nasabah.alamat,
       kelurahan: nasabah.kelurahan ?? "",
       kecamatan: nasabah.kecamatan ?? "",
       kotaKab: nasabah.kotaKab ?? "",
-      noHp: nasabah.noHp,
+      noHp: nasabah.noHp ?? "",
       pekerjaan: nasabah.pekerjaan ?? "",
       namaUsaha: nasabah.namaUsaha ?? "",
       dokumenUrls: nasabah.dokumenUrls ?? [],
@@ -143,8 +143,10 @@ export function EditNasabahForm({
               {errors.namaLengkap && <p className="text-xs text-red-500">{errors.namaLengkap.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="nik">NIK</Label>
-              <Input id="nik" {...register("nik")} maxLength={16} />
+              <Label htmlFor="nik">
+                NIK <span className="text-xs font-normal text-muted-foreground">(Opsional)</span>
+              </Label>
+              <Input id="nik" {...register("nik")} maxLength={16} placeholder="Nomor KTP (opsional)" />
               {errors.nik && <p className="text-xs text-red-500">{errors.nik.message}</p>}
             </div>
           </div>
@@ -183,8 +185,10 @@ export function EditNasabahForm({
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="noHp">No. HP</Label>
-              <Input id="noHp" {...register("noHp")} />
+              <Label htmlFor="noHp">
+                No. HP / WhatsApp <span className="text-xs font-normal text-muted-foreground">(Opsional)</span>
+              </Label>
+              <Input id="noHp" {...register("noHp")} placeholder="08xxxxxxxxxx (opsional)" />
               {errors.noHp && <p className="text-xs text-red-500">{errors.noHp.message}</p>}
             </div>
             <div className="space-y-2">

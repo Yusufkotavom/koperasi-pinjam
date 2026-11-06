@@ -241,12 +241,12 @@ export default async function NasabahDetailPage({ params }: { params: Promise<{ 
     .sort((a, b) => a.tanggalJatuhTempo.getTime() - b.tanggalJatuhTempo.getTime())
 
   const infoItems = [
-    { icon: Phone, label: "No. HP", value: nasabah.noHp },
+    { icon: Phone, label: "No. HP", value: nasabah.noHp || "—" },
     { icon: MapPin, label: "Alamat", value: `${nasabah.alamat}${nasabah.kecamatan ? `, Kec. ${nasabah.kecamatan}` : ""}${nasabah.kotaKab ? `, ${nasabah.kotaKab}` : ""}` },
     { icon: CalendarDays, label: "Tempat/Tgl. Lahir", value: nasabah.tanggalLahir ? `${nasabah.tempatLahir ?? "—"}, ${new Date(nasabah.tanggalLahir).toLocaleDateString("id-ID")}` : (nasabah.tempatLahir ?? "—") },
     { icon: Briefcase, label: "Pekerjaan", value: nasabah.pekerjaan ?? "—" },
     { icon: Store, label: "Nama Usaha", value: nasabah.namaUsaha ?? "—" },
-    { icon: CreditCard, label: "NIK", value: nasabah.nik },
+    { icon: CreditCard, label: "NIK", value: nasabah.nik || "—" },
   ]
 
   // Pinjaman aktif (belum lunas) untuk aksi cepat bayar cicilan / kartu angsuran.

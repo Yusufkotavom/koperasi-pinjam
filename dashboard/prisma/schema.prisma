@@ -94,14 +94,14 @@ model Nasabah {
   id            String        @id @default(cuid())
   nomorAnggota  String
   namaLengkap   String
-  nik           String
+  nik           String?
   tempatLahir   String?
   tanggalLahir  DateTime?
   alamat        String
   kelurahan     String?
   kecamatan     String?
   kotaKab       String?
-  noHp          String
+  noHp          String?
   pekerjaan     String?
   namaUsaha     String?
   status        StatusNasabah @default(AKTIF)

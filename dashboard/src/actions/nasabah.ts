@@ -320,17 +320,22 @@ export async function createNasabah(input: NasabahInput): Promise<CreateNasabahR
     return { error: parsed.error.flatten().fieldErrors }
   }
 
-  const { tanggalLahir, kelompokId, kolektorId, dokumenUrls, ...rest } = parsed.data
-  const existingNik = await prisma.nasabah.findFirst({
-    where: { companyId, nik: parsed.data.nik },
-    select: { namaLengkap: true },
-  })
+  const { tanggalLahir, kelompokId, kolektorId, dokumenUrls, nik, noHp, ...rest } = parsed.data
+  const cleanNik = nik && nik.trim() !== "" ? nik.trim() : null
+  const cleanNoHp = noHp && noHp.trim() !== "" ? noHp.trim() : null
 
-  if (existingNik) {
-    return {
-      error: {
-        nik: [`NIK sudah terdaftar atas nama ${existingNik.namaLengkap}.`],
-      },
+  if (cleanNik) {
+    const existingNik = await prisma.nasabah.findFirst({
+      where: { companyId, nik: cleanNik },
+      select: { namaLengkap: true },
+    })
+
+    if (existingNik) {
+      return {
+        error: {
+          nik: [`NIK sudah terdaftar atas nama ${existingNik.namaLengkap}.`],
+        },
+      }
     }
   }
 
@@ -350,6 +355,8 @@ export async function createNasabah(input: NasabahInput): Promise<CreateNasabahR
         data: {
           companyId,
           ...rest,
+          nik: cleanNik,
+          noHp: cleanNoHp,
           nomorAnggota,
           tanggalLahir: tanggalLahir ? new Date(tanggalLahir) : undefined,
           kelompokId: kelompokId || null,
@@ -391,23 +398,32 @@ export async function updateNasabah(id: string, input: Partial<NasabahInput>): P
   if ("kelompokId" in normalized && !normalized.kelompokId) normalized.kelompokId = null
   if ("kolektorId" in normalized && !normalized.kolektorId) normalized.kolektorId = null
 
-  if (typeof normalized.nik === "string") {
-    const existingNik = await prisma.nasabah.findFirst({
-      where: {
-        companyId,
-        nik: normalized.nik,
-        NOT: { id },
-      },
-      select: { namaLengkap: true },
-    })
-
-    if (existingNik) {
-      return {
-        error: {
-          nik: [`NIK sudah terdaftar atas nama ${existingNik.namaLengkap}.`],
+  if ("nik" in normalized) {
+    const rawNik = typeof normalized.nik === "string" ? normalized.nik.trim() : null
+    normalized.nik = rawNik && rawNik !== "" ? rawNik : null
+    if (normalized.nik) {
+      const existingNik = await prisma.nasabah.findFirst({
+        where: {
+          companyId,
+          nik: normalized.nik as string,
+          NOT: { id },
         },
+        select: { namaLengkap: true },
+      })
+
+      if (existingNik) {
+        return {
+          error: {
+            nik: [`NIK sudah terdaftar atas nama ${existingNik.namaLengkap}.`],
+          },
+        }
       }
     }
+  }
+
+  if ("noHp" in normalized) {
+    const rawNoHp = typeof normalized.noHp === "string" ? normalized.noHp.trim() : null
+    normalized.noHp = rawNoHp && rawNoHp !== "" ? rawNoHp : null
   }
 
   if (typeof normalized.kelompokId === "string" && normalized.kelompokId) {
