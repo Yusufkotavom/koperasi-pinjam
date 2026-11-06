@@ -7,6 +7,7 @@ import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireRoles } from "@/lib/roles"
+import { writeAuditLog } from "@/lib/audit"
 
 type SessionLike = {
   user?: {
@@ -125,4 +126,111 @@ export async function createCompanyUser(
   revalidatePath("/settings")
   return { success: true, message: "User company berhasil dibuat." }
 }
+
+export async function updateCompanyUser(input: {
+  userId: string
+  name: string
+  role: RoleType
+  isActive: boolean
+}): Promise<{ success: boolean; error?: string; message?: string }> {
+  const session = await auth()
+  requireRoles(session as unknown as SessionLike, [RoleType.SUPER_ADMIN, RoleType.OWNER, RoleType.ADMIN])
+  const companyId = getCompanyId(session as unknown as SessionLike)
+  const actorId = session?.user?.id
+
+  if (!input.name || input.name.trim().length < 2) {
+    return { success: false, error: "Nama minimal 2 karakter." }
+  }
+
+  const target = await prisma.user.findFirst({
+    where: { id: input.userId, companyId },
+    select: { id: true, name: true, isActive: true, roles: { select: { role: true } } },
+  })
+
+  if (!target) {
+    return { success: false, error: "User tidak ditemukan di company ini." }
+  }
+
+  // Admin tidak boleh menonaktifkan akunnya sendiri agar tidak terkunci
+  if (actorId === input.userId && !input.isActive) {
+    return { success: false, error: "Anda tidak dapat menonaktifkan akun Anda sendiri." }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: input.userId },
+      data: {
+        name: input.name.trim(),
+        isActive: input.isActive,
+      },
+    })
+
+    await tx.userRole.deleteMany({
+      where: { userId: input.userId },
+    })
+
+    await tx.userRole.create({
+      data: {
+        userId: input.userId,
+        role: input.role,
+      },
+    })
+  })
+
+  await writeAuditLog({
+    actorId,
+    entityType: "USER",
+    entityId: input.userId,
+    action: "UPDATE",
+    beforeData: { name: target.name, isActive: target.isActive, roles: target.roles.map((r) => r.role) },
+    afterData: { name: input.name.trim(), isActive: input.isActive, role: input.role },
+  })
+
+  revalidatePath("/settings")
+  revalidatePath("/settings/users")
+  return { success: true, message: `Data user ${input.name.trim()} berhasil diperbarui.` }
+}
+
+export async function changeCompanyUserPassword(input: {
+  userId: string
+  newPassword: string
+}): Promise<{ success: boolean; error?: string; message?: string }> {
+  const session = await auth()
+  requireRoles(session as unknown as SessionLike, [RoleType.SUPER_ADMIN, RoleType.OWNER, RoleType.ADMIN])
+  const companyId = getCompanyId(session as unknown as SessionLike)
+  const actorId = session?.user?.id
+
+  if (!input.newPassword || input.newPassword.length < 6) {
+    return { success: false, error: "Password baru minimal 6 karakter." }
+  }
+
+  const target = await prisma.user.findFirst({
+    where: { id: input.userId, companyId },
+    select: { id: true, name: true, email: true },
+  })
+
+  if (!target) {
+    return { success: false, error: "User tidak ditemukan di company ini." }
+  }
+
+  const hashedPassword = await bcrypt.hash(input.newPassword, 12)
+
+  await prisma.user.update({
+    where: { id: input.userId },
+    data: { password: hashedPassword },
+  })
+
+  await writeAuditLog({
+    actorId,
+    entityType: "USER",
+    entityId: input.userId,
+    action: "UPDATE",
+    metadata: { note: "Password changed by admin", userEmail: target.email },
+  })
+
+  revalidatePath("/settings")
+  revalidatePath("/settings/users")
+  return { success: true, message: `Password untuk user ${target.name} berhasil diubah.` }
+}
+
 
