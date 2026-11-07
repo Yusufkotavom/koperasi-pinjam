@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { requireCompanyId } from "@/lib/tenant"
-import { csvResponse } from "@/lib/export-utils"
+import { csvResponse, formatDateId, formatDateTimeId, formatExcelText, formatPhoneNumber, type CsvOptions } from "@/lib/export-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,39 +32,79 @@ export async function GET(request: NextRequest) {
       ],
     }
 
-    const data = await prisma.simpanan.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: {
-        _count: {
-          select: {
-            penggunaan: { where: { statusKembali: "TERPAKAI" } },
+    const [company, data] = await Promise.all([
+      prisma.company.findUnique({ where: { id: companyId }, select: { name: true } }),
+      prisma.simpanan.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: {
+          _count: {
+            select: {
+              penggunaan: { where: { statusKembali: "TERPAKAI" } },
+            },
           },
         },
-      },
-    })
+      }),
+    ])
 
-    const rows = data.map((item) => ({
+    const rows = data.map((item, idx) => ({
+      "No.": idx + 1,
       "No. Rekening": item.nomorRekening,
       "Nama Penyimpan": item.namaPenyimpan,
-      "NIK": item.nik || "-",
-      "No. HP": item.noHp,
+      "NIK": item.nik ? formatExcelText(item.nik) : "-",
+      "No. HP": formatPhoneNumber(item.noHp),
       "Alamat": item.alamat || "-",
-      "Saldo Awal": Number(item.saldoAwal),
-      "Saldo Tersedia": Number(item.saldoTersedia),
-      "Saldo Terpakai": Number(item.saldoTerpakai),
+      "Saldo Awal (Rp)": Number(item.saldoAwal),
+      "Saldo Tersedia (Rp)": Number(item.saldoTersedia),
+      "Saldo Terpakai (Rp)": Number(item.saldoTerpakai),
       "Persen Bagi Hasil (%)": Number(item.persenBagiHasil),
       "Periode Bagi Hasil": item.periodeBagiHasil,
       "Status": item.status,
-      "Tanggal Buka": new Date(item.tanggalBuka).toLocaleDateString("id-ID"),
-      "Tanggal Tutup": item.tanggalTutup ? new Date(item.tanggalTutup).toLocaleDateString("id-ID") : "-",
+      "Tanggal Buka": formatDateId(item.tanggalBuka),
+      "Tanggal Tutup": item.tanggalTutup ? formatDateId(item.tanggalTutup) : "-",
       "Pinjaman Aktif": item._count.penggunaan,
     }))
 
-    return csvResponse(rows, `simpanan-${new Date().toISOString().slice(0, 10)}.csv`)
+    const totalSaldoAwal = rows.reduce((acc, r) => acc + Number(r["Saldo Awal (Rp)"]), 0)
+    const totalSaldoTersedia = rows.reduce((acc, r) => acc + Number(r["Saldo Tersedia (Rp)"]), 0)
+    const totalSaldoTerpakai = rows.reduce((acc, r) => acc + Number(r["Saldo Terpakai (Rp)"]), 0)
+
+    const totalRow = {
+      "No.": "TOTAL",
+      "No. Rekening": `${rows.length} Rekening`,
+      "Nama Penyimpan": "",
+      "NIK": "",
+      "No. HP": "",
+      "Alamat": "",
+      "Saldo Awal (Rp)": totalSaldoAwal,
+      "Saldo Tersedia (Rp)": totalSaldoTersedia,
+      "Saldo Terpakai (Rp)": totalSaldoTerpakai,
+      "Persen Bagi Hasil (%)": "",
+      "Periode Bagi Hasil": "",
+      "Status": "",
+      "Tanggal Buka": "",
+      "Tanggal Tutup": "",
+      "Pinjaman Aktif": "",
+    }
+
+    const filterInfo: string[] = []
+    if (status) filterInfo.push(`Status: ${status}`)
+    if (search) filterInfo.push(`Pencarian: "${search}"`)
+    if (filterInfo.length === 0) filterInfo.push("Semua Data Rekening Simpanan")
+
+    const options: CsvOptions = {
+      header: {
+        companyName: company?.name || "KOPERASI SIMPAN PINJAM",
+        title: "LAPORAN MASTER DATA SIMPANAN & TABUNGAN",
+        generatedAt: formatDateTimeId(new Date()),
+        filterInfo,
+      },
+      totalRow,
+    }
+
+    return csvResponse(rows, `simpanan-${new Date().toISOString().slice(0, 10)}.csv`, options)
   } catch (error) {
     console.error("Export simpanan error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

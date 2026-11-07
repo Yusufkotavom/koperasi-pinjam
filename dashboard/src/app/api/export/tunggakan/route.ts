@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth"
-import { csvResponse } from "@/lib/export-utils"
+import { csvResponse, formatDateId, formatDateTimeId, formatPhoneNumber, type CsvOptions } from "@/lib/export-utils"
 import { prisma } from "@/lib/prisma"
 import { requireCompanyId } from "@/lib/tenant"
 import { differenceInDays, endOfDay, startOfDay } from "date-fns"
@@ -34,63 +34,68 @@ export async function GET(request: Request) {
     tanggalFilter = { lt: today }
   }
 
-  const jadwals = await prisma.jadwalAngsuran.findMany({
-    where: {
-      companyId,
-      sudahDibayar: false,
-      tanggalJatuhTempo: tanggalFilter,
-      pinjaman: {
-        ...(tenorType ? { tenorType } : {}),
-        pengajuan: {
-          ...(kelompokId ? { kelompokId } : {}),
-          ...(wilayah
-            ? {
-                kelompok: {
-                  wilayah,
-                },
-              }
-            : {}),
-          ...(kolektorId
-            ? {
-                nasabah: {
-                  kolektorId,
-                },
-              }
-            : {}),
+  const [company, kolektorUser, kelompokData, jadwals] = await Promise.all([
+    prisma.company.findUnique({ where: { id: companyId }, select: { name: true } }),
+    kolektorId ? prisma.user.findUnique({ where: { id: kolektorId }, select: { name: true } }) : null,
+    kelompokId ? prisma.kelompok.findUnique({ where: { id: kelompokId }, select: { nama: true } }) : null,
+    prisma.jadwalAngsuran.findMany({
+      where: {
+        companyId,
+        sudahDibayar: false,
+        tanggalJatuhTempo: tanggalFilter,
+        pinjaman: {
+          ...(tenorType ? { tenorType } : {}),
+          pengajuan: {
+            ...(kelompokId ? { kelompokId } : {}),
+            ...(wilayah
+              ? {
+                  kelompok: {
+                    wilayah,
+                  },
+                }
+              : {}),
+            ...(kolektorId
+              ? {
+                  nasabah: {
+                    kolektorId,
+                  },
+                }
+              : {}),
+          },
         },
       },
-    },
-    include: {
-      pinjaman: {
-        include: {
-          pengajuan: {
-            include: {
-              nasabah: {
-                select: {
-                  namaLengkap: true,
-                  nomorAnggota: true,
-                  noHp: true,
-                  kolektor: {
-                    select: {
-                      name: true,
+      include: {
+        pinjaman: {
+          include: {
+            pengajuan: {
+              include: {
+                nasabah: {
+                  select: {
+                    namaLengkap: true,
+                    nomorAnggota: true,
+                    noHp: true,
+                    kolektor: {
+                      select: {
+                        name: true,
+                      },
                     },
                   },
                 },
-              },
-              kelompok: {
-                select: {
-                  id: true,
-                  nama: true,
-                  wilayah: true,
+                kelompok: {
+                  select: {
+                    id: true,
+                    nama: true,
+                    wilayah: true,
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-    orderBy: { tanggalJatuhTempo: "asc" },
-  })
+      orderBy: { tanggalJatuhTempo: "asc" },
+    }),
+  ])
 
   function agingLabel(hari: number) {
     if (hari <= 7) return "1-7 hari"
@@ -106,25 +111,69 @@ export async function GET(request: Request) {
     const kelompok = p.pengajuan.kelompok
 
     return {
-      no: idx + 1,
-      nomor_kontrak: p.nomorKontrak,
-      nomor_anggota: nasabah.nomorAnggota,
-      nama_nasabah: nasabah.namaLengkap,
-      no_hp: nasabah.noHp ?? "",
-      kelompok: kelompok?.nama ?? "",
-      wilayah: kelompok?.wilayah ?? "",
-      kolektor: nasabah.kolektor?.name ?? "",
-      skema_tenor: p.tenorType,
-      angsuran_ke: j.angsuranKe,
-      jatuh_tempo: j.tanggalJatuhTempo.toISOString().slice(0, 10),
-      hari_terlambat: hariTelat,
-      status_aging: agingLabel(hariTelat),
-      pokok: Number(j.pokok),
-      bunga: Number(j.bunga),
-      total_tagihan: Number(j.total),
+      "No.": idx + 1,
+      "No. Kontrak": p.nomorKontrak,
+      "No. Anggota": nasabah.nomorAnggota,
+      "Nama Nasabah": nasabah.namaLengkap,
+      "No. HP": formatPhoneNumber(nasabah.noHp),
+      "Kelompok": kelompok?.nama ?? "-",
+      "Wilayah": kelompok?.wilayah ?? "-",
+      "Kolektor": nasabah.kolektor?.name ?? "-",
+      "Skema Tenor": p.tenorType === "MINGGUAN" ? "Mingguan" : "Bulanan",
+      "Angsuran Ke": j.angsuranKe,
+      "Tgl Jatuh Tempo": formatDateId(j.tanggalJatuhTempo),
+      "Hari Terlambat": hariTelat,
+      "Status Aging": agingLabel(hariTelat),
+      "Pokok (Rp)": Number(j.pokok),
+      "Bunga (Rp)": Number(j.bunga),
+      "Total Tagihan (Rp)": Number(j.total),
     }
   })
 
+  const totalPokok = rows.reduce((acc, r) => acc + Number(r["Pokok (Rp)"]), 0)
+  const totalBunga = rows.reduce((acc, r) => acc + Number(r["Bunga (Rp)"]), 0)
+  const totalTagihan = rows.reduce((acc, r) => acc + Number(r["Total Tagihan (Rp)"]), 0)
+
+  const totalRow = {
+    "No.": "TOTAL",
+    "No. Kontrak": `${rows.length} Data Tunggakan`,
+    "No. Anggota": "",
+    "Nama Nasabah": "",
+    "No. HP": "",
+    "Kelompok": "",
+    "Wilayah": "",
+    "Kolektor": "",
+    "Skema Tenor": "",
+    "Angsuran Ke": "",
+    "Tgl Jatuh Tempo": "",
+    "Hari Terlambat": "",
+    "Status Aging": "",
+    "Pokok (Rp)": totalPokok,
+    "Bunga (Rp)": totalBunga,
+    "Total Tagihan (Rp)": totalTagihan,
+  }
+
+  const filterInfo: string[] = []
+  if (tanggalDariParam || tanggalSampaiParam) {
+    filterInfo.push(`Periode: ${tanggalDariParam || "-"} s/d ${tanggalSampaiParam || "-"}`)
+  } else {
+    filterInfo.push("Periode: Jatuh Tempo s/d Hari Ini")
+  }
+  filterInfo.push(`Skema: ${tenorType || "Semua"}`)
+  if (kolektorUser) filterInfo.push(`Kolektor: ${kolektorUser.name}`)
+  if (kelompokData) filterInfo.push(`Kelompok: ${kelompokData.nama}`)
+  if (wilayah) filterInfo.push(`Wilayah: ${wilayah}`)
+
+  const options: CsvOptions = {
+    header: {
+      companyName: company?.name || "KOPERASI SIMPAN PINJAM",
+      title: "LAPORAN DATA TUNGGAKAN PINJAMAN (AGING REPORT)",
+      generatedAt: formatDateTimeId(new Date()),
+      filterInfo,
+    },
+    totalRow,
+  }
+
   const dateStr = new Date().toISOString().slice(0, 10)
-  return csvResponse(rows, `monitoring-tunggakan-${dateStr}.csv`)
+  return csvResponse(rows, `monitoring-tunggakan-${dateStr}.csv`, options)
 }

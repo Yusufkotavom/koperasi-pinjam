@@ -83,10 +83,17 @@ const findManyPembayaran = vi.fn(async () => [
   },
 ])
 
+const findUniqueCompany = vi.fn(async () => ({ name: "KSP Mitradana Mandiri" }))
+const findUniqueUser = vi.fn(async () => ({ name: "Kolektor A" }))
+const findUniqueKelompok = vi.fn(async () => ({ nama: "Kelompok Mawar" }))
+
 vi.mock("@/lib/auth", () => ({ auth: authMock }))
 vi.mock("@/lib/tenant", () => ({ requireCompanyId: requireCompanyIdMock }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
+    company: { findUnique: findUniqueCompany },
+    user: { findUnique: findUniqueUser },
+    kelompok: { findUnique: findUniqueKelompok },
     jadwalAngsuran: { findMany: findManyJadwal },
     pinjaman: { findMany: findManyPinjaman },
     pembayaran: { findMany: findManyPembayaran },
@@ -98,30 +105,43 @@ describe("Export Tunggakan, Pinjaman, dan Pembayaran API", () => {
     vi.clearAllMocks()
   })
 
-  it("exports tunggakan CSV with correct columns and data", async () => {
+  it("exports tunggakan CSV with structured report header, clean columns and total row", async () => {
     const { GET } = await import("@/app/api/export/tunggakan/route")
     const res = await GET(new Request("http://localhost/api/export/tunggakan"))
     expect(res.status).toBe(200)
     const csv = await readCsv(res)
-    expect(csv).toContain("nomor_kontrak,nomor_anggota,nama_nasabah,no_hp,kelompok,wilayah,kolektor,skema_tenor,angsuran_ke")
-    expect(csv).toContain("KTR-2605-000001,AG-0001,Budi Santoso,08123456789,Kelompok Mawar,Pasar Rebo,Kolektor A,MINGGUAN,3")
+    // Check header metadata
+    expect(csv).toContain("KSP MITRADANA MANDIRI")
+    expect(csv).toContain("LAPORAN DATA TUNGGAKAN PINJAMAN (AGING REPORT)")
+    expect(csv).toContain("Waktu Unduh:")
+    // Check clean column headers
+    expect(csv).toContain("No.,No. Kontrak,No. Anggota,Nama Nasabah,No. HP,Kelompok,Wilayah,Kolektor,Skema Tenor,Angsuran Ke,Tgl Jatuh Tempo,Hari Terlambat,Status Aging,Pokok (Rp),Bunga (Rp),Total Tagihan (Rp)")
+    // Check data row with formatted phone number
+    expect(csv).toContain("KTR-2605-000001,AG-0001,Budi Santoso,0812-3456-789,Kelompok Mawar,Pasar Rebo,Kolektor A,Mingguan,3")
+    // Check total summary row
+    expect(csv).toContain("TOTAL")
+    expect(csv).toContain("1 Data Tunggakan")
   })
 
-  it("exports pinjaman CSV with correct columns and data", async () => {
+  it("exports pinjaman CSV with structured report header, clean columns and total row", async () => {
     const { GET } = await import("@/app/api/export/pinjaman/route")
     const res = await GET(new Request("http://localhost/api/export/pinjaman"))
     expect(res.status).toBe(200)
     const csv = await readCsv(res)
-    expect(csv).toContain("nomor_kontrak,nomor_anggota,nama_nasabah,no_hp,kelompok,wilayah,kolektor,status,skema_tenor")
-    expect(csv).toContain("KTR-2605-000001,AG-0001,Budi Santoso,08123456789,Kelompok Mawar,Pasar Rebo,Kolektor A,AKTIF,MINGGUAN")
+    expect(csv).toContain("LAPORAN DAFTAR PINJAMAN ANGGOTA")
+    expect(csv).toContain("No.,No. Kontrak,No. Anggota,Nama Nasabah,No. HP,Kelompok,Wilayah,Kolektor,Status,Skema Tenor,Tenor,Pokok Pinjaman (Rp)")
+    expect(csv).toContain("KTR-2605-000001,AG-0001,Budi Santoso,0812-3456-789,Kelompok Mawar,Pasar Rebo,Kolektor A,AKTIF,Mingguan,10 Minggu,2500000")
+    expect(csv).toContain("TOTAL")
   })
 
-  it("exports pembayaran CSV with correct columns and data", async () => {
+  it("exports pembayaran CSV with structured report header, clean columns and total row", async () => {
     const { GET } = await import("@/app/api/export/pembayaran/route")
     const res = await GET(new Request("http://localhost/api/export/pembayaran"))
     expect(res.status).toBe(200)
     const csv = await readCsv(res)
-    expect(csv).toContain("nomor_transaksi,nomor_kontrak,nomor_anggota,nama_nasabah,no_hp,kelompok,skema_tenor,tanggal_bayar,pokok,bunga,denda,total_bayar,metode,kasir_input")
-    expect(csv).toContain("BYR-2605-000001,KTR-2605-000001,AG-0001,Budi Santoso,08123456789,Kelompok Mawar,MINGGUAN")
+    expect(csv).toContain("LAPORAN RIWAYAT PEMBAYARAN ANGSURAN")
+    expect(csv).toContain("No.,No. Transaksi,No. Kontrak,No. Anggota,Nama Nasabah,No. HP,Kelompok,Skema Tenor,Tgl Bayar,Pokok (Rp),Bunga (Rp),Denda (Rp),Total Bayar (Rp),Metode,Petugas Kasir,Catatan")
+    expect(csv).toContain("BYR-2605-000001,KTR-2605-000001,AG-0001,Budi Santoso,0812-3456-789,Kelompok Mawar,Mingguan")
+    expect(csv).toContain("TOTAL")
   })
 })

@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth"
-import { csvResponse } from "@/lib/export-utils"
+import { csvResponse, formatDateId, formatDateTimeId, formatExcelText, formatPhoneNumber, type CsvOptions } from "@/lib/export-utils"
 import { prisma } from "@/lib/prisma"
 import { requireCompanyId } from "@/lib/tenant"
 
@@ -32,27 +32,60 @@ export async function GET(request: Request) {
     ],
   }
 
-  const data = await prisma.nasabah.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: {
-      kelompok: { select: { nama: true } },
-      kolektor: { select: { name: true } },
-    },
-  })
+  const [company, kelompokData, data] = await Promise.all([
+    prisma.company.findUnique({ where: { id: companyId }, select: { name: true } }),
+    kelompokId ? prisma.kelompok.findUnique({ where: { id: kelompokId }, select: { nama: true } }) : null,
+    prisma.nasabah.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        kelompok: { select: { nama: true } },
+        kolektor: { select: { name: true } },
+      },
+    }),
+  ])
 
-  const rows = data.map((row) => ({
-    nomor_anggota: row.nomorAnggota,
-    nama_lengkap: row.namaLengkap,
-    nik: row.nik ?? "",
-    no_hp: row.noHp ?? "",
-    alamat: row.alamat,
-    kelompok: row.kelompok?.nama ?? "",
-    kolektor: row.kolektor?.name ?? "",
-    status: row.status,
-    tanggal_gabung: row.tanggalGabung.toISOString().slice(0, 10),
+  const rows = data.map((row, idx) => ({
+    "No.": idx + 1,
+    "No. Anggota": row.nomorAnggota,
+    "Nama Lengkap": row.namaLengkap,
+    "NIK": row.nik ? formatExcelText(row.nik) : "-",
+    "No. HP": formatPhoneNumber(row.noHp),
+    "Alamat": row.alamat,
+    "Kelompok": row.kelompok?.nama ?? "-",
+    "Kolektor": row.kolektor?.name ?? "-",
+    "Status": row.status,
+    "Tgl Bergabung": formatDateId(row.tanggalGabung),
   }))
 
-  return csvResponse(rows, `master-nasabah-${new Date().toISOString().slice(0, 10)}.csv`)
-}
+  const filterInfo: string[] = []
+  if (status) filterInfo.push(`Status: ${status}`)
+  if (kelompokData) filterInfo.push(`Kelompok: ${kelompokData.nama}`)
+  if (search) filterInfo.push(`Pencarian: "${search}"`)
+  if (filterInfo.length === 0) filterInfo.push("Semua Data Anggota")
 
+  const totalRow = {
+    "No.": "TOTAL",
+    "No. Anggota": `${rows.length} Anggota`,
+    "Nama Lengkap": "",
+    "NIK": "",
+    "No. HP": "",
+    "Alamat": "",
+    "Kelompok": "",
+    "Kolektor": "",
+    "Status": "",
+    "Tgl Bergabung": "",
+  }
+
+  const options: CsvOptions = {
+    header: {
+      companyName: company?.name || "KOPERASI SIMPAN PINJAM",
+      title: "LAPORAN MASTER DATA ANGGOTA / NASABAH",
+      generatedAt: formatDateTimeId(new Date()),
+      filterInfo,
+    },
+    totalRow,
+  }
+
+  return csvResponse(rows, `master-nasabah-${new Date().toISOString().slice(0, 10)}.csv`, options)
+}
