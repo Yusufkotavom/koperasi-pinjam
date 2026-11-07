@@ -46,6 +46,8 @@ export default async function KuitansiPage({
   const modeLabel = formatPembayaranModeLabel(parsedCatatan.mode)
   const totalBayarNum = Number(pembayaran.totalBayar)
   const nominalTerbilang = terbilang(totalBayarNum)
+  const totalSisaTagihan = pembayaran.sisaTagihan?.totalSisaTagihan ?? Number(pinjaman.sisaPinjaman)
+  const isLunas = pinjaman.status === "LUNAS" || totalSisaTagihan <= 0
 
   const receiptSignerName =
     companyInfo.receiptSignerName?.trim() ||
@@ -238,9 +240,11 @@ export default async function KuitansiPage({
         {/* Informasi Status Sisa Saldo */}
         <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-4 text-[11px]">
           <div>
-            <span className="text-slate-500 block text-[10px]">Sisa Pokok Pinjaman Setelah Pembayaran Ini:</span>
-            <span className="text-sm font-extrabold font-mono text-slate-900">
-              {fmt(Number(pinjaman.sisaPinjaman))}
+            <span className="text-slate-500 block text-[10px] font-semibold uppercase tracking-wider">
+              Total Sisa Tagihan (Pokok + Bunga):
+            </span>
+            <span className={`text-sm sm:text-base font-extrabold font-mono ${isLunas ? "text-emerald-700" : "text-slate-900"}`}>
+              {isLunas ? "LUNAS (Rp 0)" : fmt(totalSisaTagihan)}
             </span>
           </div>
           <div className="text-right">

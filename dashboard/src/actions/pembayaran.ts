@@ -1260,7 +1260,42 @@ export async function getPembayaranById(id: string) {
     },
   })
 
-  return serializeData(result)
+  if (!result) return null
+
+  const pinjamanId = result.pinjamanId
+  const isLunas = result.pinjaman.status === "LUNAS" || Number(result.pinjaman.sisaPinjaman) <= 0
+
+  let sisaPokok = Number(result.pinjaman.sisaPinjaman)
+  let sisaBunga = 0
+  let totalSisaTagihan = 0
+
+  if (!isLunas) {
+    const [sumJadwal, sumBayar] = await Promise.all([
+      prisma.jadwalAngsuran.aggregate({
+        where: { pinjamanId, companyId },
+        _sum: { bunga: true },
+      }),
+      prisma.pembayaran.aggregate({
+        where: { pinjamanId, companyId, isBatalkan: false },
+        _sum: { bunga: true },
+      }),
+    ])
+
+    const totalBungaAwal = Number(sumJadwal._sum.bunga ?? 0)
+    const totalBungaDibayar = Number(sumBayar._sum.bunga ?? 0)
+    sisaBunga = Math.max(0, totalBungaAwal - totalBungaDibayar)
+    sisaPokok = Math.max(0, sisaPokok)
+    totalSisaTagihan = sisaPokok + sisaBunga
+  }
+
+  return serializeData({
+    ...result,
+    sisaTagihan: {
+      sisaPokok,
+      sisaBunga,
+      totalSisaTagihan,
+    },
+  })
 }
 
 export async function requestPembatalanPembayaran(input: { pembayaranId: string; alasan: string }) {
