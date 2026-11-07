@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { getPinjamanList } from "@/actions/pinjaman"
-import { Search } from "lucide-react"
+import { Search, Download } from "lucide-react"
 import { format } from "date-fns"
 import { id as localeId } from "date-fns/locale"
 
@@ -33,9 +33,17 @@ export default async function PinjamanPage({
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Pinjaman Aktif & Lunas</CardTitle>
-          <CardDescription>Semua pinjaman yang telah dicairkan</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div>
+            <CardTitle>Pinjaman Aktif & Lunas</CardTitle>
+            <CardDescription>Semua pinjaman yang telah dicairkan</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80" asChild>
+            <a href={`/api/export/pinjaman?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`}>
+              <Download className="size-3.5" />
+              <span>Export CSV</span>
+            </a>
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="mb-4 flex gap-4">

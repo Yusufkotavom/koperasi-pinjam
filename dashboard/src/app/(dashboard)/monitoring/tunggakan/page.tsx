@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, Calendar, LayoutGrid, TrendingDown, Clock, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Calendar, LayoutGrid, TrendingDown, Clock, ShieldAlert, Download, CheckCircle2 } from "lucide-react"
 
 function fmt(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n)
@@ -49,11 +49,23 @@ export default async function TunggakanPage({
     { label: ">60 hari (NPL)", count: result.summary.buckets[">60"].count, total: result.summary.buckets[">60"].total },
   ]
 
+  const exportQuery = new URLSearchParams(
+    Object.entries(params).filter(([_, v]) => Boolean(v)) as [string, string][]
+  ).toString()
+
   return (
     <div className="p-6 space-y-8">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Data Tunggakan (Aging Report)</h1>
-        <p className="text-muted-foreground text-sm">Monitoring angsuran yang melewati jatuh tempo.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">Data Tunggakan (Aging Report)</h1>
+          <p className="text-muted-foreground text-sm">Monitoring angsuran yang melewati jatuh tempo.</p>
+        </div>
+        <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80 self-start sm:self-auto" asChild>
+          <a href={`/api/export/tunggakan?${exportQuery}`}>
+            <Download className="size-3.5" />
+            <span>Export CSV</span>
+          </a>
+        </Button>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
@@ -151,11 +163,17 @@ export default async function TunggakanPage({
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
-        <CardHeader className="pb-6 border-b border-slate-50 dark:border-slate-800/50">
+        <CardHeader className="pb-6 border-b border-slate-50 dark:border-slate-800/50 flex flex-row items-center justify-between">
            <div className="flex items-center gap-2">
               <LayoutGrid className="size-4 text-primary" />
               <CardTitle className="text-base font-semibold">Detail Tunggakan</CardTitle>
            </div>
+           <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80" asChild>
+             <a href={`/api/export/tunggakan?${exportQuery}`}>
+               <Download className="size-3.5" />
+               <span className="hidden sm:inline">Export CSV</span>
+             </a>
+           </Button>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -217,5 +235,3 @@ export default async function TunggakanPage({
     </div>
   )
 }
-
-import { CheckCircle2 } from "lucide-react"

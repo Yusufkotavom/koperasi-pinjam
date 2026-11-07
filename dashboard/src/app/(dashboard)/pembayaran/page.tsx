@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Search, History, Clock, FileText, ChevronRight } from "lucide-react"
+import { Search, History, Clock, FileText, ChevronRight, Download } from "lucide-react"
 import { BayarButton } from "./bayar-button"
 import { EditPembayaranButton } from "./edit-button"
 import { ManualPembayaranInput } from "./manual-input"
@@ -163,12 +163,20 @@ export default async function PembayaranPage({
 
         <div className="space-y-6">
           <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="pb-4 border-b border-slate-50 dark:border-slate-800/50">
-              <div className="flex items-center gap-2 mb-1">
-                <History className="size-4 text-primary" />
-                <CardTitle className="text-base font-semibold">Riwayat Terakhir</CardTitle>
+            <CardHeader className="pb-4 border-b border-slate-50 dark:border-slate-800/50 flex flex-row items-center justify-between space-y-0">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <History className="size-4 text-primary" />
+                  <CardTitle className="text-base font-semibold">Riwayat Terakhir</CardTitle>
+                </div>
+                <CardDescription>10 transaksi terbaru</CardDescription>
               </div>
-              <CardDescription>10 transaksi pembayaran terbaru</CardDescription>
+              <Button variant="outline" size="sm" className="gap-2 border-slate-200/80 dark:border-slate-800/80" asChild>
+                <a href={`/api/export/pembayaran?search=${encodeURIComponent(search)}`}>
+                  <Download className="size-3.5" />
+                  <span>Export</span>
+                </a>
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y divide-slate-50 dark:divide-slate-800">
